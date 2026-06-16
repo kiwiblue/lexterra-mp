@@ -226,10 +226,38 @@ export default {
         break;
       }
 
-      // Host resets a private ended game back to lobby with same players + settings
+      // Reconnecting player reclaims their old slot
+      case "rejoin": {
+        const state = await room.storage.get("state");
+        if (!state) { conn.send(JSON.stringify({ type: "error", message: "Game not found." })); return; }
+        const saved = state.disconnectedPlayers?.[msg.oldConnId];
+        if (!saved) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please join normally." })); return; }
+        state.players[conn.id] = saved.player;
+        delete state.disconnectedPlayers[msg.oldConnId];
+        if (state.phase === "playing") {
+          const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
+          state.turnOrder.splice(insertAt, 0, conn.id);
+        }
+        if (state.host === msg.oldConnId) state.host = conn.id;
+        if (state.cur === msg.oldConnId) { state.cur = conn.id; }
+        if (state.territory) for (let r = 0; r < state.territory.length; r++)
+          for (let c = 0; c < state.territory[r].length; c++)
+            if (state.territory[r][c] === msg.oldConnId) state.territory[r][c] = conn.id;
+        for (const claim of state.claimed ?? [])
+          if (claim.connId === msg.oldConnId) claim.connId = conn.id;
+        if (state.grid) for (let r = 0; r < state.grid.length; r++)
+          for (let c = 0; c < state.grid[r].length; c++)
+            if (state.grid[r][c]?.pi === msg.oldConnId) state.grid[r][c].pi = conn.id;
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        break;
+      }
+
+      // Host resets a private game back to lobby with same players + settings
       case "reset": {
         const state = await room.storage.get("state");
-        if (!state || state.phase !== "ended" || state.isPublic) return;
+        if (!state || state.isPublic) return;
+        if (!["ended", "playing"].includes(state.phase)) return;
         const fresh = {
           ...state,
           phase: "lobby",
@@ -256,10 +284,35 @@ export default {
 
   async onClose(conn, room) {
     const state = await room.storage.get("state");
-    // If the host disconnects while a public lobby is open, remove it from the registry
-    if (state?.isPublic && state.phase === "lobby" && state.host === conn.id) {
+    if (!state) return;
+    if (state.isPublic && state.phase === "lobby" && state.host === conn.id) {
       await notifyLobby(room, { type: "unregister", roomId: room.id });
     }
-    room.broadcast(JSON.stringify({ type: "disconnected", connId: conn.id }), [conn.id]);
+    const player = state.players[conn.id];
+    if (player && !player.isBot) {
+      // Preserve slot so player can rejoin after refresh
+      if (!state.disconnectedPlayers) state.disconnectedPlayers = {};
+      state.disconnectedPlayers[conn.id] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(conn.id) };
+      delete state.players[conn.id];
+      if (state.phase === "playing") {
+        const wasTheirTurn = state.cur === conn.id;
+        state.turnOrder = state.turnOrder.filter(id => id !== conn.id);
+        if (wasTheirTurn) {
+          if (state.turnOrder.length === 0) {
+            state.phase = "ended";
+          } else {
+            const next = state.turnOrder[0];
+            state.cur = next;
+            Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
+            state.players[next].lettersLeft = 1;
+          }
+        }
+        const humanCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
+        if (humanCount === 0) state.phase = "ended";
+      }
+      await room.storage.put("state", state);
+      room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
+      room.broadcast(JSON.stringify({ type: "state", state }), [conn.id]);
+    }
   },
 };

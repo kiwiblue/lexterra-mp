@@ -66,6 +66,10 @@
     .lbtn:hover { border-color: #7c3aed; color: #e2e8f0; }
     .lbtn.sel { border-color: #7c3aed; background: rgba(124,58,237,0.2); color: #a78bfa; }
     .action-bar { display: flex; gap: 0.5rem; }
+    .btn-danger { width:100%; padding:0.45rem; background:transparent; border:1px solid #3f1f1f; border-radius:6px; color:#6b2e2e; font-size:0.75rem; font-weight:bold; cursor:pointer; letter-spacing:0.05em; transition:border-color 0.15s,color 0.15s,background 0.15s; }
+    .btn-danger:hover { border-color:#7f1d1d; color:#fca5a5; background:rgba(127,29,29,0.15); }
+    .btn-leave { border-color:#1e3a5f; color:#334155; margin-top:0.3rem; }
+    .btn-leave:hover { border-color:#3b82f6; color:#93c5fd; background:rgba(59,130,246,0.1); }
   </style>
 </head>
 <body>
@@ -187,14 +191,31 @@
     socket.addEventListener("message", e => {
       const msg = JSON.parse(e.data);
       if (msg.type === "state") handleState(msg.state);
-      if (msg.type === "error") document.getElementById("join-status").textContent = msg.message;
+      if (msg.type === "error") {
+        if (msg.message && msg.message.includes("Slot expired")) {
+          localStorage.removeItem("lexterra_room");
+          localStorage.removeItem("lexterra_connId");
+        }
+        document.getElementById("join-status").textContent = msg.message;
+      }
+      if (msg.type === "player_left") {
+        const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
+        if (humanCount <= 1) {
+          alert(`${msg.name} has left the game.`);
+        }
+      }
     });
-    socket.addEventListener("open", () => { myConnId = socket.id; });
+    socket.addEventListener("open", () => {
+      myConnId = socket.id;
+      localStorage.setItem("lexterra_room", room);
+      localStorage.setItem("lexterra_connId", socket.id);
+    });
   }
 
   function handleState(newState) {
     state = newState;
     if (!state) return;
+    if (state.host === myConnId) isHost = true;
     if (botStateResolver) { const r = botStateResolver; botStateResolver = null; r(); }
     if (state.phase === "lobby") {
       if (gameInited) {
@@ -386,6 +407,10 @@
         <div class="card" style="padding:1rem">
           <h2>Words Claimed</h2>
           <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.3rem">
+          ${!state.isPublic ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
+          <button class="btn-danger btn-leave" onclick="returnToLobby()">RETURN TO LOBBY</button>
         </div>
       </div>`;
     const grid = document.getElementById("game-grid");
@@ -625,6 +650,16 @@
   };
   window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass" })); };
   window.playAgain = () => { if (socket) socket.send(JSON.stringify({ type: "reset" })); };
+  window.restartToLobby = function() {
+    if (!confirm("Restart the game? All progress will be lost.")) return;
+    if (socket) socket.send(JSON.stringify({ type: "reset" }));
+  };
+  window.returnToLobby = function() {
+    if (!confirm("Leave the game and return to the lobby?")) return;
+    localStorage.removeItem("lexterra_room");
+    localStorage.removeItem("lexterra_connId");
+    location.reload();
+  };
 
   document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -706,7 +741,7 @@
             </div>`).join("")}
         </div>
         <div style="display:flex;gap:0.5rem">
-          <button class="btn btn-secondary" onclick="location.reload()" style="flex:1">Back to Lobby</button>
+          <button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>
           ${!state.isPublic ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
         </div>
       </div>`;
@@ -922,7 +957,17 @@
   const PARTYKIT_HOST = window.location.host;
 
   connectLobby();
+
+  // Auto-rejoin if player refreshed mid-game
+  const _savedRoom = localStorage.getItem("lexterra_room");
+  const _savedConnId = localStorage.getItem("lexterra_connId");
+  if (_savedRoom && _savedConnId) {
+    connect(_savedRoom);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "rejoin", oldConnId: _savedConnId }));
+    }, { once: true });
+  }
 </script>
-<p style="position:fixed;bottom:0.5rem;right:0.75rem;font-size:0.65rem;color:#334155;pointer-events:none">v0.2.4</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.5</p>
 </body>
 </html>
