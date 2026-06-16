@@ -919,11 +919,10 @@
     }
   }
 
-  // PartyKit host is injected at deploy time; fall back to localhost for dev
-  const PARTYKIT_HOST = typeof __PARTYKIT_HOST__ !== "undefined" ? __PARTYKIT_HOST__ : "localhost:1999";
+  const PARTYKIT_HOST = window.location.host;
 
   connectLobby();
 </script>
-<p style="position:fixed;bottom:0.5rem;right:0.75rem;font-size:0.65rem;color:#334155;pointer-events:none">v0.2.3</p>
+<p style="position:fixed;bottom:0.5rem;right:0.75rem;font-size:0.65rem;color:#334155;pointer-events:none">v0.2.4</p>
 </body>
 </html>
