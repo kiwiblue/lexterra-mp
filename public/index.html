@@ -24,8 +24,48 @@
     .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
     .player-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
     .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
-    .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: #a78bfa; text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; }
+    .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: #a78bfa; text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+    .copy-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0.25rem; line-height: 1; flex-shrink: 0; transition: color 0.15s; }
+    .copy-btn:hover { color: #a78bfa; }
     .placeholder { color: #475569; font-size: 0.9rem; text-align: center; padding: 1rem; }
+    .setting-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .setting-label { font-size: 0.78rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; min-width: 68px; }
+    .btn-group { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .toggle-btn { padding: 0.35rem 0.7rem; border: 2px solid #334155; background: #0f172a; color: #64748b; border-radius: 8px; font-size: 0.82rem; font-weight: bold; cursor: pointer; transition: all 0.15s; letter-spacing: 0.04em; }
+    .toggle-btn:hover:not(:disabled) { border-color: #7c3aed; color: #e2e8f0; }
+    .toggle-btn.selected { border-color: #7c3aed; background: rgba(124,58,237,0.15); color: #a78bfa; }
+    .toggle-btn:disabled { opacity: 0.35; cursor: default; }
+    .name-input { background: transparent; border: none; border-bottom: 2px solid #334155; color: white; padding: 0.2rem 0; font-size: 0.95rem; font-weight: bold; outline: none; flex: 1; min-width: 60px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .name-input:focus { border-bottom-color: #7c3aed; }
+    .name-input::placeholder { color: #475569; font-weight: normal; text-transform: none; letter-spacing: 0; }
+    .remove-btn { background: none; border: none; color: #475569; font-size: 1.1rem; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
+    .remove-btn:hover { color: #ef4444; }
+    .diff-btn { padding: 0.2rem 0.45rem; font-size: 0.72rem; letter-spacing: 0; }
+    .public-game-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
+    /* Game board */
+    #game-screen { max-width: 520px; }
+    .scores-wrap { display: flex; flex-direction: row; gap: 0.3rem; }
+    .player-stat { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.4rem 0.6rem; background: #1e293b; border-radius: 8px; border: 2px solid transparent; font-size: 0.82rem; min-width: 0; }
+    .player-stat .pname { font-weight: bold; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-stat .pinfo { display: flex; align-items: center; gap: 0.35rem; }
+    .player-stat.ps-active { border-color: var(--pc); }
+    .turn-banner { background: #1e293b; border-radius: 10px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; border: 2px solid transparent; }
+    @keyframes turn-pulse {
+      0%, 100% { border-color: transparent; box-shadow: none; }
+      50% { border-color: rgba(124,58,237,0.65); box-shadow: 0 0 12px rgba(124,58,237,0.25); }
+    }
+    .turn-banner.my-turn { animation: turn-pulse 2.5s ease-in-out infinite; }
+    .game-grid { display: grid; gap: 3px; }
+    .gcell { display: flex; align-items: center; justify-content: center; width: var(--cs); height: var(--cs); border-radius: 4px; border: 2px solid #1e3a5f; font-size: calc(var(--cs) * 0.44); font-weight: 900; user-select: none; cursor: pointer; transition: border-color 0.1s, background 0.1s; box-sizing: border-box; }
+    .gcell:hover { border-color: #475569; }
+    .gcell.sel-start { border-color: #7c3aed !important; background: rgba(124,58,237,0.2) !important; }
+    .gcell.path-ok { border-color: #22c55e !important; background: rgba(34,197,94,0.12) !important; }
+    .gcell.path-bad { border-color: #ef4444 !important; background: rgba(239,68,68,0.12) !important; }
+    .letter-panel { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+    .lbtn { width: 34px; height: 34px; border: 2px solid #334155; background: #0f172a; color: #94a3b8; border-radius: 6px; font-size: 0.82rem; font-weight: 900; cursor: pointer; transition: all 0.1s; }
+    .lbtn:hover { border-color: #7c3aed; color: #e2e8f0; }
+    .lbtn.sel { border-color: #7c3aed; background: rgba(124,58,237,0.2); color: #a78bfa; }
+    .action-bar { display: flex; gap: 0.5rem; }
   </style>
 </head>
 <body>
@@ -36,13 +76,25 @@
 <!-- Join / Create screen -->
 <div id="join-screen">
   <div class="card">
-    <h2>Your Name</h2>
-    <input id="player-name" type="text" maxlength="12" placeholder="Enter your name" style="text-transform:uppercase">
+    <h2>Player Name</h2>
+    <input id="player-name" type="text" maxlength="12" placeholder="Enter Player Name" style="text-transform:uppercase">
   </div>
 
   <div class="card">
     <h2>Create a Game</h2>
+    <div class="setting-row">
+      <span class="setting-label">Visibility</span>
+      <div class="btn-group">
+        <button class="toggle-btn selected" id="vis-private" onclick="setVisibility(false)">Private</button>
+        <button class="toggle-btn" id="vis-public" onclick="setVisibility(true)">Public</button>
+      </div>
+    </div>
     <button class="btn btn-primary" onclick="createGame()">Create Room</button>
+  </div>
+
+  <div class="card" id="open-games-card">
+    <h2>Open Games</h2>
+    <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
   </div>
 
   <div class="card">
@@ -58,25 +110,29 @@
 <div id="lobby-screen">
   <div class="card">
     <h2>Room Code — share with friends</h2>
-    <div class="room-code" id="room-code-display"></div>
-  </div>
-
-  <div class="card">
-    <h2>Players</h2>
-    <div class="player-list" id="player-list">
-      <p class="placeholder">Waiting for players…</p>
+    <div class="room-code">
+      <span id="room-code-display"></span>
+      <button class="copy-btn" id="copy-code-btn" onclick="copyRoomCode()" title="Copy to clipboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
     </div>
   </div>
+
+  <div class="card" id="settings-card"></div>
+
+  <div class="card" id="players-card"></div>
 
   <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
   <p class="status" id="lobby-status">Waiting for host to start…</p>
 </div>
 
-<!-- Game screen placeholder -->
-<div id="game-screen">
-  <p class="placeholder" style="color:#a78bfa;font-size:1.1rem">Game in progress — board coming soon.</p>
-</div>
+<!-- Game screen -->
+<div id="game-screen"></div>
 
+<script src="words.js"></script>
 <script type="module">
   import PartySocket from "https://esm.sh/partysocket@1.0.2";
 
@@ -87,6 +143,32 @@
   let myConnId = null;
   let isHost = false;
   let state = null;
+  let lobbySocket = null;
+  let publicGames = {};
+  let makePublic = false;
+  let hasRegisteredPublic = false;
+  let lastLobbySnapshot = null;
+
+  // Game UI state
+  let gameInited = false;
+  let selLetter = null;
+  let claimMode = false;
+  let claimStart = null;
+  let claimPath = null;
+  let lastCur = null;
+  let timerInterval = null;
+  let timerEndsAt = 0;
+  let gameCellSize = 0;
+  let botTurnRunning = false;
+  let botStateResolver = null;
+  let wordSet = null;
+  function getWordSet() {
+    if (wordSet) return wordSet;
+    if (!window.WORDS) return null;
+    wordSet = new Set(window.WORDS.split('\n').map(w => w.trim()).filter(Boolean));
+    return wordSet;
+  }
+  function isValidWord(w) { const s = getWordSet(); return s ? s.has(w) : false; }
 
   function randomRoomCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -113,27 +195,159 @@
   function handleState(newState) {
     state = newState;
     if (!state) return;
-    if (state.phase === "lobby") renderLobby();
-    if (state.phase === "playing") renderGame();
+    if (botStateResolver) { const r = botStateResolver; botStateResolver = null; r(); }
+    if (state.phase === "lobby") {
+      if (gameInited) {
+        gameInited = false;
+        stopTimer();
+        claimMode = false; claimStart = null; claimPath = null; selLetter = null;
+        botTurnRunning = false;
+      }
+      renderLobby();
+      if (makePublic && isHost && lobbySocket) {
+        const count = Object.keys(state.players).length;
+        const hostName = state.players[myConnId]?.name ?? "HOST";
+        const snapshot = JSON.stringify({ count, settings: state.settings, hostName });
+        if (!hasRegisteredPublic) {
+          hasRegisteredPublic = true;
+          lastLobbySnapshot = snapshot;
+          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, settings: state.settings }));
+        } else if (snapshot !== lastLobbySnapshot) {
+          lastLobbySnapshot = snapshot;
+          lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, settings: state.settings, hostName } }));
+        }
+      }
+    }
+    if (state.phase === "playing") {
+      if (!gameInited) { gameInited = true; initGame(); }
+      else updateGame();
+      if (isHost && state.players[state.cur]?.isBot && !botTurnRunning) {
+        botTurnRunning = true;
+        runBotTurn(state.cur).finally(() => { botTurnRunning = false; });
+      }
+    }
+    if (state.phase === "ended") {
+      stopTimer();
+      if (!gameInited) { gameInited = true; }
+      renderEndScreen();
+    }
   }
 
   function renderLobby() {
     show("lobby-screen");
     document.getElementById("room-code-display").textContent = roomId;
-    const list = document.getElementById("player-list");
-    const players = Object.entries(state.players);
-    list.innerHTML = players.map(([id, p]) => `
-      <div class="player-row">
-        <div class="pdot" style="background:${COLORS[p.color] ?? '#9ca3af'}"></div>
-        <span style="font-weight:bold;flex:1">${p.name}</span>
-        ${p.isHost ? '<span style="font-size:0.75rem;color:#64748b">HOST</span>' : ''}
-        ${p.isReady ? '<span style="font-size:0.75rem;color:#4ade80">READY</span>' : ''}
+
+    const amHost = state.host === myConnId;
+    const s = state.settings;
+
+    // Settings card
+    const settingsCard = document.getElementById("settings-card");
+    const boardSizes = [5, 8, 10];
+    const minWords = [3, 4, 5];
+    const territories = [['off','Off'], ['conquest','Conquest'], ['exclusive','Exclusive']];
+
+    settingsCard.innerHTML = `
+      <h2>Settings</h2>
+      <div class="setting-row">
+        <span class="setting-label">Board</span>
+        <div class="btn-group">
+          ${boardSizes.map(n => `<button class="toggle-btn${s.boardSize===n?' selected':''}" data-key="boardSize" data-val="${n}"${!amHost?' disabled':''}>${n}×${n}</button>`).join('')}
+        </div>
       </div>
-    `).join('');
+      <div class="setting-row">
+        <span class="setting-label">Min Word</span>
+        <div class="btn-group">
+          ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Territory</span>
+        <div class="btn-group">
+          ${territories.map(([t, label]) => {
+            const needsBig = t === 'exclusive' && s.boardSize !== 10;
+            const dis = !amHost || needsBig;
+            return `<button class="toggle-btn${s.territoryMode===t?' selected':''}" data-key="territoryMode" data-val="${t}"${dis?' disabled':''}${needsBig?' title="Requires 10×10 board"':''}>${label}</button>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    if (amHost) {
+      settingsCard.querySelectorAll('.toggle-btn:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.key;
+          const raw = btn.dataset.val;
+          const val = (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
+          const update = { [key]: val };
+          if (key === 'boardSize' && val !== 10 && s.territoryMode === 'exclusive') {
+            update.territoryMode = 'off';
+          }
+          socket.send(JSON.stringify({ type: 'settings', settings: update }));
+        });
+      });
+    }
+
+    // Players card — save focus state before re-render
+    const playersCard = document.getElementById("players-card");
+    const focusedId = document.activeElement?.id;
+    const focusedVal = document.activeElement?.value;
+
+    const players = Object.entries(state.players);
+    const botCount = players.filter(([,p]) => p.isBot).length;
+    let botIdx = 0;
+
+    let pHtml = '<h2>Players</h2><div class="player-list">';
+    for (const [id, p] of players) {
+      const color = COLORS[p.color] ?? '#9ca3af';
+      if (p.isBot) {
+        botIdx++;
+        const label = botCount === 1 ? 'BOT' : `BOT ${botIdx}`;
+        pHtml += `<div class="player-row">
+          <div class="pdot" style="background:${color}"></div>
+          <span style="font-weight:bold;flex:1">${label}</span>
+          ${amHost ? `
+            <button class="toggle-btn diff-btn${p.botDifficulty==='easy'?' selected':''}" onclick="setBotDiff('${id}','easy')">Easy</button>
+            <button class="toggle-btn diff-btn${p.botDifficulty==='hard'?' selected':''}" onclick="setBotDiff('${id}','hard')">Hard</button>
+            <button class="remove-btn" onclick="removeBot('${id}')" title="Remove bot">×</button>
+          ` : `<span style="font-size:0.75rem;color:#64748b">${p.botDifficulty.toUpperCase()}</span>`}
+        </div>`;
+      } else {
+        const isMe = id === myConnId;
+        pHtml += `<div class="player-row">
+          <div class="pdot" style="background:${color}"></div>
+          ${isMe
+            ? `<input class="name-input" id="name-field" value="${p.name}" maxlength="12" placeholder="Enter your name" autocomplete="off">`
+            : `<span style="font-weight:bold;flex:1">${p.name}</span>`}
+          ${p.isHost ? '<span style="font-size:0.75rem;color:#64748b">HOST</span>' : ''}
+        </div>`;
+      }
+    }
+    pHtml += '</div>';
+    if (amHost && players.length < 4) {
+      pHtml += `<button class="btn btn-secondary" onclick="addBot()" style="margin-top:0.5rem;font-size:0.85rem;padding:0.5rem 1rem">+ Add Bot</button>`;
+    }
+    playersCard.innerHTML = pHtml;
+
+    // Restore focus after re-render
+    if (focusedId) {
+      const el = document.getElementById(focusedId);
+      if (el) { el.value = focusedVal; el.focus(); }
+    }
+
+    // Wire up name input
+    const nameField = document.getElementById("name-field");
+    if (nameField) {
+      const sendRename = () => {
+        const n = nameField.value.trim().toUpperCase();
+        if (n) socket.send(JSON.stringify({ type: 'rename', name: n }));
+      };
+      nameField.addEventListener('blur', sendRename);
+      nameField.addEventListener('keydown', e => { if (e.key === 'Enter') nameField.blur(); });
+    }
 
     const startBtn = document.getElementById("start-btn");
     const lobbyStatus = document.getElementById("lobby-status");
-    if (state.host === myConnId) {
+    if (amHost) {
       startBtn.style.display = 'block';
       lobbyStatus.textContent = `${players.length} player${players.length !== 1 ? 's' : ''} in lobby.`;
     } else {
@@ -142,24 +356,437 @@
     }
   }
 
-  function renderGame() {
+  // ── GAME BOARD ───────────────────────────────────────────────
+  function initGame() {
     show("game-screen");
-    // Full game board will be built here
+    const { boardSize } = state.settings;
+    const gs = document.getElementById("game-screen");
+    // clientWidth forces a layout reflow — gives the true available width after body padding
+    const availW = gs.clientWidth || (window.innerWidth - 64);
+    const cellSize = Math.max(22, Math.floor((availW - (boardSize - 1) * 3) / boardSize));
+    gameCellSize = cellSize;
+    const gridW = boardSize * cellSize + (boardSize - 1) * 3;
+    gs.innerHTML = `
+      <div style="width:${gridW}px;max-width:100%;margin:0 auto;display:flex;flex-direction:column;gap:1rem">
+        <div class="scores-wrap" id="scores-wrap"></div>
+        <div class="turn-banner" id="turn-banner">
+          <div>
+            <span id="turn-label" style="font-weight:bold"></span>
+            <div id="turn-sublabel" style="font-size:0.78rem;margin-top:0.18rem"></div>
+          </div>
+          <span id="timer-label" style="font-weight:900;font-variant-numeric:tabular-nums;color:#a78bfa"></span>
+        </div>
+        <div style="position:relative;line-height:0">
+          <div id="game-grid" class="game-grid"
+            style="grid-template-columns:repeat(${boardSize},${cellSize}px);--cs:${cellSize}px"></div>
+          <svg id="claims-svg" viewBox="0 0 ${gridW} ${gridW}"
+               style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></svg>
+        </div>
+        <div id="controls-card" class="card" style="padding:1rem"></div>
+        <div class="card" style="padding:1rem">
+          <h2>Words Claimed</h2>
+          <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
+        </div>
+      </div>`;
+    const grid = document.getElementById("game-grid");
+    for (let r = 0; r < boardSize; r++) {
+      for (let c = 0; c < boardSize; c++) {
+        const cell = document.createElement("div");
+        cell.className = "gcell";
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.addEventListener("click", () => onCellClick(r, c));
+        grid.appendChild(cell);
+      }
+    }
+    lastCur = null;
+    updateGame();
+
+    // Re-init on resize (debounced) so board stays within viewport
+    if (window._gameResizeCleanup) window._gameResizeCleanup();
+    let resizeTimer;
+    const onResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (state?.phase === 'playing' && gameInited) initGame();
+      }, 150);
+    };
+    window.addEventListener('resize', onResize);
+    window._gameResizeCleanup = () => { window.removeEventListener('resize', onResize); clearTimeout(resizeTimer); };
   }
+
+  function updateGame() {
+    const turnChanged = state.cur !== lastCur;
+    if (turnChanged) {
+      lastCur = state.cur;
+      selLetter = null; claimMode = false; claimStart = null; claimPath = null;
+      restartTimer();
+    }
+    updateScores();
+    updateGridCells();
+    updateTurnBanner();
+    updateControls();
+    updateClaimedList();
+    updateClaimLines();
+  }
+
+  function updateScores() {
+    const wrap = document.getElementById("scores-wrap");
+    if (!wrap) return;
+    wrap.innerHTML = Object.entries(state.players).map(([id, p]) => {
+      const active = id === state.cur;
+      const color = COLORS[p.color] ?? "#9ca3af";
+      const letters = p.lettersLeft ?? 0;
+      return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
+        <span class="pname">${p.name}</span>
+        <div class="pinfo">
+          <div class="pdot" style="background:${color}"></div>
+          <span style="color:#64748b;font-size:0.78rem">${p.score} pts</span>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  function updateGridCells() {
+    const { boardSize } = state.settings;
+    for (let r = 0; r < boardSize; r++) {
+      for (let c = 0; c < boardSize; c++) {
+        const cell = document.querySelector(`#game-grid [data-r="${r}"][data-c="${c}"]`);
+        if (!cell) continue;
+        const gCell = state.grid?.[r]?.[c];
+        const owner = state.territory?.[r]?.[c];
+        const ownerColor = owner ? COLORS[state.players[owner]?.color] : null;
+        cell.style.background = ownerColor ? ownerColor + "33" : "";
+        cell.style.color = gCell ? (COLORS[state.players[gCell.pi]?.color] ?? "#e2e8f0") : "#e2e8f0";
+        cell.textContent = gCell?.letter ?? "";
+        cell.className = "gcell";
+        if (claimPath) {
+          if (claimPath.some(p => p.r === r && p.c === c)) {
+            cell.classList.add(validateClaim(claimPath).valid ? "path-ok" : "path-bad");
+          }
+        } else if (claimStart && claimStart.r === r && claimStart.c === c) {
+          cell.classList.add("sel-start");
+        }
+      }
+    }
+  }
+
+  function updateTurnBanner() {
+    const lbl = document.getElementById("turn-label");
+    const sub = document.getElementById("turn-sublabel");
+    const banner = document.getElementById("turn-banner");
+    if (!lbl || !banner) return;
+    const isMyTurn = state.cur === myConnId;
+    const cur = state.players[state.cur];
+    lbl.textContent = isMyTurn ? "Your turn" : `${cur?.name ?? "…"}'s turn`;
+    if (sub) {
+      if (isMyTurn) {
+        const letters = state.players[myConnId]?.lettersLeft ?? 0;
+        sub.style.color = letters > 0 ? "#fcd34d" : "#64748b";
+        sub.textContent = letters > 0
+          ? `★ You have ${letters} letter${letters > 1 ? "s" : ""} to place`
+          : "Claim a word or pass";
+      } else {
+        sub.textContent = "";
+      }
+    }
+    banner.classList.toggle("my-turn", isMyTurn);
+  }
+
+  function updateControls() {
+    const card = document.getElementById("controls-card");
+    if (!card) return;
+    const amActive = state.cur === myConnId;
+    if (!amActive) { card.innerHTML = ""; return; }
+    const me = state.players[myConnId];
+    const lettersLeft = me?.lettersLeft ?? 0;
+    const pathWord = claimPath ? claimPath.map(p => state.grid?.[p.r]?.[p.c]?.letter ?? "").join("") : "";
+    const val = claimPath ? validateClaim(claimPath) : null;
+    let html = "";
+    if (lettersLeft > 0 && !claimMode) {
+      html += `<div class="letter-panel" id="letter-panel">
+        ${"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l =>
+          `<button class="lbtn${selLetter === l ? " sel" : ""}" onclick="selectLetter('${l}')">${l}</button>`
+        ).join("")}
+      </div>`;
+    }
+    if (claimMode) {
+      const hint = !claimStart ? "Tap start cell" : !claimPath ? "Tap end cell" : pathWord;
+      const valColor = val ? (val.valid ? "#22c55e" : "#ef4444") : "#94a3b8";
+      html += `<p style="text-align:center;font-weight:bold;color:${valColor};margin-bottom:0.5rem">${hint}${val ? (val.valid ? ` +${val.score}pts` : ` — ${val.reason}`) : ""}</p>`;
+    }
+    html += `<div class="action-bar" style="margin-top:${lettersLeft > 0 || claimMode ? "0.75rem" : "0"}">
+      <button class="btn ${claimMode ? "btn-primary" : "btn-secondary"}" onclick="toggleClaimMode()" style="flex:1">
+        ${claimMode ? "Cancel" : "Claim Word"}
+      </button>
+      <button class="btn btn-secondary" onclick="doPass()" style="flex:1">Pass</button>
+    </div>`;
+    card.innerHTML = html;
+  }
+
+  function updateClaimLines() {
+    const svg = document.getElementById("claims-svg");
+    if (!svg || !gameCellSize) return;
+    const cs = gameCellSize, gap = 3;
+    const cx = (r, c) => c * (cs + gap) + cs / 2;
+    const cy = (r, c) => r * (cs + gap) + cs / 2;
+    let html = "";
+    for (const claim of (state.claimed ?? [])) {
+      if (!claim.path?.length) continue;
+      const color = COLORS[state.players[claim.connId]?.color] ?? "#9ca3af";
+      const a = claim.path[0], b = claim.path[claim.path.length - 1];
+      html += `<line x1="${cx(a.r,a.c)}" y1="${cy(a.r,a.c)}" x2="${cx(b.r,b.c)}" y2="${cy(b.r,b.c)}"
+        stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-opacity="0.55"/>`;
+    }
+    if (claimMode && claimPath?.length >= 2) {
+      const a = claimPath[0], b = claimPath[claimPath.length - 1];
+      const valid = validateClaim(claimPath).valid;
+      html += `<line x1="${cx(a.r,a.c)}" y1="${cy(a.r,a.c)}" x2="${cx(b.r,b.c)}" y2="${cy(b.r,b.c)}"
+        stroke="${valid ? "#22c55e" : "#ef4444"}" stroke-width="5" stroke-linecap="round"
+        stroke-opacity="0.75" stroke-dasharray="8 4"/>`;
+    }
+    svg.innerHTML = html;
+  }
+
+  function updateClaimedList() {
+    const list = document.getElementById("claimed-list");
+    if (!list) return;
+    if (!state.claimed?.length) {
+      list.innerHTML = `<p class="placeholder" style="font-size:0.8rem">No words yet.</p>`;
+      return;
+    }
+    list.innerHTML = state.claimed.map(c => {
+      const color = COLORS[state.players[c.connId]?.color] ?? "#9ca3af";
+      return `<span style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color}">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+    }).join("");
+  }
+
+  // ── Timer ────────────────────────────────────────────────────
+  function restartTimer() {
+    stopTimer();
+    const secs = state.settings?.timeLimit ?? 120;
+    timerEndsAt = Date.now() + secs * 1000;
+    timerInterval = setInterval(() => {
+      const rem = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
+      const el = document.getElementById("timer-label");
+      if (el) {
+        el.textContent = `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, "0")}`;
+        el.style.color = rem <= 15 ? "#ef4444" : rem <= 40 ? "#eab308" : "#a78bfa";
+      }
+      if (rem === 0 && state.cur === myConnId) window.doPass();
+    }, 500);
+  }
+
+  function stopTimer() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  }
+
+  // ── Cell interaction ─────────────────────────────────────────
+  function onCellClick(r, c) {
+    if (state.phase !== "playing" || state.cur !== myConnId) return;
+    if (claimMode) {
+      if (!claimStart) {
+        claimStart = { r, c }; claimPath = null;
+      } else {
+        const path = getPath(claimStart, { r, c });
+        if (path && path.length > 1) {
+          claimPath = path;
+          const v = validateClaim(claimPath);
+          if (v.valid) {
+            socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+            claimMode = false; claimStart = null; claimPath = null;
+            updateControls(); updateGridCells(); updateClaimLines(); return;
+          }
+          // Invalid — show error, let player pick a new end cell
+        } else {
+          claimStart = { r, c }; claimPath = null;
+        }
+      }
+      updateControls(); updateGridCells(); updateClaimLines(); return;
+    }
+    if (!selLetter) return;
+    if (state.grid?.[r]?.[c]) return;
+    const me = state.players[myConnId];
+    if (!me || me.lettersLeft <= 0) return;
+    socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter }));
+    selLetter = null;
+  }
+
+  window.selectLetter = l => { selLetter = selLetter === l ? null : l; updateControls(); };
+  window.toggleClaimMode = () => {
+    claimMode = !claimMode; claimStart = null; claimPath = null;
+    updateControls(); updateGridCells(); updateClaimLines();
+  };
+  window.confirmClaim = () => {
+    if (!claimPath) return;
+    const v = validateClaim(claimPath);
+    if (!v.valid) return;
+    socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+    claimMode = false; claimStart = null; claimPath = null;
+  };
+  window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass" })); };
+  window.playAgain = () => { if (socket) socket.send(JSON.stringify({ type: "reset" })); };
+
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (state?.phase !== "playing" || state?.cur !== myConnId) return;
+    const key = e.key.toUpperCase();
+    if (/^[A-Z]$/.test(e.key) && e.key.length === 1) {
+      const me = state.players[myConnId];
+      if (me?.lettersLeft > 0 && !claimMode) {
+        e.preventDefault();
+        window.selectLetter(key);
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      window.doPass();
+    } else if (e.key === " ") {
+      e.preventDefault();
+      window.toggleClaimMode();
+    }
+  });
+
+  // ── Word validation ──────────────────────────────────────────
+  function getPath(a, b) {
+    const dr = b.r - a.r, dc = b.c - a.c;
+    const ar = Math.abs(dr), ac = Math.abs(dc);
+    if (dr !== 0 && dc !== 0 && ar !== ac) return null;
+    const len = Math.max(ar, ac);
+    const sr = dr === 0 ? 0 : dr / ar, sc = dc === 0 ? 0 : dc / ac;
+    return Array.from({ length: len + 1 }, (_, i) => ({ r: a.r + i * sr, c: a.c + i * sc }));
+  }
+
+  function validateClaim(path) {
+    const minLen = state.settings?.minWordLen ?? 4;
+    if (path.length < minLen) return { valid: false, reason: `Need ≥${minLen} letters` };
+    const letters = path.map(({ r, c }) => state.grid?.[r]?.[c]?.letter);
+    if (letters.some(l => !l)) return { valid: false, reason: "All cells need letters" };
+    const word = letters.join("");
+    if (state.claimed?.some(c => c.word === word)) return { valid: false, reason: "Already claimed" };
+    if (state.settings?.territoryMode === "exclusive" && state.territory) {
+      if (path.some(({ r, c }) => { const o = state.territory[r]?.[c]; return o && o !== myConnId; }))
+        return { valid: false, reason: "Crosses opponent territory" };
+    }
+    if (!isValidWord(word)) return { valid: false, reason: `"${word}" not in dictionary` };
+    return { valid: true, word, score: path.length };
+  }
+
+  // ── End screen ───────────────────────────────────────────────
+  function renderEndScreen() {
+    show("game-screen");
+    const gs = document.getElementById("game-screen");
+    const mode = state.settings?.territoryMode;
+    const useTiles = mode && mode !== "off" && state.territory;
+    let ranked;
+    if (useTiles) {
+      const counts = {};
+      const n = state.settings.boardSize;
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        const o = state.territory[r]?.[c]; if (o) counts[o] = (counts[o] ?? 0) + 1;
+      }
+      ranked = Object.entries(state.players)
+        .sort(([a], [b]) => (counts[b] ?? 0) - (counts[a] ?? 0))
+        .map(([id, p]) => ({ p, stat: `${counts[id] ?? 0} tiles` }));
+    } else {
+      ranked = Object.values(state.players)
+        .sort((a, b) => b.score - a.score)
+        .map(p => ({ p, stat: `${p.score} pts` }));
+    }
+    const winner = ranked[0]?.p;
+    gs.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:0.75rem;width:100%;max-width:420px;margin:0 auto">
+        <div class="card" style="margin-bottom:0">
+          <h2 style="text-align:center;font-size:1.4rem;color:#a78bfa;margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.05em">GAME OVER</h2>
+          <p style="text-align:center;color:#94a3b8;margin-bottom:1.25rem">${winner?.name ?? "?"} wins!</p>
+          ${ranked.map(({ p, stat }, i) => `
+            <div class="player-row" style="margin-bottom:0.5rem">
+              <span style="color:#475569;width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
+              <div class="pdot" style="background:${COLORS[p.color] ?? "#9ca3af"};flex-shrink:0"></div>
+              <span style="font-weight:bold;flex:1">${p.name}</span>
+              <span style="color:#a78bfa;font-weight:bold;white-space:nowrap">${stat}</span>
+            </div>`).join("")}
+        </div>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-secondary" onclick="location.reload()" style="flex:1">Back to Lobby</button>
+          ${!state.isPublic ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function connectLobby() {
+    lobbySocket = new PartySocket({ host: PARTYKIT_HOST, party: "lobby", room: "main" });
+    lobbySocket.addEventListener("message", e => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "games") {
+        publicGames = msg.games;
+        renderPublicGames();
+      }
+    });
+  }
+
+  function renderPublicGames() {
+    const list = document.getElementById("open-games-list");
+    if (!list) return;
+    const entries = Object.values(publicGames);
+    if (!entries.length) {
+      list.innerHTML = '<p class="placeholder">No open games right now.</p>';
+      return;
+    }
+    list.innerHTML = entries.map(g => {
+      const s = g.settings ?? {};
+      const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Exclusive' : null;
+      const meta = [`${s.boardSize ?? 10}×${s.boardSize ?? 10}`, `min ${s.minWordLen ?? 4}`, territory, `${g.playerCount}/4`].filter(Boolean).join(' · ');
+      return `
+        <div class="public-game-row">
+          <div>
+            <span style="font-weight:bold">${g.hostName}</span>
+            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}</span>
+          </div>
+          <button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem" onclick="joinPublicGame('${g.roomId}')">Join</button>
+        </div>`;
+    }).join('');
+  }
+
+  window.setVisibility = function(pub) {
+    makePublic = pub;
+    document.getElementById('vis-private')?.classList.toggle('selected', !makePublic);
+    document.getElementById('vis-public')?.classList.toggle('selected', makePublic);
+  };
+
+  function getPlayerName() {
+    const name = document.getElementById("player-name").value.trim().toUpperCase() || "PLAYER";
+    if (name !== "PLAYER") localStorage.setItem("lexterra_name", name);
+    return name;
+  }
+
+  // Restore saved name on load
+  const savedName = localStorage.getItem("lexterra_name");
+  if (savedName) {
+    const inp = document.getElementById("player-name");
+    if (inp) inp.value = savedName;
+  }
+
+  window.joinPublicGame = function(code) {
+    const name = getPlayerName();
+    document.getElementById("room-code-input").value = code;
+    connect(code);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "join", name }));
+    }, { once: true });
+  };
 
   // Exposed to onclick handlers
   window.createGame = function() {
-    const name = document.getElementById("player-name").value.trim().toUpperCase() || "PLAYER";
+    const name = getPlayerName();
     const room = randomRoomCode();
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "create", name, color: "Red", settings: { boardSize: 10, minWordLen: 4, territoryMode: "off", timeLimit: 120 } }));
+      socket.send(JSON.stringify({ type: "create", name, color: "Red", isPublic: makePublic, settings: { boardSize: 5, minWordLen: 4, territoryMode: "off", timeLimit: 120 } }));
       isHost = true;
     }, { once: true });
   };
 
   window.joinGame = function() {
-    const name = document.getElementById("player-name").value.trim().toUpperCase() || "PLAYER";
+    const name = getPlayerName();
     const room = document.getElementById("room-code-input").value.trim().toUpperCase();
     if (!room) { document.getElementById("join-status").textContent = "Enter a room code."; return; }
     connect(room);
@@ -169,11 +796,134 @@
   };
 
   window.startGame = function() {
-    if (socket) socket.send(JSON.stringify({ type: "start" }));
+    if (!socket) return;
+    if (makePublic && hasRegisteredPublic && lobbySocket) {
+      lobbySocket.send(JSON.stringify({ type: "unregister", roomId }));
+    }
+    socket.send(JSON.stringify({ type: "start" }));
   };
+
+  window.copyRoomCode = function() {
+    navigator.clipboard.writeText(roomId).then(() => {
+      const btn = document.getElementById("copy-code-btn");
+      if (!btn) return;
+      const orig = btn.innerHTML;
+      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    });
+  };
+
+  window.addBot = function() {
+    if (socket) socket.send(JSON.stringify({ type: "add-bot" }));
+  };
+
+  window.removeBot = function(botId) {
+    if (socket) socket.send(JSON.stringify({ type: "remove-bot", botId }));
+  };
+
+  window.setBotDiff = function(botId, difficulty) {
+    if (socket) socket.send(JSON.stringify({ type: "bot-difficulty", botId, difficulty }));
+  };
+
+  // ── BOT AI ───────────────────────────────────────────────────
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  const waitForNextState = () => new Promise(r => { botStateResolver = r; });
+
+  function randomLetter() {
+    return 'EEEEEEAAAAAAIIIIIOOOOOOUUURRRRSSSSTTTTLLLLNNNNCCCDDDDGGHHBBFFKKMMPPVVWWYYJQXZ'[
+      Math.floor(Math.random() * 70)];
+  }
+
+  function findBotWords(grid, botId) {
+    const { boardSize, minWordLen, territoryMode } = state.settings;
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const claimed = new Set((state.claimed ?? []).map(c => c.word));
+    const results = [];
+    for (const [dr, dc] of dirs) {
+      for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+          const path = [];
+          let nr = r, nc = c;
+          while (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && grid[nr]?.[nc]?.letter) {
+            path.push({ r: nr, c: nc }); nr += dr; nc += dc;
+          }
+          for (let len = minWordLen; len <= path.length; len++) {
+            const sub = path.slice(0, len);
+            const word = sub.map(p => grid[p.r][p.c].letter).join('');
+            if (claimed.has(word)) continue;
+            if (territoryMode === 'exclusive' && state.territory)
+              if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
+            if (isValidWord(word)) results.push({ word, path: sub, score: len });
+          }
+        }
+      }
+    }
+    return results;
+  }
+
+  function chooseBestPlacement(emptyCells) {
+    const { boardSize } = state.settings;
+    const topLetters = 'ETAOINSHRD';
+    const testCells = [...emptyCells].sort(() => Math.random() - 0.5).slice(0, 12);
+    let best = null, bestScore = -1;
+    for (const cell of testCells) {
+      for (const letter of topLetters) {
+        const g = state.grid.map(row => row.map(c => c ? { ...c } : null));
+        g[cell.r][cell.c] = { letter, pi: state.cur };
+        const score = findBotWords(g, state.cur).reduce((s, w) => s + w.score, 0);
+        if (score > bestScore) { bestScore = score; best = { cell, letter }; }
+      }
+    }
+    return best ?? { cell: emptyCells[0], letter: randomLetter() };
+  }
+
+  async function runBotTurn(botId) {
+    try {
+      const bot = state.players[botId];
+      const isHard = bot?.botDifficulty === 'hard';
+      await delay(isHard ? 900 : 1400 + Math.random() * 600);
+      if (state.cur !== botId || state.phase !== 'playing') return;
+
+      // 1. Place a letter
+      if ((state.players[botId]?.lettersLeft ?? 0) > 0) {
+        const empty = [];
+        const { boardSize } = state.settings;
+        for (let r = 0; r < boardSize; r++)
+          for (let c = 0; c < boardSize; c++)
+            if (!state.grid?.[r]?.[c]) empty.push({ r, c });
+        if (empty.length) {
+          const { cell, letter } = isHard ? chooseBestPlacement(empty)
+            : { cell: empty[Math.floor(Math.random() * empty.length)], letter: randomLetter() };
+          socket.send(JSON.stringify({ type: 'place', r: cell.r, c: cell.c, letter }));
+          await waitForNextState();
+          await delay(600);
+          if (state.cur !== botId || state.phase !== 'playing') return;
+        }
+      }
+
+      // 2. Claim the best available word (if any)
+      const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
+      if (found.length) {
+        socket.send(JSON.stringify({ type: 'claim', word: found[0].word, path: found[0].path, score: found[0].score }));
+        await waitForNextState();
+        await delay(400);
+      }
+
+      // 3. Pass — always, no looping
+      if (state.cur === botId && state.phase === 'playing')
+        socket.send(JSON.stringify({ type: 'pass' }));
+    } catch (e) {
+      console.warn('Bot error:', e);
+      if (state?.cur === botId && state?.phase === 'playing')
+        socket.send(JSON.stringify({ type: 'pass' }));
+    }
+  }
 
   // PartyKit host is injected at deploy time; fall back to localhost for dev
   const PARTYKIT_HOST = typeof __PARTYKIT_HOST__ !== "undefined" ? __PARTYKIT_HOST__ : "localhost:1999";
+
+  connectLobby();
 </script>
+<p style="position:fixed;bottom:0.5rem;right:0.75rem;font-size:0.65rem;color:#334155;pointer-events:none">v0.2.3</p>
 </body>
 </html>

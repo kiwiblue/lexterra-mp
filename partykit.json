@@ -1,5 +1,8 @@
 {
   "name": "lexterra-mp",
   "main": "party/index.js",
+  "parties": {
+    "lobby": "party/lobby.js"
+  },
   "serve": "public"
 }
