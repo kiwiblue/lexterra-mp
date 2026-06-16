@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lexterra MP</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    h1 { font-size: 2.5rem; font-weight: 900; letter-spacing: 0.25em; color: #a78bfa; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 0.85rem; color: #475569; letter-spacing: 0.15em; margin-bottom: 2.5rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 1rem; }
+    .card h2 { font-size: 1rem; color: #94a3b8; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.25rem; }
+    input { background: #0f172a; border: 2px solid #334155; color: white; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 1rem; width: 100%; outline: none; }
+    input:focus { border-color: #7c3aed; }
+    .btn { padding: 0.7rem 1.5rem; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: opacity 0.15s; }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #7c3aed; color: white; }
+    .btn-secondary { background: #1e293b; border: 2px solid #334155; color: #e2e8f0; }
+    .divider { border: none; border-top: 1px solid #334155; }
+    .status { font-size: 0.85rem; color: #64748b; text-align: center; }
+    #lobby-screen, #game-screen { display: none; width: 100%; max-width: 420px; flex-direction: column; gap: 1rem; }
+    #join-screen { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 1rem; }
+    .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .player-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
+    .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: #a78bfa; text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; }
+    .placeholder { color: #475569; font-size: 0.9rem; text-align: center; padding: 1rem; }
+  </style>
+</head>
+<body>
+
+<h1>LEXTERRA</h1>
+<p class="subtitle">MULTIPLAYER</p>
+
+<!-- Join / Create screen -->
+<div id="join-screen">
+  <div class="card">
+    <h2>Your Name</h2>
+    <input id="player-name" type="text" maxlength="12" placeholder="Enter your name" style="text-transform:uppercase">
+  </div>
+
+  <div class="card">
+    <h2>Create a Game</h2>
+    <button class="btn btn-primary" onclick="createGame()">Create Room</button>
+  </div>
+
+  <div class="card">
+    <h2>Join a Game</h2>
+    <input id="room-code-input" type="text" maxlength="6" placeholder="Room code" style="text-transform:uppercase;letter-spacing:0.2em">
+    <button class="btn btn-secondary" onclick="joinGame()">Join Room</button>
+  </div>
+
+  <p class="status" id="join-status"></p>
+</div>
+
+<!-- Lobby screen (waiting for players) -->
+<div id="lobby-screen">
+  <div class="card">
+    <h2>Room Code — share with friends</h2>
+    <div class="room-code" id="room-code-display"></div>
+  </div>
+
+  <div class="card">
+    <h2>Players</h2>
+    <div class="player-list" id="player-list">
+      <p class="placeholder">Waiting for players…</p>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
+  <p class="status" id="lobby-status">Waiting for host to start…</p>
+</div>
+
+<!-- Game screen placeholder -->
+<div id="game-screen">
+  <p class="placeholder" style="color:#a78bfa;font-size:1.1rem">Game in progress — board coming soon.</p>
+</div>
+
+<script type="module">
+  import PartySocket from "https://esm.sh/partysocket@1.0.2";
+
+  const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Pink:'#ec4899', Yellow:'#eab308', Green:'#22c55e', Grey:'#9ca3af' };
+
+  let socket = null;
+  let roomId = null;
+  let myConnId = null;
+  let isHost = false;
+  let state = null;
+
+  function randomRoomCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
+  function show(screenId) {
+    ['join-screen','lobby-screen','game-screen'].forEach(id => {
+      const el = document.getElementById(id);
+      el.style.display = id === screenId ? 'flex' : 'none';
+    });
+  }
+
+  function connect(room) {
+    roomId = room;
+    socket = new PartySocket({ host: PARTYKIT_HOST, room });
+    socket.addEventListener("message", e => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "state") handleState(msg.state);
+      if (msg.type === "error") document.getElementById("join-status").textContent = msg.message;
+    });
+    socket.addEventListener("open", () => { myConnId = socket.id; });
+  }
+
+  function handleState(newState) {
+    state = newState;
+    if (!state) return;
+    if (state.phase === "lobby") renderLobby();
+    if (state.phase === "playing") renderGame();
+  }
+
+  function renderLobby() {
+    show("lobby-screen");
+    document.getElementById("room-code-display").textContent = roomId;
+    const list = document.getElementById("player-list");
+    const players = Object.entries(state.players);
+    list.innerHTML = players.map(([id, p]) => `
+      <div class="player-row">
+        <div class="pdot" style="background:${COLORS[p.color] ?? '#9ca3af'}"></div>
+        <span style="font-weight:bold;flex:1">${p.name}</span>
+        ${p.isHost ? '<span style="font-size:0.75rem;color:#64748b">HOST</span>' : ''}
+        ${p.isReady ? '<span style="font-size:0.75rem;color:#4ade80">READY</span>' : ''}
+      </div>
+    `).join('');
+
+    const startBtn = document.getElementById("start-btn");
+    const lobbyStatus = document.getElementById("lobby-status");
+    if (state.host === myConnId) {
+      startBtn.style.display = 'block';
+      lobbyStatus.textContent = `${players.length} player${players.length !== 1 ? 's' : ''} in lobby.`;
+    } else {
+      startBtn.style.display = 'none';
+      lobbyStatus.textContent = 'Waiting for host to start…';
+    }
+  }
+
+  function renderGame() {
+    show("game-screen");
+    // Full game board will be built here
+  }
+
+  // Exposed to onclick handlers
+  window.createGame = function() {
+    const name = document.getElementById("player-name").value.trim().toUpperCase() || "PLAYER";
+    const room = randomRoomCode();
+    connect(room);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "create", name, color: "Red", settings: { boardSize: 10, minWordLen: 4, territoryMode: "off", timeLimit: 120 } }));
+      isHost = true;
+    }, { once: true });
+  };
+
+  window.joinGame = function() {
+    const name = document.getElementById("player-name").value.trim().toUpperCase() || "PLAYER";
+    const room = document.getElementById("room-code-input").value.trim().toUpperCase();
+    if (!room) { document.getElementById("join-status").textContent = "Enter a room code."; return; }
+    connect(room);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "join", name }));
+    }, { once: true });
+  };
+
+  window.startGame = function() {
+    if (socket) socket.send(JSON.stringify({ type: "start" }));
+  };
+
+  // PartyKit host is injected at deploy time; fall back to localhost for dev
+  const PARTYKIT_HOST = typeof __PARTYKIT_HOST__ !== "undefined" ? __PARTYKIT_HOST__ : "localhost:1999";
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "lexterra-mp",
+  "main": "party/index.js",
+  "serve": "public"
+}
