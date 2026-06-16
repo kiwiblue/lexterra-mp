@@ -4,5 +4,6 @@
   "parties": {
     "lobby": "party/lobby.js"
   },
-  "serve": "public"
+  "serve": "public",
+  "compatibilityDate": "2026-06-16"
 }
