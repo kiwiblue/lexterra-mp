@@ -232,6 +232,12 @@
     socket.addEventListener("message", e => {
       const msg = JSON.parse(e.data);
       if (msg.type === "state") handleState(msg.state);
+      if (msg.type === "host_left") {
+        localStorage.removeItem("lexterra_room");
+        localStorage.removeItem("lexterra_connId");
+        location.reload();
+        return;
+      }
       if (msg.type === "error") {
         if (msg.message && (msg.message.includes("Slot expired") || msg.message.includes("Game not found"))) {
           localStorage.removeItem("lexterra_room");
@@ -263,9 +269,27 @@
     });
   }
 
+  function showToast(msg) {
+    let t = document.getElementById("toast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "toast";
+      t.style.cssText = "position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #ef4444;color:#fca5a5;padding:0.6rem 1.2rem;border-radius:8px;font-size:0.85rem;font-weight:bold;z-index:1000;text-align:center;max-width:90vw;pointer-events:none";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = "block";
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = "none"; }, 5000);
+  }
+
   function handleState(newState) {
     state = newState;
     if (!state) return;
+    if (state.abandonedMessage) {
+      showToast(`${state.abandonedMessage} — sorry about that`);
+      state.abandonedMessage = null;
+    }
     if (state.host === myConnId) isHost = true;
     if (botStateResolver) { const r = botStateResolver; botStateResolver = null; r(); }
     if (state.phase === "lobby") {
@@ -1275,6 +1299,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.12</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.13</p>
 </body>
 </html>
