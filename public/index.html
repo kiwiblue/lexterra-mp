@@ -925,7 +925,8 @@
       for (const letter of topLetters) {
         const g = state.grid.map(row => row.map(c => c ? { ...c } : null));
         g[cell.r][cell.c] = { letter, pi: state.cur };
-        const score = findBotWords(g, state.cur).reduce((s, w) => s + w.score, 0);
+        // Cube-weight scores so placing for one long word beats placing for many short words
+        const score = findBotWords(g, state.cur).reduce((s, w) => s + Math.pow(w.score, 3), 0);
         if (score > bestScore) { bestScore = score; best = { cell, letter }; }
       }
     }
@@ -956,12 +957,25 @@
         }
       }
 
-      // 2. Claim the best available word (if any)
+      // 2. Claim a word
       const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
       if (found.length) {
-        socket.send(JSON.stringify({ type: 'claim', word: found[0].word, path: found[0].path, score: found[0].score }));
-        await waitForNextState();
-        await delay(400);
+        const minLen = state.settings?.minWordLen ?? 4;
+        let pick;
+        if (isHard) {
+          // Prefer words well above the minimum; only occasionally claim short ones
+          pick = found.find(w => w.score >= minLen + 2)
+              ?? found.find(w => w.score >= minLen + 1)
+              ?? (Math.random() < 0.25 ? found[0] : null);
+        } else {
+          // Easy: random selection so it doesn't always grab the best word
+          pick = found[Math.floor(Math.random() * found.length)];
+        }
+        if (pick) {
+          socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+          await waitForNextState();
+          await delay(400);
+        }
       }
 
       // 3. Pass — always, no looping
