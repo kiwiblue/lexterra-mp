@@ -1166,8 +1166,11 @@
 
   window.setGameMode = function(mode) {
     if (!socket || !isHost) return;
-    const map = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive', boardSize: 10 }, search: { territoryMode: 'off' } };
-    if (map[mode]) socket.send(JSON.stringify({ type: 'settings', settings: map[mode] }));
+    const currentMode = state.settings.territoryMode === 'exclusive' ? 'fort' : null;
+    const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive', boardSize: 10 }, search: { territoryMode: 'off' } }[mode];
+    if (!updates) return;
+    if (currentMode === 'fort' && mode !== 'fort') updates.boardSize = 5;
+    socket.send(JSON.stringify({ type: 'settings', settings: updates }));
   };
 
   window.addBot = function() {
@@ -1309,6 +1312,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.15</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.16</p>
 </body>
 </html>
