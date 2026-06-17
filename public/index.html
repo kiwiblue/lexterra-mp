@@ -61,6 +61,7 @@
     .gcell.sel-start { border-color: #7c3aed !important; background: rgba(124,58,237,0.2) !important; }
     .gcell.path-ok { border-color: #22c55e !important; background: rgba(34,197,94,0.12) !important; }
     .gcell.path-bad { border-color: #ef4444 !important; background: rgba(239,68,68,0.12) !important; }
+    .gcell.path-hl { border-color: var(--hl-color, #a78bfa) !important; background: var(--hl-bg, rgba(167,139,250,0.15)) !important; }
     .letter-panel { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
     .lbtn { width: 34px; height: 34px; border: 2px solid #334155; background: #0f172a; color: #94a3b8; border-radius: 6px; font-size: 0.82rem; font-weight: 900; cursor: pointer; transition: all 0.1s; }
     .lbtn:hover { border-color: #7c3aed; color: #e2e8f0; }
@@ -95,7 +96,7 @@
 <body>
 
 <h1 style="cursor:pointer" onclick="goHome()">LEXTERRA</h1>
-<p class="subtitle">MULTIPLAYER</p>
+<p class="subtitle" id="subtitle">MULTIPLAYER</p>
 
 <!-- Join / Create screen -->
 <div id="join-screen">
@@ -210,6 +211,7 @@
   let frozenPlayers = null;
   let otherHovers = {};
   let lastHoverSent = 0;
+  let highlightedWord = null;
   let timerInterval = null;
   let timerEndsAt = 0;
   let gameCellSize = 0;
@@ -340,7 +342,7 @@
       }
     }
     if (state?.phase === 'playing' && newState?.phase === 'ended') frozenPlayers = { ...state.players };
-    if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; }
+    if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; highlightedWord = null; }
     state = newState;
     if (!state) return;
     if (state.abandonedMessage) {
@@ -400,6 +402,8 @@
 
   function renderLobby() {
     show("lobby-screen");
+    const subEl = document.getElementById('subtitle');
+    if (subEl) subEl.textContent = 'MULTIPLAYER';
     sendLobbyHello("game");
     document.getElementById("room-code-display").textContent = roomId;
 
@@ -415,14 +419,14 @@
     const modeDescs = {
       search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
       conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
-      fort:     "Create words to claim tiles no one else can use. Secure your fortress and protect your territory. Most points wins.",
+      fort:     "Create words to claim tiles no one else can use. Secure your fortress and protect your territory. Most tiles wins.",
     };
 
     settingsSection.innerHTML = `
       <p class="section-label">Game Mode</p>
       <div class="mode-toggle">
         <button class="mode-btn${gameMode==='conquest'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('conquest')">Conquest</button>
-        <button class="mode-btn${gameMode==='fort'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('fort')">Fort</button>
+        <button class="mode-btn${gameMode==='fort'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('fort')">Keeps</button>
         <button class="mode-btn${gameMode==='search'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('search')">Search</button>
       </div>
       <p class="mode-bg-desc">${modeDescs[gameMode]}</p>
@@ -581,6 +585,9 @@
   // ── GAME BOARD ───────────────────────────────────────────────
   function initGame() {
     show("game-screen");
+    const modeLabel = ({conquest:'CONQUEST MODE', exclusive:'KEEPS MODE', off:'SEARCH MODE'})[state.settings?.territoryMode] ?? 'MULTIPLAYER';
+    const sub = document.getElementById('subtitle');
+    if (sub) sub.textContent = `MULTIPLAYER · ${modeLabel}`;
     const { boardSize } = state.settings;
     const gs = document.getElementById("game-screen");
     // clientWidth forces a layout reflow — gives the true available width after body padding
@@ -617,13 +624,13 @@
             ${[
               `${boardSize}×${boardSize} board`,
               `Min ${state.settings.minWordLen} letter${state.settings.minWordLen !== 1 ? 's' : ''}`,
-              ({off:'Search',conquest:'Conquest',exclusive:'Fort'})[state.settings.territoryMode] ?? 'Search',
+              ({off:'Search',conquest:'Conquest',exclusive:'Keeps'})[state.settings.territoryMode] ?? 'Search',
             ].map(t => `<span class="info-tag">${t}</span>`).join('')}
           </div>
           ${ state.settings.territoryMode === 'conquest'
             ? '<div class="info-desc">Claiming a word steals all its tiles. Most tiles at game end wins.</div>'
             : state.settings.territoryMode === 'exclusive'
-            ? '<div class="info-desc">Claimed tiles lock to their owner. Most tiles at game end wins.</div>'
+            ? '<div class="info-desc">Claimed tiles are yours to keep — no one can steal them. Most tiles wins.</div>'
             : '' }
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
@@ -654,6 +661,18 @@
     grid.addEventListener('mouseleave', () => {
       socket.send(JSON.stringify({ type: 'hover', r: null, c: null }));
     });
+    const claimedList = document.getElementById("claimed-list");
+    if (claimedList && !claimedList._clickBound) {
+      claimedList._clickBound = true;
+      claimedList.addEventListener('click', e => {
+        const span = e.target.closest('[data-claim-word]');
+        if (!span) return;
+        const word = span.dataset.claimWord;
+        highlightedWord = highlightedWord === word ? null : word;
+        updateGridCells();
+        updateClaimedList();
+      });
+    }
     updateGame();
 
     // Re-init on resize (debounced) so board stays within viewport
@@ -781,6 +800,15 @@
         } else if (claimStart && claimStart.r === r && claimStart.c === c) {
           cell.classList.add("sel-start");
         }
+        if (highlightedWord && !cell.classList.contains('path-ok') && !cell.classList.contains('path-bad')) {
+          const claim = state.claimed?.find(c => c.word === highlightedWord);
+          if (claim?.path?.some(p => p.r === r && p.c === c)) {
+            const hlColor = pColor(claim.connId) ?? '#a78bfa';
+            cell.style.setProperty('--hl-color', hlColor);
+            cell.style.setProperty('--hl-bg', hlColor + '33');
+            cell.classList.add('path-hl');
+          }
+        }
       }
     }
     applyOtherHovers();
@@ -903,7 +931,8 @@
     }
     list.innerHTML = [...state.claimed].reverse().map(c => {
       const color = pColor(c.connId) ?? "#9ca3af";
-      return `<span style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color}">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+      const isHl = c.word === highlightedWord;
+      return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer;outline:${isHl ? `2px solid ${color}` : 'none'};outline-offset:1px">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
     }).join("");
   }
 
@@ -977,7 +1006,7 @@
     if (socket) socket.send(JSON.stringify({ type: "reset" }));
   };
   window.returnToLobby = function() {
-    if (state?.phase === "playing" && !confirm("Leave the game and return to the lobby?")) return;
+    if (state?.phase === "playing" && !isSpectating && !confirm("Leave the game and return to the lobby?")) return;
     localStorage.removeItem("lexterra_room");
     localStorage.removeItem("lexterra_connId");
     location.reload();
@@ -1168,7 +1197,7 @@
     }
     list.innerHTML = entries.map(g => {
       const s = g.settings ?? {};
-      const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Fort' : 'Search';
+      const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Keeps' : 'Search';
       const meta = [`${s.boardSize ?? 10}×${s.boardSize ?? 10}`, `min ${s.minWordLen ?? 4}`, territory, `${g.playerCount}/4`].filter(Boolean).join(' · ');
       const isPlaying = g.phase === 'playing';
       if (!isPlaying && (g.humanCount ?? g.playerCount ?? 0) >= 4) return ''; // full, no bots to bump
@@ -1416,6 +1445,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.33</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.38</p>
 </body>
 </html>
