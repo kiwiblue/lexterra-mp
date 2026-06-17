@@ -16,6 +16,9 @@ export default {
   async onConnect(conn, room) {
     const state = await room.storage.get("state");
     conn.send(JSON.stringify({ type: "state", state: state ?? null }));
+    if (state?.isPublic && state?.phase === "ended") {
+      await notifyLobby(room, { type: "unregister", roomId: room.id });
+    }
   },
 
   async onMessage(message, conn, room) {
