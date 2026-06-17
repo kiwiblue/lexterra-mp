@@ -504,39 +504,6 @@ export default {
           state.phase = "ended";
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
           await notifyStats(room, state, "abandoned");
-        } else if (humanCount === 1 && state.phase === "playing") {
-          // Only one human left — auto-reset to lobby
-          await notifyStats(room, state, "abandoned");
-          const fresh = {
-            ...state,
-            phase: "lobby",
-            grid: null, territory: null, claimed: [],
-            cur: null, turnOrder: [],
-            consecutivePasses: 0, consecutiveHumanPasses: 0,
-            disconnectedPlayers: {},
-            abandonedMessage: `${player.name} bailed`,
-          };
-          Object.keys(fresh.players).forEach(id => {
-            fresh.players[id] = { ...fresh.players[id], score: 0, wordsFound: 0, lettersLeft: 0, isReady: false };
-          });
-          // If the host left, promote the remaining human
-          const remainingHumans = Object.keys(fresh.players).filter(id => !fresh.players[id].isBot);
-          if (remainingHumans.length > 0 && !fresh.players[fresh.host]) {
-            fresh.host = remainingHumans[0];
-            Object.keys(fresh.players).forEach(id => { fresh.players[id].isHost = id === fresh.host; });
-          }
-          await room.storage.put("state", fresh);
-          room.broadcast(JSON.stringify({ type: "state", state: fresh }), [conn.id]);
-          if (fresh.isPublic) {
-            const freshPlayers = Object.values(fresh.players);
-            await notifyLobby(room, { type: "update", roomId: room.id, patch: {
-              phase: "lobby",
-              playerCount: freshPlayers.length,
-              humanCount: freshPlayers.filter(p => !p.isBot).length,
-              botCount: freshPlayers.filter(p => p.isBot).length,
-            }});
-          }
-          return;
         }
       }
       await room.storage.put("state", state);

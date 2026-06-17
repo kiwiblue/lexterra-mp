@@ -348,8 +348,8 @@
       }
       if (msg.type === "player_left") {
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
-        if (humanCount <= 1) {
-          alert(`${msg.name} has left the game.`);
+        if (humanCount <= 1 && !isHost) {
+          showToast(`${msg.name} has left the game`);
         }
         if (isHost && state?.phase === 'playing') {
           showReplaceBotPanel(msg.name, msg.connId);
@@ -1812,6 +1812,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.56</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.57</p>
 </body>
 </html>
