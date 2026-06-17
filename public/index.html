@@ -136,6 +136,7 @@
   <div class="card" id="players-card"></div>
 
   <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
+  <div id="lobby-countdown" style="display:none;text-align:center;padding:0.15rem 0"></div>
   <p class="status" id="lobby-status">Waiting for host to start…</p>
   <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Return to Lobby</button>
 </div>
@@ -194,6 +195,8 @@
   let botTurnRunning = false;
   let botStateResolver = null;
   let isSpectating = false;
+  let lobbyRegisteredAt = 0;
+  let lobbyCountdownTimer = null;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -265,6 +268,7 @@
         botTurnRunning = false;
         hasRegisteredPublic = false;
         lastLobbySnapshot = null;
+        stopLobbyCountdown();
       }
       renderLobby();
       if (makePublic && isHost && lobbySocket) {
@@ -276,8 +280,10 @@
         const snapshot = JSON.stringify({ count, humanCount, botCount, settings: state.settings, hostName });
         if (!hasRegisteredPublic) {
           hasRegisteredPublic = true;
+          lobbyRegisteredAt = Date.now();
           lastLobbySnapshot = snapshot;
-          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, humanCount, botCount, lastActivity: Date.now(), settings: state.settings }));
+          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, humanCount, botCount, lastActivity: lobbyRegisteredAt, settings: state.settings }));
+          startLobbyCountdown();
         } else if (snapshot !== lastLobbySnapshot) {
           lastLobbySnapshot = snapshot;
           lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, humanCount, botCount, lastActivity: Date.now(), settings: state.settings, hostName } }));
@@ -428,7 +434,44 @@
       startBtn.style.display = 'none';
       lobbyStatus.textContent = 'Waiting for host to start…';
     }
+    const cdEl = document.getElementById('lobby-countdown');
+    if (cdEl) {
+      if (amHost && makePublic && hasRegisteredPublic) {
+        cdEl.style.display = 'block';
+        updateLobbyCountdown();
+      } else {
+        cdEl.style.display = 'none';
+      }
+    }
   }
+
+  // ── Lobby countdown ─────────────────────────────────────────
+  function startLobbyCountdown() {
+    stopLobbyCountdown();
+    updateLobbyCountdown();
+    lobbyCountdownTimer = setInterval(updateLobbyCountdown, 1000);
+  }
+  function stopLobbyCountdown() {
+    if (lobbyCountdownTimer) { clearInterval(lobbyCountdownTimer); lobbyCountdownTimer = null; }
+  }
+  function updateLobbyCountdown() {
+    const el = document.getElementById('lobby-countdown');
+    if (!el) return;
+    const remaining = Math.max(0, 300000 - (Date.now() - lobbyRegisteredAt));
+    if (remaining === 0) {
+      el.innerHTML = `<span style="color:#ef4444;font-size:0.78rem">Public listing expired.</span><button onclick="reactivateLobby()" class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;margin-left:0.6rem">Reactivate</button>`;
+    } else {
+      const m = Math.floor(remaining / 60000);
+      const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
+      el.innerHTML = `<span style="color:#475569;font-size:0.78rem">Listed publicly — expires in <span style="font-variant-numeric:tabular-nums;color:#64748b">${m}:${s}</span></span>`;
+    }
+  }
+  window.reactivateLobby = function() {
+    if (!lobbySocket || !isHost || !makePublic) return;
+    lobbyRegisteredAt = Date.now();
+    lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { lastActivity: lobbyRegisteredAt } }));
+    updateLobbyCountdown();
+  };
 
   // ── GAME BOARD ───────────────────────────────────────────────
   function initGame() {
@@ -951,10 +994,13 @@
   function renderPublicGames() {
     const list = document.getElementById("open-games-list");
     if (!list) return;
-    const ONE_HOUR_MS = 3600000;
     const now = Date.now();
     const entries = Object.values(publicGames)
-      .filter(g => !g.lastActivity || (now - g.lastActivity) < ONE_HOUR_MS)
+      .filter(g => {
+        if (!g.lastActivity) return true;
+        const ttl = g.phase === 'playing' ? 3600000 : 300000;
+        return (now - g.lastActivity) < ttl;
+      })
       .sort((a, b) => {
       // Join games before Watch games
       const aPlaying = a.phase === 'playing';
@@ -1200,6 +1246,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.1</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.2</p>
 </body>
 </html>

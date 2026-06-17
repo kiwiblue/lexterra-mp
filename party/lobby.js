@@ -1,13 +1,15 @@
 // Lexterra MP — Public games lobby
 // A single shared room that acts as a registry for public games.
 
-const ONE_HOUR_MS = 3600000;
+const LOBBY_TTL_MS  = 5 * 60 * 1000;   // 5 min for games awaiting players
+const PLAYING_TTL_MS = 60 * 60 * 1000; // 1 hour for in-progress games
 
 function pruneStale(games) {
   const now = Date.now();
   const pruned = {};
   for (const [id, g] of Object.entries(games)) {
-    if (!g.lastActivity || (now - g.lastActivity) < ONE_HOUR_MS) {
+    const ttl = g.phase === 'playing' ? PLAYING_TTL_MS : LOBBY_TTL_MS;
+    if (!g.lastActivity || (now - g.lastActivity) < ttl) {
       pruned[id] = g;
     }
   }
