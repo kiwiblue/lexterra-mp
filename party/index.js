@@ -151,7 +151,7 @@ export default {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id) return;
         if (Object.keys(state.players).length < 2) return;
-        if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+        if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "playing" } });
         const { boardSize } = state.settings;
         state.phase = "playing";
         state.grid = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
@@ -224,6 +224,7 @@ export default {
         // End game when all players have passed consecutively
         if (state.consecutivePasses >= state.turnOrder.length * 2) {
           state.phase = "ended";
+          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
@@ -281,6 +282,9 @@ export default {
         });
         await room.storage.put("state", fresh);
         room.broadcast(JSON.stringify({ type: "state", state: fresh }));
+        if (fresh.isPublic) {
+          await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "lobby", playerCount: Object.keys(fresh.players).length } });
+        }
         break;
       }
 

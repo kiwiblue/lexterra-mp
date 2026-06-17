@@ -191,6 +191,7 @@
   let gameCellSize = 0;
   let botTurnRunning = false;
   let botStateResolver = null;
+  let isSpectating = false;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -235,14 +236,16 @@
     });
     socket.addEventListener("open", () => {
       const savedConnId = localStorage.getItem("lexterra_connId");
-      const isReconnect = savedConnId && savedConnId !== socket.id && state !== null;
+      const isReconnect = !isSpectating && savedConnId && savedConnId !== socket.id && state !== null;
       myConnId = socket.id;
       if (isReconnect) {
         // Socket reconnected after being backgrounded — reclaim our slot
         socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId }));
       }
-      localStorage.setItem("lexterra_room", room);
-      localStorage.setItem("lexterra_connId", socket.id);
+      if (!isSpectating) {
+        localStorage.setItem("lexterra_room", room);
+        localStorage.setItem("lexterra_connId", socket.id);
+      }
     });
   }
 
@@ -258,6 +261,8 @@
         lastCur = null;
         claimMode = false; claimStart = null; claimPath = null; selLetter = null;
         botTurnRunning = false;
+        hasRegisteredPublic = false;
+        lastLobbySnapshot = null;
       }
       renderLobby();
       if (makePublic && isHost && lobbySocket) {
@@ -596,11 +601,14 @@
     const sub = document.getElementById("turn-sublabel");
     const banner = document.getElementById("turn-banner");
     if (!lbl || !banner) return;
-    const isMyTurn = state.cur === myConnId;
+    const isMyTurn = !isSpectating && state.cur === myConnId;
     const cur = state.players[state.cur];
     lbl.textContent = isMyTurn ? "Your turn" : `${cur?.name ?? "…"}'s turn`;
     if (sub) {
-      if (isMyTurn) {
+      if (isSpectating) {
+        sub.style.color = "#475569";
+        sub.textContent = "Spectating";
+      } else if (isMyTurn) {
         const letters = state.players[myConnId]?.lettersLeft ?? 0;
         sub.style.color = letters > 0 ? "#fcd34d" : "#64748b";
         sub.textContent = letters > 0
@@ -865,7 +873,7 @@
         </div>
         <div style="display:flex;gap:0.5rem">
           <button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>
-          ${!state.isPublic ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
+          ${!state.isPublic && !isSpectating ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
         </div>
       </div>`;
   }
@@ -904,13 +912,16 @@
       const s = g.settings ?? {};
       const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Exclusive' : null;
       const meta = [`${s.boardSize ?? 10}×${s.boardSize ?? 10}`, `min ${s.minWordLen ?? 4}`, territory, `${g.playerCount}/4`].filter(Boolean).join(' · ');
+      const isPlaying = g.phase === 'playing';
       return `
         <div class="public-game-row">
           <div>
             <span style="font-weight:bold">${g.hostName}</span>
-            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}</span>
+            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}${isPlaying ? ' · <span style="color:#22c55e;font-weight:bold">In progress</span>' : ''}</span>
           </div>
-          <button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem" onclick="joinPublicGame('${g.roomId}')">Join</button>
+          ${isPlaying
+            ? `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#22c55e;color:#22c55e" onclick="watchGame('${g.roomId}')">Watch</button>`
+            : `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
         </div>`;
     }).join('');
   }
@@ -941,6 +952,14 @@
     socket.addEventListener("open", () => {
       socket.send(JSON.stringify({ type: "join", name }));
     }, { once: true });
+  };
+
+  window.watchGame = function(code) {
+    isSpectating = true;
+    localStorage.removeItem("lexterra_room");
+    localStorage.removeItem("lexterra_connId");
+    connect(code);
+    // No message sent — server broadcasts state on connect; we just observe
   };
 
   // Exposed to onclick handlers
@@ -1121,6 +1140,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.0</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.1</p>
 </body>
 </html>
