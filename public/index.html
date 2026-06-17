@@ -32,7 +32,7 @@
     .setting-label { font-size: 0.78rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; min-width: 68px; }
     .btn-group { display: flex; gap: 0.35rem; flex-wrap: wrap; }
     .toggle-btn { padding: 0.35rem 0.7rem; border: 2px solid #334155; background: #0f172a; color: #64748b; border-radius: 8px; font-size: 0.82rem; font-weight: bold; cursor: pointer; transition: all 0.15s; letter-spacing: 0.04em; }
-    .toggle-btn:hover:not(:disabled) { border-color: #7c3aed; color: #e2e8f0; }
+    @media (hover: hover) { .toggle-btn:hover:not(:disabled) { border-color: #7c3aed; color: #e2e8f0; } }
     .toggle-btn.selected { border-color: #7c3aed; background: rgba(124,58,237,0.15); color: #a78bfa; }
     .toggle-btn:disabled { opacity: 0.35; cursor: default; }
     .name-input { background: transparent; border: none; border-bottom: 2px solid #334155; color: white; padding: 0.2rem 0; font-size: 0.95rem; font-weight: bold; outline: none; flex: 1; min-width: 60px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -1267,6 +1267,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.7</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.8</p>
 </body>
 </html>
