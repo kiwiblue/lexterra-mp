@@ -719,7 +719,8 @@
     if (!card) return;
     updateClaimOverlay();
     const amActive = state.cur === myConnId;
-    if (!amActive) { card.innerHTML = ""; return; }
+    if (!amActive) { card.innerHTML = ""; card.style.display = "none"; return; }
+    card.style.display = "";
     const me = state.players[myConnId];
     const lettersLeft = me?.lettersLeft ?? 0;
     const pathWord = claimPath ? claimPath.map(p => state.grid?.[p.r]?.[p.c]?.letter ?? "").join("") : "";
@@ -1274,6 +1275,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.11</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.12</p>
 </body>
 </html>
