@@ -466,7 +466,7 @@
             : '' }
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
-          ${!state.isPublic ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
+          ${isHost ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
           <button class="btn-danger btn-leave" onclick="returnToLobby()">RETURN TO LOBBY</button>
         </div>
       </div>`;
