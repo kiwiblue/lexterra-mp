@@ -268,6 +268,10 @@
   let joinRequestCountdownTimer = null;
   let hostJoinRequestTimer = null;
   let pendingRequestConnId = null;
+  let pendingRequestName = null;
+  let pendingRequestExpiry = 0;
+  let hostDismissCount = 0;
+  let joinPopupSuppressed = false;
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
@@ -336,6 +340,9 @@
       }
       if (msg.type === "request_cancelled") {
         hideJoinRequestPanel();
+        updateQuietJoinRequest(null);
+        pendingRequestConnId = null;
+        pendingRequestName = null;
       }
       if (msg.type === "player_left") {
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
@@ -699,6 +706,7 @@
           <h2>Words Claimed</h2>
           <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
         </div>
+        <div id="jr-quiet" style="display:none;padding:0.5rem 0.75rem;background:#1e293b;border-radius:8px;border:1px solid #334155;max-width:100%"></div>
         <div class="card" style="padding:0.7rem 1rem;max-width:100%">
           <div class="info-tags">
             ${[
@@ -861,27 +869,62 @@
     }, 1000);
   };
 
-  window.grantJoin = function(botId) {
+  window.grantJoin = function(botId, mode) {
     if (!pendingRequestConnId) return;
-    socket.send(JSON.stringify({ type: 'grant_join', botId, requestConnId: pendingRequestConnId }));
+    socket.send(JSON.stringify({ type: 'grant_join', botId, requestConnId: pendingRequestConnId, mode }));
+    hostDismissCount = 0;
     hideJoinRequestPanel();
+    updateQuietJoinRequest(null);
+  };
+
+  window.dismissJoinRequest = function() {
+    hostDismissCount++;
+    const nowSuppressed = hostDismissCount >= 2;
+    if (nowSuppressed) joinPopupSuppressed = true;
+    clearInterval(hostJoinRequestTimer);
+    hostJoinRequestTimer = null;
+    const panel = document.getElementById('join-request-panel');
+    if (panel) panel.style.display = 'none';
+    if (joinPopupSuppressed && pendingRequestConnId) {
+      const bots = Object.entries(state?.players ?? {}).filter(([, p]) => p.isBot);
+      updateQuietJoinRequest(pendingRequestName, pendingRequestConnId, bots, pendingRequestExpiry);
+    }
+  };
+
+  window.dismissQuietJoinRequest = function() {
+    pendingRequestConnId = null;
+    pendingRequestName = null;
+    updateQuietJoinRequest(null);
   };
 
   function showJoinRequestPanel(name, connId, expiresAt) {
     hideJoinRequestPanel();
+    pendingRequestConnId = connId;
+    pendingRequestName = name;
+    pendingRequestExpiry = expiresAt;
+    const bots = Object.entries(state?.players ?? {}).filter(([, p]) => p.isBot);
+
+    if (joinPopupSuppressed) {
+      updateQuietJoinRequest(name, connId, bots, expiresAt);
+      return;
+    }
+
     const panel = document.getElementById('join-request-panel');
     if (!panel) return;
-    document.getElementById('jr-name').textContent = `${name} wants to join`;
-    const bots = Object.entries(state?.players ?? {}).filter(([, p]) => p.isBot);
-    document.getElementById('jr-bots').innerHTML = bots.map(([id, p]) =>
-      `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0.6rem;background:#0f172a;border-radius:8px;margin-bottom:0.35rem">
-        <div>
-          <span style="font-weight:bold;font-size:0.85rem;color:#e2e8f0">${p.name}</span>
-          <span style="font-size:0.72rem;color:#64748b;margin-left:0.4rem">${(p.botDifficulty ?? 'easy').toUpperCase()} · ${p.score} pts</span>
+    const botsHtml = bots.map(([id, p]) =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.5rem;background:#0f172a;border-radius:6px">
+        <div style="font-size:0.82rem">
+          <span style="font-weight:bold;color:#e2e8f0">${p.name}</span>
+          <span style="color:#64748b;margin-left:0.4rem">${(p.botDifficulty??'easy').toUpperCase()} · ${p.score} pts</span>
         </div>
-        <button class="btn btn-secondary" onclick="grantJoin('${id}')" style="padding:0.3rem 0.75rem;font-size:0.8rem">Replace</button>
+        <button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.25rem 0.65rem;font-size:0.78rem">Replace</button>
       </div>`
     ).join('');
+    document.getElementById('jr-name').textContent = `${name} wants to join`;
+    document.getElementById('jr-body').innerHTML = `
+      <button class="btn btn-primary" onclick="grantJoin(null,'add')" style="width:100%;margin-bottom:0.6rem">+ Add to Game</button>
+      ${bots.length ? `<p style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">— or replace a bot —</p>
+      <div style="display:flex;flex-direction:column;gap:0.3rem">${botsHtml}</div>` : ''}`;
     panel.style.display = 'block';
     let secsLeft = Math.ceil((expiresAt - Date.now()) / 1000);
     document.getElementById('jr-countdown').textContent = `${secsLeft}s`;
@@ -896,9 +939,27 @@
   function hideJoinRequestPanel() {
     clearInterval(hostJoinRequestTimer);
     hostJoinRequestTimer = null;
-    pendingRequestConnId = null;
     const panel = document.getElementById('join-request-panel');
     if (panel) panel.style.display = 'none';
+  }
+
+  function updateQuietJoinRequest(name, connId, bots, expiresAt) {
+    const el = document.getElementById('jr-quiet');
+    if (!el) return;
+    if (!name) { el.style.display = 'none'; return; }
+    const botBtns = (bots ?? []).map(([id, p]) =>
+      `<button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.2rem 0.5rem;font-size:0.75rem">${p.name} (${p.score}pts)</button>`
+    ).join('');
+    el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
+      <span style="font-size:0.82rem;color:#94a3b8"><span style="color:#e2e8f0;font-weight:bold">${name}</span> wants to join</span>
+      <div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary" onclick="grantJoin(null,'add')" style="padding:0.2rem 0.5rem;font-size:0.75rem">Add</button>
+        ${botBtns}
+        <button onclick="dismissQuietJoinRequest()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0 0.2rem;line-height:1">✕</button>
+      </div>
+    </div>`;
+    el.style.display = 'block';
+    if (expiresAt) setTimeout(() => { if (pendingRequestConnId === connId) updateQuietJoinRequest(null); }, Math.max(0, expiresAt - Date.now()));
   }
 
   function updateSpectatorTag() {
@@ -1678,14 +1739,16 @@
 </div>
 
 <div id="join-request-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid #7c3aed;border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
     <p id="jr-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
-    <span id="jr-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums"></span>
+    <div style="display:flex;align-items:center;gap:0.6rem">
+      <span id="jr-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums"></span>
+      <button onclick="dismissJoinRequest()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
+    </div>
   </div>
-  <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.08em">Replace which bot?</p>
-  <div id="jr-bots"></div>
+  <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.51</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.52</p>
 </body>
 </html>

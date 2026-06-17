@@ -332,29 +332,40 @@ export default {
         break;
       }
 
-      // Host approves a spectator to replace a specific bot
+      // Host approves a spectator — mode:"replace" swaps a bot, mode:"add" inserts as new player
       case "grant_join": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         if (state.host !== conn.id) return;
-        const { botId, requestConnId } = msg;
+        const { botId, requestConnId, mode } = msg;
         const req = state.pendingJoinRequest;
         if (!req || req.connId !== requestConnId || Date.now() > req.expiresAt) return;
-        const bot = state.players[botId];
-        if (!bot?.isBot) return;
-        state.players[requestConnId] = {
-          name: req.name,
-          color: bot.color,
-          score: 0,
-          wordsFound: 0,
-          lettersLeft: bot.lettersLeft ?? 0,
-          isBot: false,
-          isReady: true,
-        };
-        const botIdx = state.turnOrder.indexOf(botId);
-        if (botIdx !== -1) state.turnOrder[botIdx] = requestConnId;
-        if (state.cur === botId) state.cur = requestConnId;
-        delete state.players[botId];
+
+        if (mode === "add") {
+          const takenColors = Object.values(state.players).map(p => p.color);
+          const color = ["Red","Blue","Pink","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+          state.players[requestConnId] = {
+            name: req.name, color, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
+          };
+          state.turnOrder.push(requestConnId);
+        } else {
+          const bot = state.players[botId];
+          if (!bot?.isBot) return;
+          state.players[requestConnId] = {
+            name: req.name,
+            color: bot.color,
+            score: bot.score,
+            wordsFound: bot.wordsFound,
+            lettersLeft: bot.lettersLeft ?? 0,
+            isBot: false,
+            isReady: true,
+          };
+          const botIdx = state.turnOrder.indexOf(botId);
+          if (botIdx !== -1) state.turnOrder[botIdx] = requestConnId;
+          if (state.cur === botId) state.cur = requestConnId;
+          delete state.players[botId];
+        }
+
         delete state.pendingJoinRequest;
         spectatorConns.delete(requestConnId);
         broadcastSpectatorCount(room);
