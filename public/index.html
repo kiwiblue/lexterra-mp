@@ -535,16 +535,31 @@
   function updateScores() {
     const wrap = document.getElementById("scores-wrap");
     if (!wrap) return;
+    const isTerritoryMode = state.settings?.territoryMode === 'conquest' || state.settings?.territoryMode === 'exclusive';
+    const tileCounts = {};
+    if (isTerritoryMode && state.territory) {
+      const n = state.settings.boardSize;
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        const o = state.territory[r]?.[c];
+        if (o) tileCounts[o] = (tileCounts[o] ?? 0) + 1;
+      }
+    }
     wrap.innerHTML = Object.entries(state.players).map(([id, p]) => {
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
-      const letters = p.lettersLeft ?? 0;
+      const pinfo = isTerritoryMode
+        ? `<div class="pinfo">
+            <div class="pdot" style="background:${color}"></div>
+            <span style="font-weight:900;font-size:0.85rem">${tileCounts[id] ?? 0}</span>
+            <span style="color:#475569;font-size:0.72rem">&nbsp;${p.score}pts · ${p.wordsFound ?? 0}w</span>
+          </div>`
+        : `<div class="pinfo">
+            <div class="pdot" style="background:${color}"></div>
+            <span style="color:#64748b;font-size:0.78rem">${p.score} pts</span>
+          </div>`;
       return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
         <span class="pname">${p.name}</span>
-        <div class="pinfo">
-          <div class="pdot" style="background:${color}"></div>
-          <span style="color:#64748b;font-size:0.78rem">${p.score} pts</span>
-        </div>
+        ${pinfo}
       </div>`;
     }).join("");
   }
