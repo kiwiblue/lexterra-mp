@@ -51,10 +51,10 @@
     .player-stat.ps-active { border-color: var(--pc); }
     .turn-banner { background: #1e293b; border-radius: 10px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; border: 2px solid transparent; }
     @keyframes turn-pulse {
-      0%, 100% { border-color: transparent; box-shadow: none; }
-      50% { border-color: rgba(124,58,237,0.65); box-shadow: 0 0 12px rgba(124,58,237,0.25); }
+      0%, 100% { border-color: rgba(239,68,68,0.5); box-shadow: none; background: rgba(239,68,68,0.06); }
+      50% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,0.35); background: rgba(239,68,68,0.13); }
     }
-    .turn-banner.my-turn { animation: turn-pulse 2.5s ease-in-out infinite; }
+    .turn-banner.my-turn { animation: turn-pulse 1.8s ease-in-out infinite; }
     .game-grid { display: grid; gap: 3px; }
     .gcell { display: flex; align-items: center; justify-content: center; width: var(--cs); height: var(--cs); border-radius: 4px; border: 2px solid #1e3a5f; font-size: calc(var(--cs) * 0.44); font-weight: 900; user-select: none; cursor: pointer; transition: border-color 0.1s, background 0.1s; box-sizing: border-box; }
     .gcell:hover { border-color: #475569; }
@@ -240,6 +240,7 @@
       if (gameInited) {
         gameInited = false;
         stopTimer();
+        lastCur = null;
         claimMode = false; claimStart = null; claimPath = null; selLetter = null;
         botTurnRunning = false;
       }
@@ -461,7 +462,6 @@
         grid.appendChild(cell);
       }
     }
-    lastCur = null;
     updateGame();
 
     // Re-init on resize (debounced) so board stays within viewport
@@ -477,12 +477,34 @@
     window._gameResizeCleanup = () => { window.removeEventListener('resize', onResize); clearTimeout(resizeTimer); };
   }
 
+  let audioCtx = null;
+  document.addEventListener('click', () => {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }, { once: true });
+
+  function playTurnSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = audioCtx.currentTime;
+      [[660, 0, 0.12], [880, 0.13, 0.22]].forEach(([freq, start, end]) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.18, t + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + end);
+        osc.start(t + start); osc.stop(t + end);
+      });
+    } catch(e) {}
+  }
+
   function updateGame() {
     const turnChanged = state.cur !== lastCur;
     if (turnChanged) {
       lastCur = state.cur;
       selLetter = null; claimMode = false; claimStart = null; claimPath = null;
       restartTimer();
+      if (state.cur === myConnId) playTurnSound();
     }
     updateScores();
     updateGridCells();
