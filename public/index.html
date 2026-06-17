@@ -842,7 +842,8 @@
   // ── End screen ───────────────────────────────────────────────
   function buildStaticBoard() {
     const { boardSize } = state.settings;
-    const availW = Math.min(420, (window.innerWidth || 480) - 64);
+    // container max-width 420px, body padding 64px, card padding 32px (1rem each side)
+    const availW = Math.min(420, (window.innerWidth || 480) - 64) - 32;
     const cellSize = Math.max(22, Math.floor((availW - (boardSize - 1) * 3) / boardSize));
     const gridW = boardSize * cellSize + (boardSize - 1) * 3;
     const tMode = state.settings?.territoryMode;
@@ -1190,6 +1191,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.4</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.5</p>
 </body>
 </html>
