@@ -141,6 +141,12 @@
 <!-- Game screen -->
 <div id="game-screen"></div>
 
+<!-- Fixed claim overlay — visible on mobile while scrolling to select cells -->
+<div id="claim-overlay" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1e293b;border-top:2px solid #334155;padding:0.75rem 1rem;z-index:200;align-items:center;justify-content:space-between;gap:1rem">
+  <span id="claim-overlay-hint" style="font-weight:bold;font-size:0.9rem;color:#94a3b8"></span>
+  <button class="btn btn-secondary" onclick="toggleClaimMode()" style="flex-shrink:0;padding:0.4rem 0.9rem;font-size:0.85rem">Cancel</button>
+</div>
+
 <script src="words.js"></script>
 <script type="module">
   import PartySocket from "https://esm.sh/partysocket@1.0.2";
@@ -541,9 +547,33 @@
     banner.classList.toggle("my-turn", isMyTurn);
   }
 
+  function updateClaimOverlay() {
+    const overlay = document.getElementById('claim-overlay');
+    if (!overlay) return;
+    if (!claimMode || state.cur !== myConnId || !isTouch()) {
+      overlay.style.display = 'none';
+      return;
+    }
+    const hint = document.getElementById('claim-overlay-hint');
+    if (claimPath) {
+      const pathWord = claimPath.map(p => state.grid?.[p.r]?.[p.c]?.letter ?? '').join('');
+      const val = validateClaim(claimPath);
+      hint.style.color = val.valid ? '#22c55e' : '#ef4444';
+      hint.textContent = val.valid ? `${pathWord}  +${val.score} pts — tap again to confirm` : `${pathWord} — ${val.reason}`;
+    } else if (claimStart) {
+      hint.style.color = '#fcd34d';
+      hint.textContent = 'Now tap the end cell';
+    } else {
+      hint.style.color = '#94a3b8';
+      hint.textContent = 'Tap the start cell';
+    }
+    overlay.style.display = 'flex';
+  }
+
   function updateControls() {
     const card = document.getElementById("controls-card");
     if (!card) return;
+    updateClaimOverlay();
     const amActive = state.cur === myConnId;
     if (!amActive) { card.innerHTML = ""; return; }
     const me = state.players[myConnId];
