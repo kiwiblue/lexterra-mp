@@ -319,6 +319,53 @@ export default {
         break;
       }
 
+      // Spectator requests to join by replacing a bot
+      case "join_request": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        if (!spectatorConns.has(conn.id)) return;
+        if (!Object.values(state.players).some(p => p.isBot)) return;
+        const expiresAt = Date.now() + 30000;
+        state.pendingJoinRequest = { connId: conn.id, name: msg.name, expiresAt };
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: msg.name, expiresAt }));
+        break;
+      }
+
+      // Host approves a spectator to replace a specific bot
+      case "grant_join": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        if (state.host !== conn.id) return;
+        const { botId, requestConnId } = msg;
+        const req = state.pendingJoinRequest;
+        if (!req || req.connId !== requestConnId || Date.now() > req.expiresAt) return;
+        const bot = state.players[botId];
+        if (!bot?.isBot) return;
+        state.players[requestConnId] = {
+          name: req.name,
+          color: bot.color,
+          score: 0,
+          wordsFound: 0,
+          lettersLeft: bot.lettersLeft ?? 0,
+          isBot: false,
+          isReady: true,
+        };
+        const botIdx = state.turnOrder.indexOf(botId);
+        if (botIdx !== -1) state.turnOrder[botIdx] = requestConnId;
+        if (state.cur === botId) state.cur = requestConnId;
+        delete state.players[botId];
+        delete state.pendingJoinRequest;
+        spectatorConns.delete(requestConnId);
+        broadcastSpectatorCount(room);
+        await room.storage.put("state", state);
+        for (const c of room.getConnections()) {
+          if (c.id === requestConnId) { c.send(JSON.stringify({ type: "join_granted" })); break; }
+        }
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        break;
+      }
+
       // Player hover position — relay to everyone else without touching state
       case "hover": {
         room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
@@ -367,6 +414,12 @@ export default {
   async onClose(conn, room) {
     if (spectatorConns.has(conn.id)) {
       spectatorConns.delete(conn.id);
+      const state = await room.storage.get("state");
+      if (state?.pendingJoinRequest?.connId === conn.id) {
+        delete state.pendingJoinRequest;
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "request_cancelled" }));
+      }
       broadcastSpectatorCount(room);
       return;
     }

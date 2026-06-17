@@ -263,6 +263,11 @@
   let botStateResolver = null;
   let isSpectating = false;
   let spectatorCount = 0;
+  let joinRequestPending = false;
+  let joinRequestExpiry = 0;
+  let joinRequestCountdownTimer = null;
+  let hostJoinRequestTimer = null;
+  let pendingRequestConnId = null;
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
@@ -317,6 +322,20 @@
       if (msg.type === "spectators") {
         spectatorCount = msg.count ?? 0;
         updateSpectatorTag();
+      }
+      if (msg.type === "spectator_request") {
+        pendingRequestConnId = msg.connId;
+        showJoinRequestPanel(msg.name, msg.connId, msg.expiresAt);
+      }
+      if (msg.type === "join_granted") {
+        isSpectating = false;
+        joinRequestPending = false;
+        clearInterval(joinRequestCountdownTimer);
+        joinRequestCountdownTimer = null;
+        updateControls();
+      }
+      if (msg.type === "request_cancelled") {
+        hideJoinRequestPanel();
       }
       if (msg.type === "player_left") {
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
@@ -825,6 +844,63 @@
 
   function pColor(id) { return COLORS[(frozenPlayers ?? state.players)[id]?.color]; }
 
+  window.sendJoinRequest = function() {
+    if (joinRequestPending) return;
+    const name = localStorage.getItem('lexterra_name') ?? 'PLAYER';
+    socket.send(JSON.stringify({ type: 'join_request', name }));
+    joinRequestPending = true;
+    joinRequestExpiry = Date.now() + 30000;
+    updateControls();
+    joinRequestCountdownTimer = setInterval(() => {
+      if (Date.now() >= joinRequestExpiry) {
+        joinRequestPending = false;
+        clearInterval(joinRequestCountdownTimer);
+        joinRequestCountdownTimer = null;
+      }
+      updateControls();
+    }, 1000);
+  };
+
+  window.grantJoin = function(botId) {
+    if (!pendingRequestConnId) return;
+    socket.send(JSON.stringify({ type: 'grant_join', botId, requestConnId: pendingRequestConnId }));
+    hideJoinRequestPanel();
+  };
+
+  function showJoinRequestPanel(name, connId, expiresAt) {
+    hideJoinRequestPanel();
+    const panel = document.getElementById('join-request-panel');
+    if (!panel) return;
+    document.getElementById('jr-name').textContent = `${name} wants to join`;
+    const bots = Object.entries(state?.players ?? {}).filter(([, p]) => p.isBot);
+    document.getElementById('jr-bots').innerHTML = bots.map(([id, p]) =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0.6rem;background:#0f172a;border-radius:8px;margin-bottom:0.35rem">
+        <div>
+          <span style="font-weight:bold;font-size:0.85rem;color:#e2e8f0">${p.name}</span>
+          <span style="font-size:0.72rem;color:#64748b;margin-left:0.4rem">${(p.botDifficulty ?? 'easy').toUpperCase()} · ${p.score} pts</span>
+        </div>
+        <button class="btn btn-secondary" onclick="grantJoin('${id}')" style="padding:0.3rem 0.75rem;font-size:0.8rem">Replace</button>
+      </div>`
+    ).join('');
+    panel.style.display = 'block';
+    let secsLeft = Math.ceil((expiresAt - Date.now()) / 1000);
+    document.getElementById('jr-countdown').textContent = `${secsLeft}s`;
+    hostJoinRequestTimer = setInterval(() => {
+      secsLeft--;
+      const el = document.getElementById('jr-countdown');
+      if (el) el.textContent = `${secsLeft}s`;
+      if (secsLeft <= 0) hideJoinRequestPanel();
+    }, 1000);
+  }
+
+  function hideJoinRequestPanel() {
+    clearInterval(hostJoinRequestTimer);
+    hostJoinRequestTimer = null;
+    pendingRequestConnId = null;
+    const panel = document.getElementById('join-request-panel');
+    if (panel) panel.style.display = 'none';
+  }
+
   function updateSpectatorTag() {
     const el = document.getElementById('spectator-tag');
     if (!el) return;
@@ -940,6 +1016,21 @@
     const card = document.getElementById("controls-card");
     if (!card) return;
     updateClaimOverlay();
+    if (isSpectating) {
+      const hasBots = Object.values(state?.players ?? {}).some(p => p.isBot);
+      if (hasBots && state?.phase === 'playing') {
+        card.style.display = "";
+        if (joinRequestPending) {
+          const secsLeft = Math.max(0, Math.ceil((joinRequestExpiry - Date.now()) / 1000));
+          card.innerHTML = `<p style="text-align:center;color:#64748b;font-size:0.85rem;padding:0.25rem 0">Waiting for host… (${secsLeft}s)</p>`;
+        } else {
+          card.innerHTML = `<button class="btn btn-secondary" onclick="sendJoinRequest()" style="width:100%">Request to Join</button>`;
+        }
+      } else {
+        card.innerHTML = ""; card.style.display = "none";
+      }
+      return;
+    }
     const amActive = state.cur === myConnId;
     if (!amActive) { card.innerHTML = ""; card.style.display = "none"; return; }
     card.style.display = "";
@@ -1586,6 +1677,15 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.50</p>
+<div id="join-request-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid #7c3aed;border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem">
+    <p id="jr-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
+    <span id="jr-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums"></span>
+  </div>
+  <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.08em">Replace which bot?</p>
+  <div id="jr-bots"></div>
+</div>
+
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.51</p>
 </body>
 </html>
