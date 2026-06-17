@@ -4,6 +4,16 @@
 const LOBBY_TTL_MS  = 5 * 60 * 1000;   // 5 min for games awaiting players
 const PLAYING_TTL_MS = 60 * 60 * 1000; // 1 hour for in-progress games
 
+// In-memory set of connection IDs that are on the home/join page.
+// Resets on Durable Object restart (fine — connections are lost too).
+const homeConnections = new Set();
+
+function broadcastCounts(room) {
+  const total = [...room.getConnections()].length;
+  const inLobby = homeConnections.size;
+  room.broadcast(JSON.stringify({ type: "online", total, inLobby }));
+}
+
 function pruneStale(games) {
   const now = Date.now();
   const pruned = {};
@@ -49,15 +59,20 @@ export default {
       room.broadcast(JSON.stringify({ type: "games", games }));
     }
     conn.send(JSON.stringify({ type: "games", games }));
-    const count = [...room.getConnections()].length;
-    room.broadcast(JSON.stringify({ type: "online", count }));
+    broadcastCounts(room);
   },
   async onClose(conn, room) {
-    const count = [...room.getConnections()].length;
-    room.broadcast(JSON.stringify({ type: "online", count }));
+    homeConnections.delete(conn.id);
+    broadcastCounts(room);
   },
   async onMessage(message, conn, room) {
-    await applyUpdate(JSON.parse(message), room);
+    const msg = JSON.parse(message);
+    if (msg.type === "hello") {
+      if (msg.location === "home") homeConnections.add(conn.id);
+      broadcastCounts(room);
+      return;
+    }
+    await applyUpdate(msg, room);
   },
   // Called by the main party via inter-party HTTP (server → lobby)
   async onRequest(req, room) {

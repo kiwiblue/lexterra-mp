@@ -198,6 +198,7 @@
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
+  let lobbyCount = 0;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -311,6 +312,7 @@
 
   function renderLobby() {
     show("lobby-screen");
+    sendLobbyHello("game");
     document.getElementById("room-code-display").textContent = roomId;
 
     const amHost = state.host === myConnId;
@@ -451,7 +453,7 @@
     if (amHost && !canStart) {
       el.textContent = 'Need at least 2 players (or add a bot) to start.';
     } else {
-      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} in the lobby`;
+      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online (${lobbyCount} in lobby)`;
     }
   }
 
@@ -979,8 +981,15 @@
       </div>`;
   }
 
+  function sendLobbyHello(location) {
+    if (lobbySocket && lobbySocket.readyState === WebSocket.OPEN) {
+      lobbySocket.send(JSON.stringify({ type: "hello", location }));
+    }
+  }
+
   function connectLobby() {
     lobbySocket = new PartySocket({ host: PARTYKIT_HOST, party: "lobby", room: "main" });
+    lobbySocket.addEventListener("open", () => sendLobbyHello("home"));
     lobbySocket.addEventListener("message", e => {
       const msg = JSON.parse(e.data);
       if (msg.type === "games") {
@@ -988,7 +997,8 @@
         renderPublicGames();
       }
       if (msg.type === "online") {
-        onlineCount = msg.count;
+        onlineCount = msg.total ?? msg.count ?? 0;
+        lobbyCount = msg.inLobby ?? 0;
         updateLobbyStatus();
       }
     });
@@ -1257,6 +1267,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.5</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.6</p>
 </body>
 </html>
