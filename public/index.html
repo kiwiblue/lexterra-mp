@@ -547,6 +547,9 @@
     wrap.innerHTML = Object.entries(state.players).map(([id, p]) => {
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
+      const nameLabel = p.isBot
+        ? `${p.name}<span style="font-size:0.6rem;color:#64748b;font-weight:normal;margin-left:0.25rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+        : p.name;
       const pinfo = isTerritoryMode
         ? `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
@@ -558,7 +561,7 @@
             <span style="color:#64748b;font-size:0.78rem">${p.score} pts</span>
           </div>`;
       return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
-        <span class="pname">${p.name}</span>
+        <span class="pname">${nameLabel}</span>
         ${pinfo}
       </div>`;
     }).join("");
@@ -856,7 +859,7 @@
             <div class="player-row" style="margin-bottom:0.5rem">
               <span style="color:#475569;width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
               <div class="pdot" style="background:${COLORS[p.color] ?? "#9ca3af"};flex-shrink:0"></div>
-              <span style="font-weight:bold;flex:1">${p.name}</span>
+              <span style="font-weight:bold;flex:1">${p.name}${p.isBot ? `<span style="font-size:0.72rem;color:#64748b;font-weight:normal;margin-left:0.3rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : ''}</span>
               <span style="color:#a78bfa;font-weight:bold;white-space:nowrap">${stat}</span>
             </div>`).join("")}
         </div>
@@ -1067,24 +1070,29 @@
         }
       }
 
-      // 2. Claim a word
-      const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
-      if (found.length) {
-        const minLen = state.settings?.minWordLen ?? 4;
-        let pick;
-        if (isHard) {
-          // Prefer words well above the minimum; only occasionally claim short ones
-          pick = found.find(w => w.score >= minLen + 2)
-              ?? found.find(w => w.score >= minLen + 1)
-              ?? (Math.random() < 0.25 ? found[0] : null);
-        } else {
-          // Easy: random selection so it doesn't always grab the best word
-          pick = found[Math.floor(Math.random() * found.length)];
-        }
-        if (pick) {
-          socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
-          await waitForNextState();
-          await delay(400);
+      // 2. Claim a word (skip if humans have passed enough times to signal board exhaustion)
+      const humanPlayerCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
+      const humanPasses = state.consecutiveHumanPasses ?? 0;
+      const claimPassThreshold = isHard ? 4 * Math.max(1, humanPlayerCount) : 2 * Math.max(1, humanPlayerCount);
+      if (humanPasses < claimPassThreshold) {
+        const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
+        if (found.length) {
+          const minLen = state.settings?.minWordLen ?? 4;
+          let pick;
+          if (isHard) {
+            // Prefer words well above the minimum; only occasionally claim short ones
+            pick = found.find(w => w.score >= minLen + 2)
+                ?? found.find(w => w.score >= minLen + 1)
+                ?? (Math.random() < 0.25 ? found[0] : null);
+          } else {
+            // Easy: random selection so it doesn't always grab the best word
+            pick = found[Math.floor(Math.random() * found.length)];
+          }
+          if (pick) {
+            socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+            await waitForNextState();
+            await delay(400);
+          }
         }
       }
 
@@ -1113,6 +1121,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.9</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.0</p>
 </body>
 </html>

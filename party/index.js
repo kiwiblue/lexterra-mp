@@ -161,6 +161,7 @@ export default {
         state.turnOrder = Object.keys(state.players).filter(id => !state.players[id].isBot || true);
         state.cur = state.turnOrder[0];
         state.consecutivePasses = 0;
+        state.consecutiveHumanPasses = 0;
         // Only the first player gets a letter; everyone else starts at 0
         Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
         state.players[state.cur].lettersLeft = 1;
@@ -198,6 +199,7 @@ export default {
         state.players[state.cur].wordsFound++;
         state.players[state.cur].lettersLeft++;
         state.consecutivePasses = 0;
+        if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
         if (state.territory) {
           path.forEach(({ r, c }) => { state.territory[r][c] = state.cur; });
         }
@@ -213,6 +215,7 @@ export default {
         const passCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(passCurBot && state.host === conn.id)) return;
         state.consecutivePasses++;
+        if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
         const idx = state.turnOrder.indexOf(state.cur);
         const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
         state.players[state.cur].lettersLeft = 0;
@@ -268,6 +271,7 @@ export default {
           cur: null,
           turnOrder: [],
           consecutivePasses: 0,
+          consecutiveHumanPasses: 0,
         };
         Object.keys(fresh.players).forEach(id => {
           fresh.players[id].score = 0;
