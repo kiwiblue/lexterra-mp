@@ -57,7 +57,7 @@
     .turn-banner.my-turn { animation: turn-pulse 1.8s ease-in-out infinite; }
     .game-grid { display: grid; gap: 3px; }
     .gcell { display: flex; align-items: center; justify-content: center; width: var(--cs); height: var(--cs); border-radius: 4px; border: 2px solid #1e3a5f; font-size: calc(var(--cs) * 0.44); font-weight: 900; user-select: none; cursor: pointer; transition: border-color 0.1s, background 0.1s; box-sizing: border-box; }
-    .gcell:hover { border-color: #475569; }
+    @media (hover: hover) { .gcell:hover { border-color: var(--hover-color, #475569); } }
     .gcell.sel-start { border-color: #7c3aed !important; background: rgba(124,58,237,0.2) !important; }
     .gcell.path-ok { border-color: #22c55e !important; background: rgba(34,197,94,0.12) !important; }
     .gcell.path-bad { border-color: #ef4444 !important; background: rgba(239,68,68,0.12) !important; }
@@ -206,6 +206,10 @@
   let claimStart = null;
   let claimPath = null;
   let lastCur = null;
+  let lastMoveDesc = "";
+  let frozenPlayers = null;
+  let otherHovers = {};
+  let lastHoverSent = 0;
   let timerInterval = null;
   let timerEndsAt = 0;
   let gameCellSize = 0;
@@ -258,6 +262,11 @@
         }
         document.getElementById("join-status").textContent = msg.message;
       }
+      if (msg.type === "hover") {
+        if (msg.r == null) delete otherHovers[msg.connId];
+        else otherHovers[msg.connId] = { r: msg.r, c: msg.c };
+        applyOtherHovers();
+      }
       if (msg.type === "player_left") {
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
         if (humanCount <= 1) {
@@ -265,12 +274,21 @@
         }
       }
     });
+    let reconnectTimer = null;
+    socket.addEventListener("close", () => {
+      reconnectTimer = setTimeout(() => {
+        const overlay = document.getElementById("reconnect-overlay");
+        if (overlay) { overlay.style.display = "flex"; }
+      }, 2500);
+    });
     socket.addEventListener("open", () => {
+      clearTimeout(reconnectTimer);
+      const overlay = document.getElementById("reconnect-overlay");
+      if (overlay) overlay.style.display = "none";
       const savedConnId = localStorage.getItem("lexterra_connId");
       const isReconnect = !isSpectating && savedConnId && savedConnId !== socket.id && state !== null;
       myConnId = socket.id;
       if (isReconnect) {
-        // Socket reconnected after being backgrounded — reclaim our slot
         socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId }));
       }
       if (!isSpectating) {
@@ -295,6 +313,34 @@
   }
 
   function handleState(newState) {
+    // Detect last move before replacing state
+    if (state && newState && state.phase === 'playing' && newState.phase === 'playing') {
+      const prevClaimed = state.claimed?.length ?? 0;
+      const newClaimed = newState.claimed?.length ?? 0;
+      if (newClaimed > prevClaimed) {
+        const latest = newState.claimed[newClaimed - 1];
+        lastMoveDesc = `${latest.word} accepted — ${latest.score} pts`;
+      } else {
+        let placedLetter = null;
+        if (state.grid && newState.grid) {
+          outer: for (let r = 0; r < newState.grid.length; r++) {
+            for (let c = 0; c < newState.grid[r].length; c++) {
+              if (!state.grid[r]?.[c] && newState.grid[r][c]) {
+                placedLetter = newState.grid[r][c].letter;
+                break outer;
+              }
+            }
+          }
+        }
+        if (placedLetter) {
+          lastMoveDesc = `Letter ${placedLetter} placed on board`;
+        } else if ((newState.consecutivePasses ?? 0) > (state.consecutivePasses ?? 0)) {
+          lastMoveDesc = `Passed their turn`;
+        }
+      }
+    }
+    if (state?.phase === 'playing' && newState?.phase === 'ended') frozenPlayers = { ...state.players };
+    if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; }
     state = newState;
     if (!state) return;
     if (state.abandonedMessage) {
@@ -595,6 +641,19 @@
         grid.appendChild(cell);
       }
     }
+    const myColor = pColor(myConnId);
+    if (myColor) grid.style.setProperty('--hover-color', myColor);
+    grid.addEventListener('mousemove', e => {
+      const cell = e.target.closest('[data-r]');
+      if (!cell) return;
+      const now = Date.now();
+      if (now - lastHoverSent < 80) return;
+      lastHoverSent = now;
+      socket.send(JSON.stringify({ type: 'hover', r: +cell.dataset.r, c: +cell.dataset.c }));
+    });
+    grid.addEventListener('mouseleave', () => {
+      socket.send(JSON.stringify({ type: 'hover', r: null, c: null }));
+    });
     updateGame();
 
     // Re-init on resize (debounced) so board stays within viewport
@@ -637,7 +696,8 @@
       lastCur = state.cur;
       selLetter = null; claimMode = false; claimStart = null; claimPath = null;
       restartTimer();
-      if (state.cur === myConnId && soundEnabled) playTurnSound();
+      const hasHumanOpponent = Object.values(state.players).some(p => !p.isBot && p !== state.players[myConnId]);
+      if (state.cur === myConnId && soundEnabled && hasHumanOpponent) playTurnSound();
     }
     updateScores();
     updateGridCells();
@@ -659,7 +719,7 @@
         if (o) tileCounts[o] = (tileCounts[o] ?? 0) + 1;
       }
     }
-    wrap.innerHTML = Object.entries(state.players).map(([id, p]) => {
+    wrap.innerHTML = Object.entries(frozenPlayers ?? state.players).map(([id, p]) => {
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
       const nameLabel = p.isBot
@@ -682,6 +742,25 @@
     }).join("");
   }
 
+  function pColor(id) { return COLORS[(frozenPlayers ?? state.players)[id]?.color]; }
+
+  function applyOtherHovers() {
+    const boardSize = state?.settings?.boardSize;
+    if (!boardSize) return;
+    for (let r = 0; r < boardSize; r++) {
+      for (let c = 0; c < boardSize; c++) {
+        const cell = document.querySelector(`#game-grid [data-r="${r}"][data-c="${c}"]`);
+        if (!cell) continue;
+        if (cell.classList.contains('path-ok') || cell.classList.contains('path-bad') || cell.classList.contains('sel-start')) {
+          cell.style.borderColor = '';
+          continue;
+        }
+        const hoverer = Object.entries(otherHovers).find(([, pos]) => pos.r === r && pos.c === c);
+        cell.style.borderColor = hoverer ? (pColor(hoverer[0]) ?? '#475569') : '';
+      }
+    }
+  }
+
   function updateGridCells() {
     const { boardSize } = state.settings;
     for (let r = 0; r < boardSize; r++) {
@@ -690,9 +769,9 @@
         if (!cell) continue;
         const gCell = state.grid?.[r]?.[c];
         const owner = state.territory?.[r]?.[c];
-        const ownerColor = owner ? COLORS[state.players[owner]?.color] : null;
+        const ownerColor = owner ? pColor(owner) : null;
         cell.style.background = ownerColor ? ownerColor + "55" : "";
-        cell.style.color = gCell ? (COLORS[state.players[gCell.pi]?.color] ?? "#e2e8f0") : "#e2e8f0";
+        cell.style.color = gCell ? (pColor(gCell.pi) ?? "#e2e8f0") : "#e2e8f0";
         cell.textContent = gCell?.letter ?? "";
         cell.className = "gcell";
         if (claimPath) {
@@ -704,6 +783,7 @@
         }
       }
     }
+    applyOtherHovers();
   }
 
   function updateTurnBanner() {
@@ -725,7 +805,8 @@
           ? `★ You have ${letters} letter${letters > 1 ? "s" : ""} to place`
           : "Claim a word or pass";
       } else {
-        sub.textContent = "";
+        sub.style.color = "#475569";
+        sub.textContent = lastMoveDesc;
       }
     }
     banner.classList.toggle("my-turn", isMyTurn);
@@ -798,7 +879,7 @@
     let html = "";
     for (const claim of (state.claimed ?? [])) {
       if (!claim.path?.length) continue;
-      const color = COLORS[state.players[claim.connId]?.color] ?? "#9ca3af";
+      const color = pColor(claim.connId) ?? "#9ca3af";
       const a = claim.path[0], b = claim.path[claim.path.length - 1];
       html += `<line x1="${cx(a.r,a.c)}" y1="${cy(a.r,a.c)}" x2="${cx(b.r,b.c)}" y2="${cy(b.r,b.c)}"
         stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-opacity="0.55"/>`;
@@ -820,8 +901,8 @@
       list.innerHTML = `<p class="placeholder" style="font-size:0.8rem">No words yet.</p>`;
       return;
     }
-    list.innerHTML = state.claimed.map(c => {
-      const color = COLORS[state.players[c.connId]?.color] ?? "#9ca3af";
+    list.innerHTML = [...state.claimed].reverse().map(c => {
+      const color = pColor(c.connId) ?? "#9ca3af";
       return `<span style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color}">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
     }).join("");
   }
@@ -960,8 +1041,8 @@
       for (let c = 0; c < boardSize; c++) {
         const gCell = state.grid?.[r]?.[c];
         const owner = state.territory?.[r]?.[c];
-        const ownerColor = owner ? COLORS[state.players[owner]?.color] : null;
-        const letterColor = gCell ? (COLORS[state.players[gCell.pi]?.color] ?? '#e2e8f0') : '#475569';
+        const ownerColor = owner ? pColor(owner) : null;
+        const letterColor = gCell ? (pColor(gCell.pi) ?? '#e2e8f0') : '#475569';
         const bg = ownerColor ? ownerColor + '55' : '';
         cells += `<div style="display:flex;align-items:center;justify-content:center;width:${cellSize}px;height:${cellSize}px;border-radius:4px;border:2px solid #1e3a5f;font-size:${Math.floor(cellSize*0.44)}px;font-weight:900;background:${bg};color:${letterColor}">${gCell?.letter ?? ''}</div>`;
       }
@@ -973,7 +1054,7 @@
       const cy = (r, c) => r * (cs + gap) + cs / 2;
       for (const claim of (state.claimed ?? [])) {
         if (!claim.path?.length) continue;
-        const color = COLORS[state.players[claim.connId]?.color] ?? '#9ca3af';
+        const color = pColor(claim.connId) ?? '#9ca3af';
         const a = claim.path[0], b = claim.path[claim.path.length - 1];
         svgLines += `<line x1="${cx(a.r,a.c)}" y1="${cy(a.r,a.c)}" x2="${cx(b.r,b.c)}" y2="${cy(b.r,b.c)}" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-opacity="0.55"/>`;
       }
@@ -1329,6 +1410,12 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.27</p>
+<div id="reconnect-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:0.75rem;padding:2rem;text-align:center">
+  <p style="font-size:1.1rem;font-weight:bold;color:#e2e8f0">Connection lost</p>
+  <p style="font-size:0.85rem;color:#64748b">Trying to reconnect…</p>
+  <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
+</div>
+
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.33</p>
 </body>
 </html>

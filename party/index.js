@@ -264,6 +264,12 @@ export default {
         break;
       }
 
+      // Player hover position — relay to everyone else without touching state
+      case "hover": {
+        room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
+        break;
+      }
+
       // Host resets the game back to lobby with same players + settings
       case "reset": {
         const state = await room.storage.get("state");
