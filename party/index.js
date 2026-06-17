@@ -386,8 +386,10 @@ export default {
         const saved = state.disconnectedPlayers?.[oldConnId];
         if (!saved) return;
         const botId = `bot_${Date.now()}`;
+        const botNum = Object.values(state.players).filter(p => p.isBot).length + 1;
         state.players[botId] = {
           ...saved.player,
+          name: `BOT${botNum}`,
           isBot: true,
           botDifficulty: difficulty ?? "easy",
           isReady: true,
@@ -396,6 +398,14 @@ export default {
         const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
         state.turnOrder.splice(insertAt, 0, botId);
         delete state.disconnectedPlayers[oldConnId];
+        if (state.territory) for (let r = 0; r < state.territory.length; r++)
+          for (let c = 0; c < state.territory[r].length; c++)
+            if (state.territory[r][c] === oldConnId) state.territory[r][c] = botId;
+        for (const claim of state.claimed ?? [])
+          if (claim.connId === oldConnId) claim.connId = botId;
+        if (state.grid) for (let r = 0; r < state.grid.length; r++)
+          for (let c = 0; c < state.grid[r].length; c++)
+            if (state.grid[r][c]?.pi === oldConnId) state.grid[r][c].pi = botId;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;

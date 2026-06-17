@@ -1633,7 +1633,10 @@
 
   // ── BOT AI ───────────────────────────────────────────────────
   const delay = ms => new Promise(r => setTimeout(r, ms));
-  const waitForNextState = () => new Promise(r => { botStateResolver = r; });
+  const waitForNextState = (ms = 3000) => new Promise(r => {
+    const t = setTimeout(() => { botStateResolver = null; r(); }, ms);
+    botStateResolver = () => { clearTimeout(t); r(); };
+  });
 
   function randomLetter() {
     return 'EEEEEEAAAAAAIIIIIOOOOOOUUURRRRSSSSTTTTLLLLNNNNCCCDDDDGGHHBBFFKKMMPPVVWWYYJQXZ'[
@@ -1643,7 +1646,16 @@
   function findBotWords(grid, botId) {
     const { boardSize, minWordLen, territoryMode } = state.settings;
     const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
-    const claimed = new Set((state.claimed ?? []).map(c => c.word));
+    const claimedWords = (state.claimed ?? []).map(c => c.word.toLowerCase());
+    const isClaimedVariant = w => {
+      const wl = w.toLowerCase();
+      return claimedWords.some(cw =>
+        wl === cw || wl === cw + 's' || wl === cw + 'es' ||
+        (wl.endsWith('ies') && cw === wl.slice(0,-3) + 'y') ||
+        cw === wl + 's' || cw === wl + 'es' ||
+        (cw.endsWith('ies') && wl === cw.slice(0,-3) + 'y')
+      );
+    };
     const results = [];
     for (const [dr, dc] of dirs) {
       for (let r = 0; r < boardSize; r++) {
@@ -1656,7 +1668,7 @@
           for (let len = minWordLen; len <= path.length; len++) {
             const sub = path.slice(0, len);
             const word = sub.map(p => grid[p.r][p.c].letter).join('');
-            if (claimed.has(word)) continue;
+            if (isClaimedVariant(word)) continue;
             if (territoryMode === 'exclusive' && state.territory)
               if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
             if (isValidWord(word) && !isBannedWord(word)) results.push({ word, path: sub, score: len });
@@ -1800,6 +1812,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.53</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.55</p>
 </body>
 </html>
