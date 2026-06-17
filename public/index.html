@@ -1134,7 +1134,7 @@
     const room = randomRoomCode();
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "create", name, color: "Red", isPublic: makePublic, settings: { boardSize: 5, minWordLen: 4, territoryMode: "off", timeLimit: 120 } }));
+      socket.send(JSON.stringify({ type: "create", name, color: "Red", isPublic: makePublic, settings: { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 } }));
       isHost = true;
     }, { once: true });
   };
@@ -1309,6 +1309,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.14</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.15</p>
 </body>
 </html>
