@@ -1024,9 +1024,6 @@
 
   window.startGame = function() {
     if (!socket) return;
-    if (makePublic && hasRegisteredPublic && lobbySocket) {
-      lobbySocket.send(JSON.stringify({ type: "unregister", roomId }));
-    }
     socket.send(JSON.stringify({ type: "start" }));
   };
 
@@ -1179,6 +1176,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.2</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.3</p>
 </body>
 </html>
