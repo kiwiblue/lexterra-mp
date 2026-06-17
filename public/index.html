@@ -112,12 +112,9 @@
 
   <div class="card">
     <h2>Create a Game</h2>
-    <div class="setting-row">
-      <span class="setting-label">Visibility</span>
-      <div class="btn-group">
-        <button class="toggle-btn selected" id="vis-private" onclick="setVisibility(false)">Private</button>
-        <button class="toggle-btn" id="vis-public" onclick="setVisibility(true)">Public</button>
-      </div>
+    <div style="display:flex;gap:0.35rem">
+      <button class="toggle-btn selected" id="vis-public" onclick="setVisibility(true)" style="flex:1;padding:0.55rem 0.25rem;font-size:0.88rem;letter-spacing:0.07em">Public</button>
+      <button class="toggle-btn" id="vis-private" onclick="setVisibility(false)" style="flex:1;padding:0.55rem 0.25rem;font-size:0.88rem;letter-spacing:0.07em">Private</button>
     </div>
     <button class="btn btn-primary" onclick="createGame()">Create Room</button>
   </div>
@@ -189,6 +186,13 @@
     return _bwSub.some(w => c.includes(w));
   }
 
+  // ── Banned claimable words (profanity filter) ────────────────────
+  // Add words in lowercase. Keep in sync with party/index.js.
+  const BANNED_WORDS = new Set([
+    // add words here, e.g.: "word", "another"
+  ]);
+  function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
+
   let soundEnabled = localStorage.getItem('lexterra_sound') !== 'off';
 
   function soundIcon(on) {
@@ -211,7 +215,7 @@
   let state = null;
   let lobbySocket = null;
   let publicGames = {};
-  let makePublic = false;
+  let makePublic = true;
   let hasRegisteredPublic = false;
   let lastLobbySnapshot = null;
 
@@ -1127,6 +1131,7 @@
     const word = letters.join("");
     const variant = claimedVariant(word);
     if (variant) return { valid: false, reason: variant === word ? "Already claimed" : `"${variant}" already claimed` };
+    if (isBannedWord(word)) return { valid: false, reason: "That word isn't allowed in this family friendly game" };
     if (state.settings?.territoryMode === "exclusive" && state.territory) {
       if (path.some(({ r, c }) => { const o = state.territory[r]?.[c]; return o && o !== myConnId; }))
         return { valid: false, reason: "Crosses opponent territory" };
@@ -1422,7 +1427,7 @@
             if (claimed.has(word)) continue;
             if (territoryMode === 'exclusive' && state.territory)
               if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
-            if (isValidWord(word)) results.push({ word, path: sub, score: len });
+            if (isValidWord(word) && !isBannedWord(word)) results.push({ word, path: sub, score: len });
           }
         }
       }
@@ -1537,6 +1542,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.43</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.46</p>
 </body>
 </html>

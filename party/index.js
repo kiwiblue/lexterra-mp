@@ -1,6 +1,13 @@
 // Lexterra MP — PartyKit server
 // Each room is one game instance. The server is the source of truth for game state.
 
+// ── Banned claimable words (profanity filter) ────────────────────────
+// Add words in lowercase. Keep in sync with public/index.html.
+const BANNED_WORDS = new Set([
+  // add words here, e.g.: "word", "another"
+]);
+function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
+
 async function notifyLobby(room, msg) {
   try {
     await room.context.parties.lobby.get("main").fetch("/", {
@@ -219,6 +226,7 @@ export default {
         const claimCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(claimCurBot && state.host === conn.id)) return;
         const { word, path, score } = msg;
+        if (isBannedWord(word)) return;
         if (state.claimed.some(c => {
           const w = word.toLowerCase(), cw = c.word.toLowerCase();
           return w === cw ||
