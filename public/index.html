@@ -272,6 +272,8 @@
   let pendingRequestExpiry = 0;
   let hostDismissCount = 0;
   let joinPopupSuppressed = false;
+  let replaceBotTimer = null;
+  let replaceConnId = null;
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
@@ -348,6 +350,9 @@
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
         if (humanCount <= 1) {
           alert(`${msg.name} has left the game.`);
+        }
+        if (isHost && state?.phase === 'playing') {
+          showReplaceBotPanel(msg.name, msg.connId);
         }
       }
     });
@@ -851,6 +856,37 @@
   }
 
   function pColor(id) { return COLORS[(frozenPlayers ?? state.players)[id]?.color]; }
+
+  window.replaceWithBot = function(difficulty) {
+    if (!replaceConnId) return;
+    socket.send(JSON.stringify({ type: 'replace_with_bot', oldConnId: replaceConnId, difficulty }));
+    dismissReplaceBotPanel();
+  };
+
+  window.dismissReplaceBotPanel = function() {
+    clearTimeout(replaceBotTimer);
+    replaceBotTimer = null;
+    replaceConnId = null;
+    const panel = document.getElementById('replace-bot-panel');
+    if (panel) panel.style.display = 'none';
+  };
+
+  function showReplaceBotPanel(name, connId) {
+    dismissReplaceBotPanel();
+    replaceConnId = connId;
+    const panel = document.getElementById('replace-bot-panel');
+    if (!panel) return;
+    document.getElementById('rb-name').textContent = `${name} left the game`;
+    panel.style.display = 'block';
+    replaceBotTimer = setTimeout(dismissReplaceBotPanel, 20000);
+    let secsLeft = 20;
+    const tick = setInterval(() => {
+      secsLeft--;
+      const el = document.getElementById('rb-countdown');
+      if (el) el.textContent = `${secsLeft}s`;
+      if (secsLeft <= 0) clearInterval(tick);
+    }, 1000);
+  }
 
   window.sendJoinRequest = function() {
     if (joinRequestPending) return;
@@ -1738,6 +1774,21 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
+<div id="replace-bot-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+    <p id="rb-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
+    <div style="display:flex;align-items:center;gap:0.6rem">
+      <span id="rb-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums">20s</span>
+      <button onclick="dismissReplaceBotPanel()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
+    </div>
+  </div>
+  <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem">Replace with a bot? They'll keep the score.</p>
+  <div style="display:flex;gap:0.5rem">
+    <button class="btn btn-secondary" onclick="replaceWithBot('easy')" style="flex:1">Easy Bot</button>
+    <button class="btn btn-secondary" onclick="replaceWithBot('hard')" style="flex:1">Hard Bot</button>
+  </div>
+</div>
+
 <div id="join-request-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid #7c3aed;border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
     <p id="jr-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
@@ -1749,6 +1800,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.52</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.53</p>
 </body>
 </html>

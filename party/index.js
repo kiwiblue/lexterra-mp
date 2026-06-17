@@ -377,6 +377,30 @@ export default {
         break;
       }
 
+      // Host replaces a departed player with a bot
+      case "replace_with_bot": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        if (state.host !== conn.id) return;
+        const { oldConnId, difficulty } = msg;
+        const saved = state.disconnectedPlayers?.[oldConnId];
+        if (!saved) return;
+        const botId = `bot_${Date.now()}`;
+        state.players[botId] = {
+          ...saved.player,
+          isBot: true,
+          botDifficulty: difficulty ?? "easy",
+          isReady: true,
+          lettersLeft: 0,
+        };
+        const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
+        state.turnOrder.splice(insertAt, 0, botId);
+        delete state.disconnectedPlayers[oldConnId];
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        break;
+      }
+
       // Player hover position — relay to everyone else without touching state
       case "hover": {
         room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
