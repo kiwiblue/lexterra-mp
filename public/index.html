@@ -153,6 +153,7 @@
 
   <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
   <div id="lobby-countdown" style="display:none;text-align:center;padding:0.15rem 0"></div>
+  <div id="waiting-msg" style="display:none;text-align:center;padding:0.75rem 1rem;background:#1e293b;border-radius:10px;border:1px solid #334155;font-size:0.85rem;color:#94a3b8">Waiting for the host to start the game…</div>
   <p class="status" id="lobby-status">Waiting for host to start…</p>
   <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Return to Lobby</button>
 </div>
@@ -467,13 +468,16 @@
     }
 
     const startBtn = document.getElementById("start-btn");
+    const waitingMsg = document.getElementById("waiting-msg");
     if (amHost) {
       const canStart = players.length >= 2;
       startBtn.style.display = 'block';
       startBtn.disabled = !canStart;
       startBtn.style.opacity = canStart ? '1' : '0.4';
+      if (waitingMsg) waitingMsg.style.display = 'none';
     } else {
       startBtn.style.display = 'none';
+      if (waitingMsg) waitingMsg.style.display = 'block';
     }
     updateLobbyStatus();
     const cdEl = document.getElementById('lobby-countdown');
@@ -665,7 +669,7 @@
         ? `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${tileCounts[id] ?? 0}</span>
-            <span style="color:#475569;font-size:0.72rem">&nbsp;${p.score}pts · ${p.wordsFound ?? 0}w</span>
+            <span style="color:#475569;font-size:0.72rem">&nbsp;${p.score}pts · ${p.wordsFound ?? 0} ${(p.wordsFound ?? 0) === 1 ? 'word' : 'words'}</span>
           </div>`
         : `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
@@ -1325,6 +1329,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.24</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.27</p>
 </body>
 </html>
