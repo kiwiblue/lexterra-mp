@@ -589,7 +589,17 @@
   window.reactivateLobby = function() {
     if (!lobbySocket || !isHost || !makePublic) return;
     lobbyRegisteredAt = Date.now();
-    lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { lastActivity: lobbyRegisteredAt } }));
+    const allPlayers = Object.values(state.players);
+    lobbySocket.send(JSON.stringify({
+      type: "register",
+      roomId,
+      hostName: state.players[myConnId]?.name ?? "HOST",
+      playerCount: allPlayers.length,
+      humanCount: allPlayers.filter(p => !p.isBot).length,
+      botCount: allPlayers.filter(p => p.isBot).length,
+      lastActivity: lobbyRegisteredAt,
+      settings: state.settings,
+    }));
     updateLobbyCountdown();
   };
 
@@ -1458,6 +1468,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.39</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.40</p>
 </body>
 </html>
