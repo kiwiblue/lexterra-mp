@@ -2,7 +2,8 @@
   "name": "lexterra-mp",
   "main": "party/index.js",
   "parties": {
-    "lobby": "party/lobby.js"
+    "lobby": "party/lobby.js",
+    "stats": "party/stats.js"
   },
   "serve": "public",
   "compatibilityDate": "2026-06-16"

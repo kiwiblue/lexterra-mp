@@ -1106,13 +1106,27 @@
     return Array.from({ length: len + 1 }, (_, i) => ({ r: a.r + i * sr, c: a.c + i * sc }));
   }
 
+  function claimedVariant(word) {
+    const w = word.toLowerCase();
+    for (const c of (state.claimed ?? [])) {
+      const cw = c.word.toLowerCase();
+      if (w === cw) return c.word;
+      if (w === cw + 's' || w === cw + 'es') return c.word;
+      if (w.endsWith('ies') && cw === w.slice(0, -3) + 'y') return c.word;
+      if (cw === w + 's' || cw === w + 'es') return c.word;
+      if (cw.endsWith('ies') && w === cw.slice(0, -3) + 'y') return c.word;
+    }
+    return null;
+  }
+
   function validateClaim(path) {
     const minLen = state.settings?.minWordLen ?? 4;
     if (path.length < minLen) return { valid: false, reason: `Need ≥${minLen} letters` };
     const letters = path.map(({ r, c }) => state.grid?.[r]?.[c]?.letter);
     if (letters.some(l => !l)) return { valid: false, reason: "All cells need letters" };
     const word = letters.join("");
-    if (state.claimed?.some(c => c.word === word)) return { valid: false, reason: "Already claimed" };
+    const variant = claimedVariant(word);
+    if (variant) return { valid: false, reason: variant === word ? "Already claimed" : `"${variant}" already claimed` };
     if (state.settings?.territoryMode === "exclusive" && state.territory) {
       if (path.some(({ r, c }) => { const o = state.territory[r]?.[c]; return o && o !== myConnId; }))
         return { valid: false, reason: "Crosses opponent territory" };
@@ -1222,6 +1236,8 @@
         onlineCount = msg.total ?? msg.count ?? 0;
         lobbyCount = msg.inLobby ?? 0;
         updateLobbyStatus();
+        const joinEl = document.getElementById('join-status');
+        if (joinEl) joinEl.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online`;
       }
     });
   }
@@ -1521,6 +1537,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.41</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.43</p>
 </body>
 </html>

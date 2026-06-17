@@ -11,6 +11,28 @@ async function notifyLobby(room, msg) {
   } catch {}
 }
 
+async function notifyStats(room, state, outcome) {
+  try {
+    const all = [
+      ...Object.values(state.players),
+      ...Object.values(state.disconnectedPlayers ?? {}).map(d => d.player),
+    ];
+    await room.context.parties.stats.get("main").fetch("/", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "game_end",
+        outcome,
+        mode: state.settings?.territoryMode ?? "off",
+        boardSize: state.settings?.boardSize ?? 10,
+        minWordLen: state.settings?.minWordLen ?? 4,
+        botCount: all.filter(p => p.isBot).length,
+        humanCount: all.filter(p => !p.isBot).length,
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch {}
+}
+
 /** @type {import("partykit/server").PartyKitServer} */
 export default {
   async onConnect(conn, room) {
@@ -197,7 +219,14 @@ export default {
         const claimCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(claimCurBot && state.host === conn.id)) return;
         const { word, path, score } = msg;
-        if (state.claimed.some(c => c.word === word)) return;
+        if (state.claimed.some(c => {
+          const w = word.toLowerCase(), cw = c.word.toLowerCase();
+          return w === cw ||
+            w === cw + 's' || w === cw + 'es' ||
+            (w.endsWith('ies') && cw === w.slice(0,-3) + 'y') ||
+            cw === w + 's' || cw === w + 'es' ||
+            (cw.endsWith('ies') && w === cw.slice(0,-3) + 'y');
+        })) return;
         state.claimed.push({ word, path, connId: state.cur, score });
         state.players[state.cur].score += score;
         state.players[state.cur].wordsFound++;
@@ -231,6 +260,7 @@ export default {
         if (state.consecutivePasses >= state.turnOrder.length * 2) {
           state.phase = "ended";
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          await notifyStats(room, state, "completed");
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
@@ -333,6 +363,7 @@ export default {
         if (wasTheirTurn) {
           if (state.turnOrder.length === 0) {
             state.phase = "ended";
+            await notifyStats(room, state, "abandoned");
           } else {
             const next = state.turnOrder[0];
             state.cur = next;
@@ -341,11 +372,13 @@ export default {
           }
         }
         const humanCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
-        if (humanCount === 0) {
+        if (humanCount === 0 && state.phase === "playing") {
           state.phase = "ended";
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          await notifyStats(room, state, "abandoned");
         } else if (humanCount === 1 && state.phase === "playing") {
           // Only one human left — auto-reset to lobby
+          await notifyStats(room, state, "abandoned");
           const fresh = {
             ...state,
             phase: "lobby",
