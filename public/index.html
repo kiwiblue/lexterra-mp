@@ -74,6 +74,11 @@
     .info-tags:last-child { margin-bottom:0; }
     .info-tag { background:#0f172a; border:1px solid #334155; border-radius:4px; padding:0.18rem 0.5rem; font-size:0.72rem; font-weight:bold; color:#94a3b8; }
     .info-desc { font-size:0.75rem; color:#64748b; margin-top:0.2rem; }
+    .mode-btn { flex:1; min-width:0; padding:0.85rem 0.25rem; border:2px solid #334155; background:#0f172a; color:#64748b; border-radius:10px; font-size:0.82rem; font-weight:bold; cursor:pointer; text-align:center; transition:all 0.15s; letter-spacing:0.06em; text-transform:uppercase; }
+    .mode-btn.selected { border-color:#7c3aed; background:rgba(124,58,237,0.15); color:#a78bfa; }
+    .mode-btn:disabled { opacity:0.45; cursor:default; }
+    @media (hover:hover) { .mode-btn:hover:not(:disabled) { border-color:#7c3aed; color:#e2e8f0; } }
+    .mode-desc { font-size:0.78rem; color:#94a3b8; padding:0.6rem 0.75rem; background:#0f172a; border-radius:8px; border-left:3px solid #334155; line-height:1.5; }
     @media (max-width: 520px) {
       body { padding: 0.75rem; justify-content: flex-start; }
       h1 { font-size: 1.4rem; }
@@ -353,30 +358,33 @@
     const settingsCard = document.getElementById("settings-card");
     const boardSizes = [5, 8, 10];
     const minWords = [3, 4, 5];
-    const territories = [['off','Off'], ['conquest','Conquest'], ['exclusive','Exclusive']];
+
+    const gameMode = s.territoryMode === 'conquest' ? 'conquest' : s.territoryMode === 'exclusive' ? 'fort' : 'search';
+    const modeDescs = {
+      search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
+      conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
+      fort:     'Claim tiles on a 10×10 board. Once a tile is yours it can\'t be stolen. Build your fort before the board fills up!',
+    };
 
     settingsCard.innerHTML = `
-      <h2>Settings</h2>
+      <h2>Game Mode</h2>
+      <div style="display:flex;gap:0.5rem">
+        <button class="mode-btn${gameMode==='conquest'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('conquest')">Conquest</button>
+        <button class="mode-btn${gameMode==='fort'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('fort')">Fort</button>
+        <button class="mode-btn${gameMode==='search'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('search')">Search</button>
+      </div>
+      <div class="mode-desc">${modeDescs[gameMode]}</div>
+      ${gameMode !== 'fort' ? `
       <div class="setting-row">
         <span class="setting-label">Board</span>
         <div class="btn-group">
           ${boardSizes.map(n => `<button class="toggle-btn${s.boardSize===n?' selected':''}" data-key="boardSize" data-val="${n}"${!amHost?' disabled':''}>${n}×${n}</button>`).join('')}
         </div>
-      </div>
+      </div>` : ''}
       <div class="setting-row">
         <span class="setting-label">Min Word</span>
         <div class="btn-group">
           ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
-        </div>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Territory</span>
-        <div class="btn-group">
-          ${territories.map(([t, label]) => {
-            const needsBig = t === 'exclusive' && s.boardSize !== 10;
-            const dis = !amHost || needsBig;
-            return `<button class="toggle-btn${s.territoryMode===t?' selected':''}" data-key="territoryMode" data-val="${t}"${dis?' disabled':''}${needsBig?' title="Requires 10×10 board"':''}>${label}</button>`;
-          }).join('')}
         </div>
       </div>
     `;
@@ -387,11 +395,7 @@
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
           const val = (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
-          const update = { [key]: val };
-          if (key === 'boardSize' && val !== 10 && s.territoryMode === 'exclusive') {
-            update.territoryMode = 'off';
-          }
-          socket.send(JSON.stringify({ type: 'settings', settings: update }));
+          socket.send(JSON.stringify({ type: 'settings', settings: { [key]: val } }));
         });
       });
     }
@@ -555,7 +559,7 @@
             ${[
               `${boardSize}×${boardSize} board`,
               `Min ${state.settings.minWordLen} letter${state.settings.minWordLen !== 1 ? 's' : ''}`,
-              ({off:'Standard',conquest:'Conquest',exclusive:'Exclusive'})[state.settings.territoryMode] ?? 'Standard',
+              ({off:'Search',conquest:'Conquest',exclusive:'Fort'})[state.settings.territoryMode] ?? 'Search',
             ].map(t => `<span class="info-tag">${t}</span>`).join('')}
           </div>
           ${ state.settings.territoryMode === 'conquest'
@@ -1071,7 +1075,7 @@
     }
     list.innerHTML = entries.map(g => {
       const s = g.settings ?? {};
-      const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Exclusive' : null;
+      const territory = s.territoryMode === 'conquest' ? 'Conquest' : s.territoryMode === 'exclusive' ? 'Fort' : 'Search';
       const meta = [`${s.boardSize ?? 10}×${s.boardSize ?? 10}`, `min ${s.minWordLen ?? 4}`, territory, `${g.playerCount}/4`].filter(Boolean).join(' · ');
       const isPlaying = g.phase === 'playing';
       if (!isPlaying && (g.humanCount ?? g.playerCount ?? 0) >= 4) return ''; // full, no bots to bump
@@ -1158,6 +1162,12 @@
       btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
       setTimeout(() => { btn.innerHTML = orig; }, 1500);
     });
+  };
+
+  window.setGameMode = function(mode) {
+    if (!socket || !isHost) return;
+    const map = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive', boardSize: 10 }, search: { territoryMode: 'off' } };
+    if (map[mode]) socket.send(JSON.stringify({ type: 'settings', settings: map[mode] }));
   };
 
   window.addBot = function() {
@@ -1299,6 +1309,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.13</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.14</p>
 </body>
 </html>
