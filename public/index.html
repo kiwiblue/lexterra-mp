@@ -197,6 +197,7 @@
   let isSpectating = false;
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
+  let onlineCount = 0;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -421,19 +422,15 @@
     }
 
     const startBtn = document.getElementById("start-btn");
-    const lobbyStatus = document.getElementById("lobby-status");
     if (amHost) {
       const canStart = players.length >= 2;
       startBtn.style.display = 'block';
       startBtn.disabled = !canStart;
       startBtn.style.opacity = canStart ? '1' : '0.4';
-      lobbyStatus.textContent = canStart
-        ? `${players.length} player${players.length !== 1 ? 's' : ''} in lobby.`
-        : 'Need at least 2 players (or add a bot) to start.';
     } else {
       startBtn.style.display = 'none';
-      lobbyStatus.textContent = 'Waiting for host to start…';
     }
+    updateLobbyStatus();
     const cdEl = document.getElementById('lobby-countdown');
     if (cdEl) {
       if (amHost && makePublic && hasRegisteredPublic) {
@@ -442,6 +439,20 @@
       } else {
         cdEl.style.display = 'none';
       }
+    }
+  }
+
+  function updateLobbyStatus() {
+    if (!state || state.phase !== 'lobby') return;
+    const el = document.getElementById('lobby-status');
+    if (!el) return;
+    const amHost = state.host === myConnId;
+    const humanCount = Object.values(state.players).filter(p => !p.isBot).length;
+    const canStart = Object.keys(state.players).length >= 2;
+    if (amHost && !canStart) {
+      el.textContent = 'Need at least 2 players (or add a bot) to start.';
+    } else {
+      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online (${humanCount} in this lobby)`;
     }
   }
 
@@ -978,8 +989,8 @@
         renderPublicGames();
       }
       if (msg.type === "online") {
-        const el = document.getElementById("online-count");
-        if (el) el.textContent = `${msg.count} player${msg.count !== 1 ? 's' : ''} online`;
+        onlineCount = msg.count;
+        updateLobbyStatus();
       }
     });
   }
@@ -1245,7 +1256,7 @@
     }, { once: true });
   }
 </script>
-<p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.2</p>
+
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.3</p>
 </body>
 </html>
