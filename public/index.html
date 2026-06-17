@@ -100,15 +100,15 @@
     <button class="btn btn-primary" onclick="createGame()">Create Room</button>
   </div>
 
-  <div class="card" id="open-games-card">
-    <h2>Public Games</h2>
-    <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
-  </div>
-
   <div class="card">
     <h2>Join a Game</h2>
     <input id="room-code-input" type="text" maxlength="6" placeholder="Room code" style="text-transform:uppercase;letter-spacing:0.2em">
     <button class="btn btn-secondary" onclick="joinGame()">Join Room</button>
+  </div>
+
+  <div class="card" id="open-games-card">
+    <h2>Public Games</h2>
+    <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
   </div>
 
   <p class="status" id="join-status"></p>
@@ -1198,6 +1198,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.8</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.9</p>
 </body>
 </html>
