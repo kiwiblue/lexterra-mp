@@ -211,6 +211,7 @@
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
   let lobbyCount = 0;
+  let preFortBoardSize = null;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -1169,7 +1170,12 @@
     const currentMode = state.settings.territoryMode === 'exclusive' ? 'fort' : null;
     const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive', boardSize: 10 }, search: { territoryMode: 'off' } }[mode];
     if (!updates) return;
-    if (currentMode === 'fort' && mode !== 'fort') updates.boardSize = 5;
+    if (mode === 'fort' && currentMode !== 'fort') {
+      preFortBoardSize = state.settings.boardSize;
+    } else if (currentMode === 'fort' && mode !== 'fort') {
+      updates.boardSize = preFortBoardSize ?? 5;
+      preFortBoardSize = null;
+    }
     socket.send(JSON.stringify({ type: 'settings', settings: updates }));
   };
 
@@ -1312,6 +1318,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.16</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.17</p>
 </body>
 </html>
