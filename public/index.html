@@ -70,6 +70,10 @@
     .btn-danger:hover { border-color:#7f1d1d; color:#fca5a5; background:rgba(127,29,29,0.15); }
     .btn-leave { border-color:#1e3a5f; color:#334155; margin-top:0.3rem; }
     .btn-leave:hover { border-color:#3b82f6; color:#93c5fd; background:rgba(59,130,246,0.1); }
+    .info-tags { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.35rem; }
+    .info-tags:last-child { margin-bottom:0; }
+    .info-tag { background:#0f172a; border:1px solid #334155; border-radius:4px; padding:0.18rem 0.5rem; font-size:0.72rem; font-weight:bold; color:#94a3b8; }
+    .info-desc { font-size:0.75rem; color:#64748b; margin-top:0.2rem; }
   </style>
 </head>
 <body>
@@ -413,6 +417,21 @@
         <div class="card" style="padding:1rem">
           <h2>Words Claimed</h2>
           <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
+        </div>
+        <div class="card" style="padding:0.7rem 1rem">
+          <div class="info-tags">
+            ${[
+              `${boardSize}×${boardSize} board`,
+              `Min ${state.settings.minWordLen} letter${state.settings.minWordLen !== 1 ? 's' : ''}`,
+              ({off:'Standard',conquest:'Conquest',exclusive:'Exclusive'})[state.settings.territoryMode] ?? 'Standard',
+              `${state.settings.timeLimit ?? 120}s turns`
+            ].map(t => `<span class="info-tag">${t}</span>`).join('')}
+          </div>
+          ${ state.settings.territoryMode === 'conquest'
+            ? '<div class="info-desc">Claiming a word steals all its tiles. Most tiles at game end wins.</div>'
+            : state.settings.territoryMode === 'exclusive'
+            ? '<div class="info-desc">Claimed tiles lock to their owner. Most tiles at game end wins.</div>'
+            : '' }
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
           ${!state.isPublic ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
