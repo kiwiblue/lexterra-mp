@@ -643,9 +643,9 @@
     }
     html += `<div class="action-bar" style="margin-top:${lettersLeft > 0 || claimMode ? "0.75rem" : "0"}">
       <button class="btn ${claimMode ? "btn-primary" : "btn-secondary"}" onclick="toggleClaimMode()" style="flex:1">
-        ${claimMode ? "Cancel" : "Claim Word"}
+        ${claimMode ? "Cancel Claim" : "Claim Word"}
       </button>
-      <button class="btn btn-secondary" onclick="doPass()" style="flex:1">Pass</button>
+      ${!claimMode ? `<button class="btn btn-secondary" onclick="doPass()" style="flex:1">Pass</button>` : ""}
     </div>`;
     card.innerHTML = html;
   }
@@ -1098,6 +1098,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.6</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.9</p>
 </body>
 </html>
