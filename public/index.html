@@ -772,7 +772,7 @@
       selLetter = null; claimMode = false; claimStart = null; claimPath = null;
       restartTimer();
       const hasHumanOpponent = Object.values(state.players).some(p => !p.isBot && p !== state.players[myConnId]);
-      if (state.cur === myConnId && soundEnabled && hasHumanOpponent) playTurnSound();
+      if (state.cur === myConnId && soundEnabled && hasHumanOpponent && !isSpectating) playTurnSound();
     }
     updateScores();
     updateGridCells();
@@ -1567,6 +1567,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.48</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.49</p>
 </body>
 </html>
