@@ -151,7 +151,8 @@ export default {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id) return;
         if (Object.keys(state.players).length < 2) return;
-        if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "playing" } });
+        state.lastActivity = Date.now();
+        if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "playing", lastActivity: state.lastActivity } });
         const { boardSize } = state.settings;
         state.phase = "playing";
         state.grid = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
@@ -200,6 +201,8 @@ export default {
         state.players[state.cur].lettersLeft++;
         state.consecutivePasses = 0;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
+        state.lastActivity = Date.now();
+        if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { lastActivity: state.lastActivity } });
         if (state.territory) {
           path.forEach(({ r, c }) => { state.territory[r][c] = state.cur; });
         }

@@ -275,10 +275,10 @@
         if (!hasRegisteredPublic) {
           hasRegisteredPublic = true;
           lastLobbySnapshot = snapshot;
-          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, humanCount, botCount, settings: state.settings }));
+          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, humanCount, botCount, lastActivity: Date.now(), settings: state.settings }));
         } else if (snapshot !== lastLobbySnapshot) {
           lastLobbySnapshot = snapshot;
-          lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, humanCount, botCount, settings: state.settings, hostName } }));
+          lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, humanCount, botCount, lastActivity: Date.now(), settings: state.settings, hostName } }));
         }
       }
     }
@@ -949,7 +949,11 @@
   function renderPublicGames() {
     const list = document.getElementById("open-games-list");
     if (!list) return;
-    const entries = Object.values(publicGames).sort((a, b) => {
+    const ONE_HOUR_MS = 3600000;
+    const now = Date.now();
+    const entries = Object.values(publicGames)
+      .filter(g => !g.lastActivity || (now - g.lastActivity) < ONE_HOUR_MS)
+      .sort((a, b) => {
       // Join games before Watch games
       const aPlaying = a.phase === 'playing';
       const bPlaying = b.phase === 'playing';
@@ -1194,6 +1198,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.6</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.7</p>
 </body>
 </html>
