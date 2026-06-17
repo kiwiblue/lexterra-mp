@@ -43,6 +43,13 @@ async function notifyStats(room, state, outcome) {
   } catch {}
 }
 
+// In-memory spectator tracking (per room instance, resets on DO restart — fine)
+const spectatorConns = new Set();
+
+function broadcastSpectatorCount(room) {
+  room.broadcast(JSON.stringify({ type: "spectators", count: spectatorConns.size }));
+}
+
 /** @type {import("partykit/server").PartyKitServer} */
 export default {
   async onConnect(conn, room) {
@@ -305,6 +312,13 @@ export default {
         break;
       }
 
+      // Spectator announces themselves
+      case "watch": {
+        spectatorConns.add(conn.id);
+        broadcastSpectatorCount(room);
+        break;
+      }
+
       // Player hover position — relay to everyone else without touching state
       case "hover": {
         room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
@@ -351,6 +365,11 @@ export default {
   },
 
   async onClose(conn, room) {
+    if (spectatorConns.has(conn.id)) {
+      spectatorConns.delete(conn.id);
+      broadcastSpectatorCount(room);
+      return;
+    }
     const state = await room.storage.get("state");
     if (!state) return;
 

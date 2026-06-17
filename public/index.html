@@ -262,6 +262,7 @@
   let botTurnRunning = false;
   let botStateResolver = null;
   let isSpectating = false;
+  let spectatorCount = 0;
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let onlineCount = 0;
@@ -312,6 +313,10 @@
         if (msg.r == null) delete otherHovers[msg.connId];
         else otherHovers[msg.connId] = { r: msg.r, c: msg.c };
         applyOtherHovers();
+      }
+      if (msg.type === "spectators") {
+        spectatorCount = msg.count ?? 0;
+        updateSpectatorTag();
       }
       if (msg.type === "player_left") {
         const humanCount = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
@@ -682,6 +687,7 @@
               `Min ${state.settings.minWordLen} letter${state.settings.minWordLen !== 1 ? 's' : ''}`,
               ({off:'Search',conquest:'Conquest',exclusive:'Keeps'})[state.settings.territoryMode] ?? 'Search',
             ].map(t => `<span class="info-tag">${t}</span>`).join('')}
+            <span id="spectator-tag" class="info-tag" style="display:none"></span>
           </div>
           ${ state.settings.territoryMode === 'conquest'
             ? '<div class="info-desc">Claiming a word steals all its tiles. Most tiles at game end wins.</div>'
@@ -818,6 +824,17 @@
   }
 
   function pColor(id) { return COLORS[(frozenPlayers ?? state.players)[id]?.color]; }
+
+  function updateSpectatorTag() {
+    const el = document.getElementById('spectator-tag');
+    if (!el) return;
+    if (spectatorCount > 0) {
+      el.textContent = `${spectatorCount} watching`;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  }
 
   function applyOtherHovers() {
     const boardSize = state?.settings?.boardSize;
@@ -1357,7 +1374,9 @@
     localStorage.removeItem("lexterra_room");
     localStorage.removeItem("lexterra_connId");
     connect(code);
-    // No message sent — server broadcasts state on connect; we just observe
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "watch" }));
+    }, { once: true });
   };
 
   // Exposed to onclick handlers
@@ -1567,6 +1586,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.49</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.50</p>
 </body>
 </html>
