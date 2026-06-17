@@ -174,6 +174,16 @@
 
   const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Pink:'#f472b6', Yellow:'#eab308', Green:'#22c55e', Grey:'#9ca3af' };
 
+  const _bw = ["4r5e","5h1t","5hit","a55","anal","anus","ar5e","arrse","arse","ass","asses","assfucker","assfukka","asshole","assholes","asswhole","b17ch","b1tch","ballbag","balls","ballsack","bastard","beastial","beastiality","bellend","bestial","bestiality","biatch","bitch","bitcher","bitchers","bitches","bitchin","bitching","boiolas","bollock","bollok","boner","boob","boobs","buceta","bugger","bum","butthole","buttmuch","buttplug","c0ck","c0cksucker","cawk","chink","cipa","cl1t","clit","clitoris","clits","cnut","cock","cockface","cockhead","cockmunch","cockmuncher","cocks","cocksuck","cocksucked","cocksucker","cocksucking","cocksukka","cok","cokmuncher","coksucka","coon","crap","cum","cummer","cumming","cums","cumshot","cunilingus","cunillingus","cunnilingus","cunt","cuntlick","cuntlicker","cuntlicking","cunts","cyberfuc","cyberfuck","cyberfucked","cyberfucker","cyberfuckers","cyberfucking","d1ck","dick","dickhead","dildo","dildos","dink","dinks","dirsa","dlck","doggin","dogging","donkeyribber","doosh","duche","dyke","ejaculate","ejaculated","ejaculates","ejaculating","ejaculation","ejakulate","f4nny","fag","fagging","faggitt","faggot","faggs","fagot","fagots","fags","fanny","fannyflaps","fannyfucker","fanyy","fatass","fcuk","fcuker","fcuking","feck","fecker","felching","fellate","fellatio","fingerfuck","fingerfucked","fingerfucker","fingerfuckers","fingerfucking","fingerfucks","fistfuck","fistfucked","fistfucker","fistfuckers","fistfucking","fistfucks","flange","fook","fooker","fuck","fucka","fucked","fucker","fuckers","fuckhead","fuckheads","fuckin","fucking","fuckme","fucks","fuckwhit","fuckwit","fudgepacker","fuk","fuker","fukker","fukkin","fuks","fukwit","fux","gangbang","gangbanged","gangbangs","gaylord","gaysex","goatse","goddamn","goddamned","hardcoresex","heshe","hoar","hoare","hoer","homo","hore","horniest","horny","hotsex","jackoff","jap","jism","jiz","jizm","jizz","kawk","knob","knobead","knobed","knobend","knobhead","knobjocky","knobjokey","kock","kondum","kondums","kum","kummer","kumming","kums","kunilingus","l3itch","labia","lust","lusting","m0f0","m0fo","masochist","masterbate","masterbation","masterbations","masturbate","mof0","mofo","mothafuck","mothafucka","mothafucked","mothafucker","mothafuckers","mothafuckin","mothafucking","mothafucks","motherfuck","motherfucked","motherfucker","motherfuckers","motherfuckin","motherfucking","motherfuckka","motherfucks","muff","mutha","muthafecker","muthafuckker","muther","mutherfucker","n1gga","n1gger","nazi","nigg3r","nigg4h","nigga","niggah","niggas","niggaz","nigger","niggers","nob","nobhead","nobjocky","nobjokey","numbnuts","nutsack","orgasim","orgasims","orgasm","orgasms","pecker","penis","penisfucker","phonesex","phuck","phuk","phuked","phuking","phukked","phukking","phuks","phuq","pigfucker","pimpis","piss","pissed","pisser","pissers","pisses","pissflaps","pissin","pissing","pissoff","poop","porn","porno","pornography","pornos","prick","pricks","pron","pube","pusse","pussi","pussies","pussy","pussys","rectum","retard","rimjaw","rimming","sadist","schlong","screwing","scroat","scrote","scrotum","semen","shag","shagger","shaggin","shagging","shemale","shit","shitdick","shite","shited","shitey","shitfuck","shitfull","shithead","shiting","shits","shitted","shitter","shitters","shitting","shitty","skank","slut","sluts","smegma","smut","snatch","spunk","t1tties","teets","teez","testical","testicle","tit","titfuck","tits","titt","tittiefucker","titties","tittyfuck","tittywank","titwank","tosser","turd","twat","twathead","twatty","twunt","twunter","vagina","vulva","wang","wank","wanker","wanky","whoar","whore","willies","willy","xrated","xxx"];
+  const _bwSet = new Set(_bw.map(w => w.replace(/[^a-z0-9]/g,'')));
+  const _bwSub = _bw.map(w => w.replace(/[^a-z0-9]/g,'')).filter(w => w.length >= 5);
+  function isBannedName(name) {
+    const c = name.toLowerCase().replace(/[^a-z]/g,'');
+    if (!c) return false;
+    if (_bwSet.has(c)) return true;
+    return _bwSub.some(w => c.includes(w));
+  }
+
   let soundEnabled = localStorage.getItem('lexterra_sound') !== 'off';
 
   function soundIcon(on) {
@@ -511,6 +521,7 @@
     if (nameField) {
       const sendRename = () => {
         const n = nameField.value.trim().toUpperCase();
+        if (n && isBannedName(n)) { nameField.value = state.players[myConnId]?.name ?? ''; return; }
         if (n) socket.send(JSON.stringify({ type: 'rename', name: n }));
       };
       nameField.addEventListener('blur', sendRename);
@@ -1253,6 +1264,7 @@
   // Exposed to onclick handlers
   window.createGame = function() {
     const name = getPlayerName();
+    if (isBannedName(name)) { document.getElementById("join-status").textContent = "Please choose a different name."; return; }
     const room = randomRoomCode();
     connect(room);
     socket.addEventListener("open", () => {
@@ -1263,6 +1275,7 @@
 
   window.joinGame = function() {
     const name = getPlayerName();
+    if (isBannedName(name)) { document.getElementById("join-status").textContent = "Please choose a different name."; return; }
     const room = document.getElementById("room-code-input").value.trim().toUpperCase();
     if (!room) { document.getElementById("join-status").textContent = "Enter a room code."; return; }
     connect(room);
@@ -1445,6 +1458,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.38</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.39</p>
 </body>
 </html>
