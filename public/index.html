@@ -74,11 +74,15 @@
     .info-tags:last-child { margin-bottom:0; }
     .info-tag { background:#0f172a; border:1px solid #334155; border-radius:4px; padding:0.18rem 0.5rem; font-size:0.72rem; font-weight:bold; color:#94a3b8; }
     .info-desc { font-size:0.75rem; color:#64748b; margin-top:0.2rem; }
-    .mode-btn { flex:1; min-width:0; padding:0.85rem 0.25rem; border:2px solid #334155; background:#0f172a; color:#64748b; border-radius:10px; font-size:0.82rem; font-weight:bold; cursor:pointer; text-align:center; transition:all 0.15s; letter-spacing:0.06em; text-transform:uppercase; }
-    .mode-btn.selected { border-color:#7c3aed; background:rgba(124,58,237,0.15); color:#a78bfa; }
+    .section-label { font-size:1.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.14em; font-weight:800; text-align:center; }
+    .mode-toggle { display:flex; background:#0f172a; border-radius:14px; padding:4px; border:1px solid #1e293b; width:100%; }
+    .mode-btn { flex:1; min-width:0; padding:0.75rem 0.25rem; border:none; background:#1e293b; color:#64748b; border-radius:10px; font-size:0.82rem; font-weight:bold; cursor:pointer; text-align:center; transition:all 0.18s; letter-spacing:0.06em; text-transform:uppercase; }
+    .mode-btn.selected { background:#7c3aed; color:#fff; box-shadow:0 2px 8px rgba(124,58,237,0.35); }
     .mode-btn:disabled { opacity:0.45; cursor:default; }
-    @media (hover:hover) { .mode-btn:hover:not(:disabled) { border-color:#7c3aed; color:#e2e8f0; } }
+    @media (hover:hover) { .mode-btn:hover:not(.selected):not(:disabled) { background:rgba(124,58,237,0.15); color:#e2e8f0; } }
+    #settings-section { display:flex; flex-direction:column; gap:0.5rem; }
     .mode-desc { font-size:0.78rem; color:#94a3b8; padding:0.6rem 0.75rem; background:#0f172a; border-radius:8px; border-left:3px solid #334155; line-height:1.5; }
+    .mode-bg-desc { font-size:0.78rem; color:#64748b; line-height:1.5; text-align:center; margin:0; }
     @media (max-width: 520px) {
       body { padding: 0.75rem; justify-content: flex-start; }
       h1 { font-size: 1.4rem; }
@@ -143,7 +147,7 @@
     </div>
   </div>
 
-  <div class="card" id="settings-card"></div>
+  <div id="settings-section"></div>
 
   <div class="card" id="players-card"></div>
 
@@ -355,8 +359,8 @@
     const amHost = state.host === myConnId;
     const s = state.settings;
 
-    // Settings card
-    const settingsCard = document.getElementById("settings-card");
+    // Settings section
+    const settingsSection = document.getElementById("settings-section");
     const boardSizes = [5, 8, 10];
     const minWords = [3, 4, 5];
 
@@ -364,34 +368,37 @@
     const modeDescs = {
       search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
       conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
-      fort:     'Claim tiles on a 10×10 board. Once a tile is yours it can\'t be stolen. Build your fort before the board fills up!',
+      fort:     "Create words to claim tiles no one else can use. Secure your fortress and protect your territory. Most points wins.",
     };
 
-    settingsCard.innerHTML = `
-      <h2>Game Mode</h2>
-      <div style="display:flex;gap:0.5rem">
+    settingsSection.innerHTML = `
+      <p class="section-label">Game Mode</p>
+      <div class="mode-toggle">
         <button class="mode-btn${gameMode==='conquest'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('conquest')">Conquest</button>
         <button class="mode-btn${gameMode==='fort'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('fort')">Fort</button>
         <button class="mode-btn${gameMode==='search'?' selected':''}"${!amHost?' disabled':''} onclick="setGameMode('search')">Search</button>
       </div>
-      <div class="mode-desc">${modeDescs[gameMode]}</div>
-      ${gameMode !== 'fort' ? `
-      <div class="setting-row">
-        <span class="setting-label">Board</span>
-        <div class="btn-group">
-          ${boardSizes.map(n => `<button class="toggle-btn${s.boardSize===n?' selected':''}" data-key="boardSize" data-val="${n}"${!amHost?' disabled':''}>${n}×${n}</button>`).join('')}
-        </div>
-      </div>` : ''}
-      <div class="setting-row">
-        <span class="setting-label">Min Word</span>
-        <div class="btn-group">
-          ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
+      <p class="mode-bg-desc">${modeDescs[gameMode]}</p>
+      <div class="card">
+        <h2>Game Settings</h2>
+        ${gameMode !== 'fort' ? `
+        <div class="setting-row">
+          <span class="setting-label">Board</span>
+          <div class="btn-group">
+            ${boardSizes.map(n => `<button class="toggle-btn${s.boardSize===n?' selected':''}" data-key="boardSize" data-val="${n}"${!amHost?' disabled':''}>${n}×${n}</button>`).join('')}
+          </div>
+        </div>` : ''}
+        <div class="setting-row">
+          <span class="setting-label">Min Word</span>
+          <div class="btn-group">
+            ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
+          </div>
         </div>
       </div>
     `;
 
     if (amHost) {
-      settingsCard.querySelectorAll('.toggle-btn:not([disabled])').forEach(btn => {
+      settingsSection.querySelectorAll('.toggle-btn:not([disabled])').forEach(btn => {
         btn.addEventListener('click', () => {
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
@@ -885,7 +892,7 @@
     if (socket) socket.send(JSON.stringify({ type: "reset" }));
   };
   window.returnToLobby = function() {
-    if (!confirm("Leave the game and return to the lobby?")) return;
+    if (state?.phase === "playing" && !confirm("Leave the game and return to the lobby?")) return;
     localStorage.removeItem("lexterra_room");
     localStorage.removeItem("lexterra_connId");
     location.reload();
@@ -1318,6 +1325,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.17</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.24</p>
 </body>
 </html>
