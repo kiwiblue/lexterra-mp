@@ -447,12 +447,11 @@
     const el = document.getElementById('lobby-status');
     if (!el) return;
     const amHost = state.host === myConnId;
-    const humanCount = Object.values(state.players).filter(p => !p.isBot).length;
     const canStart = Object.keys(state.players).length >= 2;
     if (amHost && !canStart) {
       el.textContent = 'Need at least 2 players (or add a bot) to start.';
     } else {
-      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online (${humanCount} in this lobby)`;
+      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} in the lobby`;
     }
   }
 
@@ -1258,6 +1257,6 @@
   }
 </script>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.4</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.5</p>
 </body>
 </html>
