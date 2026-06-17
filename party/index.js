@@ -283,7 +283,13 @@ export default {
         await room.storage.put("state", fresh);
         room.broadcast(JSON.stringify({ type: "state", state: fresh }));
         if (fresh.isPublic) {
-          await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "lobby", playerCount: Object.keys(fresh.players).length } });
+          const freshPlayers = Object.values(fresh.players);
+          await notifyLobby(room, { type: "update", roomId: room.id, patch: {
+            phase: "lobby",
+            playerCount: freshPlayers.length,
+            humanCount: freshPlayers.filter(p => !p.isBot).length,
+            botCount: freshPlayers.filter(p => p.isBot).length,
+          }});
         }
         break;
       }

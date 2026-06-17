@@ -266,16 +266,19 @@
       }
       renderLobby();
       if (makePublic && isHost && lobbySocket) {
-        const count = Object.keys(state.players).length;
+        const allPlayers = Object.values(state.players);
+        const count = allPlayers.length;
+        const humanCount = allPlayers.filter(p => !p.isBot).length;
+        const botCount = allPlayers.filter(p => p.isBot).length;
         const hostName = state.players[myConnId]?.name ?? "HOST";
-        const snapshot = JSON.stringify({ count, settings: state.settings, hostName });
+        const snapshot = JSON.stringify({ count, humanCount, botCount, settings: state.settings, hostName });
         if (!hasRegisteredPublic) {
           hasRegisteredPublic = true;
           lastLobbySnapshot = snapshot;
-          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, settings: state.settings }));
+          lobbySocket.send(JSON.stringify({ type: "register", roomId, hostName, playerCount: count, humanCount, botCount, settings: state.settings }));
         } else if (snapshot !== lastLobbySnapshot) {
           lastLobbySnapshot = snapshot;
-          lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, settings: state.settings, hostName } }));
+          lobbySocket.send(JSON.stringify({ type: "update", roomId, patch: { playerCount: count, humanCount, botCount, settings: state.settings, hostName } }));
         }
       }
     }
@@ -942,7 +945,18 @@
   function renderPublicGames() {
     const list = document.getElementById("open-games-list");
     if (!list) return;
-    const entries = Object.values(publicGames);
+    const entries = Object.values(publicGames).sort((a, b) => {
+      // Join games before Watch games
+      const aPlaying = a.phase === 'playing';
+      const bPlaying = b.phase === 'playing';
+      if (aPlaying !== bPlaying) return aPlaying ? 1 : -1;
+      // Most human players first
+      const aH = a.humanCount ?? a.playerCount ?? 0;
+      const bH = b.humanCount ?? b.playerCount ?? 0;
+      if (bH !== aH) return bH - aH;
+      // Fewest bots last (most bots last within same human count)
+      return (a.botCount ?? 0) - (b.botCount ?? 0);
+    });
     if (!entries.length) {
       list.innerHTML = '<p class="placeholder">No open games right now.</p>';
       return;
@@ -1176,6 +1190,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.3</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.4</p>
 </body>
 </html>
