@@ -254,10 +254,10 @@ export default {
         break;
       }
 
-      // Host resets a private game back to lobby with same players + settings
+      // Host resets the game back to lobby with same players + settings
       case "reset": {
         const state = await room.storage.get("state");
-        if (!state || state.isPublic || state.host !== conn.id) return;
+        if (!state || state.host !== conn.id) return;
         if (!["ended", "playing"].includes(state.phase)) return;
         const fresh = {
           ...state,
