@@ -135,7 +135,7 @@
 
   <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
   <p class="status" id="lobby-status">Waiting for host to start…</p>
-  <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Main Menu</button>
+  <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Return to Lobby</button>
 </div>
 
 <!-- Game screen -->
@@ -424,7 +424,6 @@
               `${boardSize}×${boardSize} board`,
               `Min ${state.settings.minWordLen} letter${state.settings.minWordLen !== 1 ? 's' : ''}`,
               ({off:'Standard',conquest:'Conquest',exclusive:'Exclusive'})[state.settings.territoryMode] ?? 'Standard',
-              `${state.settings.timeLimit ?? 120}s turns`
             ].map(t => `<span class="info-tag">${t}</span>`).join('')}
           </div>
           ${ state.settings.territoryMode === 'conquest'
@@ -1021,7 +1020,7 @@
     }, { once: true });
   }
 </script>
-<p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none"></p>
+<p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
 <p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.6</p>
 </body>
 </html>
