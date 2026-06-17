@@ -150,6 +150,7 @@ export default {
       case "start": {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id) return;
+        if (Object.keys(state.players).length < 2) return;
         if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
         const { boardSize } = state.settings;
         state.phase = "playing";
@@ -256,7 +257,7 @@ export default {
       // Host resets a private game back to lobby with same players + settings
       case "reset": {
         const state = await room.storage.get("state");
-        if (!state || state.isPublic) return;
+        if (!state || state.isPublic || state.host !== conn.id) return;
         if (!["ended", "playing"].includes(state.phase)) return;
         const fresh = {
           ...state,

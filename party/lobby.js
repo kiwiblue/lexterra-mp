@@ -25,6 +25,12 @@ export default {
   async onConnect(conn, room) {
     const games = (await room.storage.get("games")) ?? {};
     conn.send(JSON.stringify({ type: "games", games }));
+    const count = [...room.getConnections()].length;
+    room.broadcast(JSON.stringify({ type: "online", count }));
+  },
+  async onClose(conn, room) {
+    const count = [...room.getConnections()].length;
+    room.broadcast(JSON.stringify({ type: "online", count }));
   },
   async onMessage(message, conn, room) {
     await applyUpdate(JSON.parse(message), room);

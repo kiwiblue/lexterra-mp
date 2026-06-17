@@ -74,7 +74,7 @@
 </head>
 <body>
 
-<h1>LEXTERRA</h1>
+<h1 style="cursor:pointer" onclick="goHome()">LEXTERRA</h1>
 <p class="subtitle">MULTIPLAYER</p>
 
 <!-- Join / Create screen -->
@@ -97,7 +97,7 @@
   </div>
 
   <div class="card" id="open-games-card">
-    <h2>Open Games</h2>
+    <h2>Public Games</h2>
     <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
   </div>
 
@@ -131,6 +131,7 @@
 
   <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
   <p class="status" id="lobby-status">Waiting for host to start…</p>
+  <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Main Menu</button>
 </div>
 
 <!-- Game screen -->
@@ -369,8 +370,13 @@
     const startBtn = document.getElementById("start-btn");
     const lobbyStatus = document.getElementById("lobby-status");
     if (amHost) {
+      const canStart = players.length >= 2;
       startBtn.style.display = 'block';
-      lobbyStatus.textContent = `${players.length} player${players.length !== 1 ? 's' : ''} in lobby.`;
+      startBtn.disabled = !canStart;
+      startBtn.style.opacity = canStart ? '1' : '0.4';
+      lobbyStatus.textContent = canStart
+        ? `${players.length} player${players.length !== 1 ? 's' : ''} in lobby.`
+        : 'Need at least 2 players (or add a bot) to start.';
     } else {
       startBtn.style.display = 'none';
       lobbyStatus.textContent = 'Waiting for host to start…';
@@ -551,6 +557,8 @@
   function updateClaimLines() {
     const svg = document.getElementById("claims-svg");
     if (!svg || !gameCellSize) return;
+    const tMode = state.settings?.territoryMode;
+    if (tMode === 'conquest' || tMode === 'exclusive') { svg.innerHTML = ""; return; }
     const cs = gameCellSize, gap = 3;
     const cx = (r, c) => c * (cs + gap) + cs / 2;
     const cy = (r, c) => r * (cs + gap) + cs / 2;
@@ -661,11 +669,12 @@
     location.reload();
   };
 
+  const isTouch = () => window.matchMedia('(hover:none)').matches;
   document.addEventListener("keydown", e => {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     if (state?.phase !== "playing" || state?.cur !== myConnId) return;
     const key = e.key.toUpperCase();
-    if (/^[A-Z]$/.test(e.key) && e.key.length === 1) {
+    if (e.key.length === 1 && /^[A-Za-z]$/.test(e.key) && !isTouch()) {
       const me = state.players[myConnId];
       if (me?.lettersLeft > 0 && !claimMode) {
         e.preventDefault();
@@ -755,8 +764,19 @@
         publicGames = msg.games;
         renderPublicGames();
       }
+      if (msg.type === "online") {
+        const el = document.getElementById("online-count");
+        if (el) el.textContent = `${msg.count} player${msg.count !== 1 ? 's' : ''} online`;
+      }
     });
   }
+
+  window.goHome = function() {
+    if (socket && !confirm("Leave and return to the main screen?")) return;
+    localStorage.removeItem("lexterra_room");
+    localStorage.removeItem("lexterra_connId");
+    location.reload();
+  };
 
   function renderPublicGames() {
     const list = document.getElementById("open-games-list");
@@ -968,6 +988,7 @@
     }, { once: true });
   }
 </script>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.5</p>
+<p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none"></p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.2.6</p>
 </body>
 </html>
