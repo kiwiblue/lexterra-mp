@@ -4,7 +4,10 @@
 // ── Banned claimable words (profanity filter) ────────────────────────
 // Add words in lowercase. Keep in sync with public/index.html.
 const BANNED_WORDS = new Set([
-  // add words here, e.g.: "word", "another"
+  "cunt","cunts","fuck","fucked","fucker","fuckers","fucking","fuckings",
+  "fuckoff","fuckoffs","fucks","fuckup","fuckups","fuckwit","fuckwits",
+  "headfuck","headfucks","mindfuck","mindfucks","motherfucker","motherfuckers",
+  "motherfucking","starfucker","starfuckers","starfucking","starfuckings",
 ]);
 function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
 

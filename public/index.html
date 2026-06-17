@@ -211,7 +211,10 @@
   // ── Banned claimable words (profanity filter) ────────────────────
   // Add words in lowercase. Keep in sync with party/index.js.
   const BANNED_WORDS = new Set([
-    // add words here, e.g.: "word", "another"
+    "cunt","cunts","fuck","fucked","fucker","fuckers","fucking","fuckings",
+    "fuckoff","fuckoffs","fucks","fuckup","fuckups","fuckwit","fuckwits",
+    "headfuck","headfucks","mindfuck","mindfucks","motherfucker","motherfuckers",
+    "motherfucking","starfucker","starfuckers","starfucking","starfuckings",
   ]);
   function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
 
@@ -1564,6 +1567,6 @@
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.47</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.48</p>
 </body>
 </html>
