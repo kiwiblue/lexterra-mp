@@ -324,6 +324,7 @@ export default {
         }
         const humanCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
         if (humanCount === 0) state.phase = "ended";
+        if (state.phase === "ended" && state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
       }
       await room.storage.put("state", state);
       room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);

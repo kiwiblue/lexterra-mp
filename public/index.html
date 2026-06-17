@@ -293,6 +293,9 @@
     if (state.phase === "ended") {
       stopTimer();
       if (!gameInited) { gameInited = true; }
+      if (isHost && makePublic && hasRegisteredPublic && lobbySocket) {
+        lobbySocket.send(JSON.stringify({ type: "unregister", roomId }));
+      }
       renderEndScreen();
     }
   }
@@ -1191,6 +1194,6 @@
   }
 </script>
 <p id="online-count" style="position:fixed;bottom:6px;left:10px;font-size:0.65rem;color:rgba(255,255,255,0.25);pointer-events:none;user-select:none;z-index:100"></p>
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.5</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.3.6</p>
 </body>
 </html>
