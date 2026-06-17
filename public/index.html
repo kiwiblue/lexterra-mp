@@ -203,9 +203,11 @@
       const msg = JSON.parse(e.data);
       if (msg.type === "state") handleState(msg.state);
       if (msg.type === "error") {
-        if (msg.message && msg.message.includes("Slot expired")) {
+        if (msg.message && (msg.message.includes("Slot expired") || msg.message.includes("Game not found"))) {
           localStorage.removeItem("lexterra_room");
           localStorage.removeItem("lexterra_connId");
+          location.reload();
+          return;
         }
         document.getElementById("join-status").textContent = msg.message;
       }
@@ -217,7 +219,13 @@
       }
     });
     socket.addEventListener("open", () => {
+      const savedConnId = localStorage.getItem("lexterra_connId");
+      const isReconnect = savedConnId && savedConnId !== socket.id && state !== null;
       myConnId = socket.id;
+      if (isReconnect) {
+        // Socket reconnected after being backgrounded — reclaim our slot
+        socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId }));
+      }
       localStorage.setItem("lexterra_room", room);
       localStorage.setItem("lexterra_connId", socket.id);
     });
