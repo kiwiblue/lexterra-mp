@@ -631,7 +631,7 @@
     if (amHost && !canStart) {
       el.textContent = 'Need at least 2 players (or add a bot) to start.';
     } else {
-      el.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online (${lobbyCount} in lobby)`;
+      el.textContent = '';
     }
   }
 
@@ -1476,8 +1476,6 @@
         onlineCount = msg.total ?? msg.count ?? 0;
         lobbyCount = msg.inLobby ?? 0;
         updateLobbyStatus();
-        const joinEl = document.getElementById('join-status');
-        if (joinEl) joinEl.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online`;
         const footerOnline = document.getElementById('footer-online');
         if (footerOnline) footerOnline.textContent = `${onlineCount} player${onlineCount !== 1 ? 's' : ''} online`;
       }
@@ -1822,7 +1820,7 @@
 </div>
 
 <div id="site-footer" style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:0.65rem;color:#475569;pointer-events:none;user-select:none;padding:5px 0;z-index:5">
-  © <span id="footer-year"></span> · Chris Sandford · v0.4.64 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · Chris Sandford · v0.4.65 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
