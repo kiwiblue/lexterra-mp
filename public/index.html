@@ -128,7 +128,13 @@
       0%, 100% { transform: scaleY(1); }
       35%, 65%  { transform: scaleY(0.07); }
     }
-    .spec-eye { position:absolute; pointer-events:none; opacity:0.55; }
+    @keyframes spec-wobble {
+      0%, 100% { transform: translate(0, 0); }
+      20%      { transform: translate(0.7px, -1.2px); }
+      50%      { transform: translate(-0.6px, 0.9px); }
+      75%      { transform: translate(0.5px, 1.1px); }
+    }
+    .spec-eye { position:absolute; pointer-events:none; opacity:0; }
     .spec-eye svg { display:block; transform-origin:50% 50%; }
     .spec-eye.blinking svg { animation: spec-blink 0.3s ease-in-out; }
   </style>
@@ -309,7 +315,6 @@
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let specEyes = [];
-  let eyesRafId = null;
   let onlineCount = 0;
   let lobbyCount = 0;
   let preFortBoardSize = null;
@@ -1123,22 +1128,44 @@
     }
   }
 
-  function perimPos(t, W, H) {
-    const p = 2 * (W + H);
-    const d = ((t % 1) + 1) % 1 * p;
-    const GAP = 18;
-    if (d < W)           return { x: d,           y: -GAP };
-    if (d < W + H)       return { x: W + GAP,      y: d - W };
-    if (d < 2 * W + H)   return { x: W - (d-W-H),  y: H + GAP };
-    return                      { x: -GAP,          y: H - (d-2*W-H) };
-  }
-
-  function specEyeSVG() {
+  function specEyeSVG(facingRight) {
+    const hx = facingRight ? 12.2 : 9.8;
     return `<svg viewBox="0 0 22 13" width="22" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M11 1.5C6 1.5 1.5 6.5 1.5 6.5S6 11.5 11 11.5 20.5 6.5 20.5 6.5 16 1.5 11 1.5z" stroke="#94a3b8" stroke-width="1.4" stroke-linejoin="round"/>
       <circle cx="11" cy="6.5" r="2.8" fill="#94a3b8"/>
-      <circle cx="12.1" cy="5.4" r="1" fill="#1e293b"/>
+      <circle cx="${hx}" cy="5.3" r="1" fill="#1e293b"/>
     </svg>`;
+  }
+
+  function placeEye(eye) {
+    const grid = document.getElementById('game-grid');
+    if (!grid) return;
+    const W = grid.offsetWidth;
+    const H = grid.offsetHeight;
+    const GAP = 20;
+    const side = Math.random() < 0.5 ? 'left' : 'right';
+    const facingRight = side === 'left';
+    const x = side === 'left' ? -(GAP + 11) : W + GAP - 11;
+    const margin = 18;
+    const y = margin + Math.random() * (H - margin * 2) - 6;
+    eye.el.style.left = x + 'px';
+    eye.el.style.top  = y + 'px';
+    eye.el.innerHTML  = specEyeSVG(facingRight);
+  }
+
+  function scheduleEyeMove(eye) {
+    clearTimeout(eye.moveHandle);
+    const delay = 8000 + Math.random() * 6000;
+    eye.moveHandle = setTimeout(() => {
+      if (!eye.el.isConnected) return;
+      eye.el.style.opacity = '0';
+      setTimeout(() => {
+        if (!eye.el.isConnected) return;
+        placeEye(eye);
+        eye.el.style.opacity = '0.6';
+        scheduleEyeMove(eye);
+      }, 550);
+    }, delay);
   }
 
   function scheduleEyeBlink(eye) {
@@ -1154,56 +1181,36 @@
     }, delay);
   }
 
-  function eyeAnimFrame() {
-    const layer = document.getElementById('spec-eyes-layer');
-    if (!layer || !specEyes.length) { eyesRafId = null; return; }
-    const grid = document.getElementById('game-grid');
-    if (!grid) { eyesRafId = null; return; }
-    const W = grid.offsetWidth;
-    const H = grid.offsetHeight;
-    if (!W || !H) { eyesRafId = requestAnimationFrame(eyeAnimFrame); return; }
-    for (const eye of specEyes) {
-      eye.phase = (eye.phase + eye.speed) % 1;
-      const { x, y } = perimPos(eye.phase, W, H);
-      eye.el.style.left = (x - 11) + 'px';
-      eye.el.style.top  = (y - 6)  + 'px';
-    }
-    eyesRafId = requestAnimationFrame(eyeAnimFrame);
-  }
-
   function updateSpectatorEyes() {
     const layer = document.getElementById('spec-eyes-layer');
     if (!layer) return;
     const target = spectatorCount;
     while (specEyes.length < target) {
-      const idx = specEyes.length;
       const el = document.createElement('div');
       el.className = 'spec-eye';
-      el.innerHTML = specEyeSVG();
+      const dur   = (4 + Math.random() * 4).toFixed(1);
+      const delay = (-Math.random() * 4).toFixed(1);
+      el.style.cssText = `animation:spec-wobble ${dur}s ${delay}s ease-in-out infinite;transition:opacity 0.5s ease`;
       layer.appendChild(el);
-      const eye = {
-        el,
-        phase: idx / Math.max(target, 1),
-        speed: 1 / (3200 + Math.random() * 1600),
-        blinkHandle: null,
-      };
+      const eye = { el, moveHandle: null, blinkHandle: null };
+      placeEye(eye);
+      requestAnimationFrame(() => requestAnimationFrame(() => { el.style.opacity = '0.6'; }));
       specEyes.push(eye);
+      scheduleEyeMove(eye);
       scheduleEyeBlink(eye);
     }
     while (specEyes.length > target) {
       const eye = specEyes.pop();
+      clearTimeout(eye.moveHandle);
       clearTimeout(eye.blinkHandle);
-      eye.el.remove();
-    }
-    if (specEyes.length > 0 && !eyesRafId) {
-      eyesRafId = requestAnimationFrame(eyeAnimFrame);
+      eye.el.style.opacity = '0';
+      setTimeout(() => eye.el.remove(), 550);
     }
   }
 
   function clearSpectatorEyes() {
-    specEyes.forEach(e => { clearTimeout(e.blinkHandle); e.el.remove(); });
+    specEyes.forEach(e => { clearTimeout(e.moveHandle); clearTimeout(e.blinkHandle); e.el.remove(); });
     specEyes.length = 0;
-    if (eyesRafId) { cancelAnimationFrame(eyesRafId); eyesRafId = null; }
   }
 
   function applyOtherHovers() {
