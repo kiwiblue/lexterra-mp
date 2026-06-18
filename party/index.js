@@ -148,7 +148,19 @@ export default {
       // Player joins an existing lobby
       case "join": {
         const state = await room.storage.get("state");
-        if (!state || state.phase !== "lobby") {
+        if (!state) {
+          conn.send(JSON.stringify({ type: "error", message: "Game not available." }));
+          return;
+        }
+        if (state.phase === "playing") {
+          // Game already started — redirect to spectator so they can request to join
+          spectatorConns.add(conn.id);
+          broadcastSpectatorCount(room);
+          conn.send(JSON.stringify({ type: "watching" }));
+          conn.send(JSON.stringify({ type: "state", state }));
+          return;
+        }
+        if (state.phase !== "lobby") {
           conn.send(JSON.stringify({ type: "error", message: "Game not available." }));
           return;
         }

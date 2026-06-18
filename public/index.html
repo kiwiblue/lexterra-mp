@@ -374,6 +374,12 @@
         pendingRequestConnId = msg.connId;
         showJoinRequestPanel(msg.name, msg.connId, msg.expiresAt);
       }
+      if (msg.type === "watching") {
+        isSpectating = true;
+        localStorage.removeItem("lexterra_room");
+        localStorage.removeItem("lexterra_connId");
+        return;
+      }
       if (msg.type === "join_granted") {
         isSpectating = false;
         joinRequestPending = false;
@@ -786,6 +792,18 @@
             : state.settings.territoryMode === 'exclusive'
             ? '<div class="info-desc">Claimed tiles are yours to keep — no one can steal them. Most tiles wins.</div>'
             : '' }
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;background:#0f172a;border:1px solid #1e293b;border-radius:8px;max-width:100%">
+          <div>
+            <div style="color:#64748b;font-size:0.7rem;margin-bottom:0.15rem">Room Code</div>
+            <div style="font-weight:900;letter-spacing:0.18em;color:var(--clr-primary-light);font-size:0.95rem">${roomId}</div>
+          </div>
+          <button id="copy-code-btn-game" onclick="copyRoomCode()" title="Copy to clipboard" style="background:none;border:1px solid #334155;border-radius:6px;cursor:pointer;color:#94a3b8;padding:0.3rem 0.5rem;display:flex;align-items:center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
           ${isHost ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
@@ -1831,7 +1849,7 @@
 
   window.copyRoomCode = function() {
     navigator.clipboard.writeText(roomId).then(() => {
-      const btn = document.getElementById("copy-code-btn");
+      const btn = document.getElementById("copy-code-btn-game") ?? document.getElementById("copy-code-btn");
       if (!btn) return;
       const orig = btn.innerHTML;
       btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
@@ -2055,7 +2073,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.83 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.84 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
