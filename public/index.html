@@ -1386,6 +1386,9 @@
   };
   window.returnToLobby = function() {
     if (state?.phase === "playing" && !isSpectating && !confirm("Leave the game and return to the lobby?")) return;
+    if (state?.phase === "playing" && !isSpectating && socket?.readyState === 1) {
+      socket.send(JSON.stringify({ type: "leave_game" }));
+    }
     localStorage.removeItem("lexterra_room");
     localStorage.removeItem("lexterra_connId");
     location.reload();
@@ -1899,7 +1902,7 @@
 </div>
 
 <div id="site-footer" style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:0.65rem;color:#475569;pointer-events:none;user-select:none;padding:5px 0;z-index:5">
-  © <span id="footer-year"></span> · Chris Sandford · v0.4.68 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · Chris Sandford · v0.4.69 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

@@ -425,6 +425,40 @@ export default {
         break;
       }
 
+      // Player intentionally leaves the game (Return to Lobby button)
+      case "leave_game": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        const player = state.players[conn.id];
+        if (!player || player.isBot) return;
+        // Save slot so host can still replace with a bot if other humans remain
+        if (!state.disconnectedPlayers) state.disconnectedPlayers = {};
+        state.disconnectedPlayers[conn.id] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(conn.id) };
+        delete state.players[conn.id];
+        const wasTheirTurn = state.cur === conn.id;
+        state.turnOrder = state.turnOrder.filter(id => id !== conn.id);
+        if (wasTheirTurn) {
+          if (state.turnOrder.length === 0) {
+            state.phase = "ended";
+          } else {
+            const next = state.turnOrder[0];
+            state.cur = next;
+            Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
+            state.players[next].lettersLeft = 1;
+          }
+        }
+        // End game if only bots remain — no one left to drive them
+        if (state.phase === "playing" && !Object.values(state.players).some(p => !p.isBot)) {
+          state.phase = "ended";
+          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          await notifyStats(room, state, "abandoned");
+        }
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
+        room.broadcast(JSON.stringify({ type: "state", state }), [conn.id]);
+        break;
+      }
+
       // Player hover position — relay to everyone else without touching state
       case "hover": {
         room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
@@ -480,6 +514,14 @@ export default {
         delete state.pendingJoinRequest;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "request_cancelled" }));
+      }
+      // End game if only bots remain and no humans will drive them
+      if (state?.phase === "playing" && !Object.values(state.players ?? {}).some(p => !p.isBot)) {
+        state.phase = "ended";
+        if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+        await notifyStats(room, state, "abandoned");
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
       }
       broadcastSpectatorCount(room);
       return;
