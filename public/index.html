@@ -1290,6 +1290,11 @@
         <span class="help-mode-badge">${modeName} Mode</span>
         <p>${modeRule}</p>
       </div>
+      ${window.matchMedia('(hover: hover) and (pointer: fine)').matches ? `
+      <div class="help-section">
+        <h3>Keyboard Shortcuts</h3>
+        <p><strong>Enter</strong> = Pass &nbsp;·&nbsp; <strong>Spacebar</strong> = Claim word &nbsp;·&nbsp; Type any letter to select it</p>
+      </div>` : ''}
     `;
     modal.style.display = 'block';
   };
@@ -1812,6 +1817,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.58</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.59</p>
 </body>
 </html>
