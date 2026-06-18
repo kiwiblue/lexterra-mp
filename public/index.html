@@ -315,6 +315,7 @@
   let lobbyRegisteredAt = 0;
   let lobbyCountdownTimer = null;
   let specEyes = [];
+  let claimedSortMode = 'recent'; // 'recent' | 'alpha'
   let onlineCount = 0;
   let lobbyCount = 0;
   let preFortBoardSize = null;
@@ -757,8 +758,14 @@
         <div id="controls-card" class="card" style="padding:1rem;max-width:100%"></div>
         <div class="scores-wrap" id="scores-wrap"></div>
         <div class="card" style="padding:1rem;max-width:100%">
-          <h2>Words Claimed</h2>
-          <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+            <h2 style="margin:0">Words Claimed</h2>
+            <div style="display:flex;gap:0.25rem">
+              <button id="sort-recent-btn" onclick="setClaimedSort('recent')" class="toggle-btn selected" style="padding:0.2rem 0.5rem;font-size:0.72rem">Recent</button>
+              <button id="sort-alpha-btn"  onclick="setClaimedSort('alpha')"  class="toggle-btn"          style="padding:0.2rem 0.5rem;font-size:0.72rem">A–Z</button>
+            </div>
+          </div>
+          <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem"></div>
         </div>
         <div class="card" style="padding:1rem;max-width:100%">
           <h2>Player Stats</h2>
@@ -1387,6 +1394,13 @@
     svg.innerHTML = html;
   }
 
+  window.setClaimedSort = function(mode) {
+    claimedSortMode = mode;
+    document.getElementById('sort-recent-btn')?.classList.toggle('selected', mode === 'recent');
+    document.getElementById('sort-alpha-btn')?.classList.toggle('selected', mode === 'alpha');
+    updateClaimedList();
+  };
+
   function updateClaimedList() {
     const list = document.getElementById("claimed-list");
     if (!list) return;
@@ -1394,7 +1408,10 @@
       list.innerHTML = `<p class="placeholder" style="font-size:0.8rem">No words yet.</p>`;
       return;
     }
-    list.innerHTML = [...state.claimed].reverse().map(c => {
+    const sorted = claimedSortMode === 'alpha'
+      ? [...state.claimed].sort((a, b) => a.word.localeCompare(b.word))
+      : [...state.claimed].reverse();
+    list.innerHTML = sorted.map(c => {
       const color = pColor(c.connId) ?? "#9ca3af";
       const isHl = c.word === highlightedWord;
       return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer;outline:${isHl ? `2px solid ${color}` : 'none'};outline-offset:1px">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
@@ -2038,7 +2055,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.82 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.83 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
