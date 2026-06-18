@@ -340,7 +340,6 @@ export default {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         if (!spectatorConns.has(conn.id)) return;
-        if (!Object.values(state.players).some(p => p.isBot)) return;
         const expiresAt = Date.now() + 30000;
         state.pendingJoinRequest = { connId: conn.id, name: msg.name, expiresAt };
         await room.storage.put("state", state);
