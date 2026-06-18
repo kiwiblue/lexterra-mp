@@ -56,6 +56,59 @@ function broadcastSpectatorCount(room) {
   room.broadcast(JSON.stringify({ type: "spectators", count: spectatorConns.size }));
 }
 
+// Grace period before processing a disconnect — gives mobile users time to
+// reconnect after briefly switching apps without being booted from the game.
+const pendingDisconnects = new Map(); // connId → timeoutId
+const DISCONNECT_GRACE_MS = 8000;
+
+async function processDisconnect(connId, room) {
+  const state = await room.storage.get("state");
+  if (!state) return;
+
+  // Host leaving the lobby — send everyone home
+  if (state.phase === "lobby" && state.host === connId) {
+    if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+    state.phase = "ended";
+    await room.storage.put("state", state);
+    room.broadcast(JSON.stringify({ type: "host_left" }));
+    return;
+  }
+
+  const player = state.players[connId];
+  if (!player || player.isBot) return;
+
+  if (!state.disconnectedPlayers) state.disconnectedPlayers = {};
+  state.disconnectedPlayers[connId] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(connId) };
+  delete state.players[connId];
+
+  if (state.phase === "playing") {
+    // Reassign host to another human if the host disconnected
+    if (state.host === connId) {
+      const nextHuman = state.turnOrder.find(id => !state.players[id]?.isBot);
+      if (nextHuman) state.host = nextHuman;
+    }
+
+    const wasTheirTurn = state.cur === connId;
+    state.turnOrder = state.turnOrder.filter(id => id !== connId);
+    if (wasTheirTurn) {
+      if (state.turnOrder.length === 0) {
+        state.phase = "ended";
+        await notifyStats(room, state, "abandoned");
+      } else {
+        const next = state.turnOrder[0];
+        state.cur = next;
+        Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
+        state.players[next].lettersLeft = 1;
+      }
+    }
+    // Don't auto-end when only bots remain — the player may be reloading
+  }
+
+  await room.storage.put("state", state);
+  room.broadcast(JSON.stringify({ type: "player_left", connId, name: player.name }));
+  room.broadcast(JSON.stringify({ type: "state", state }));
+}
+
 /** @type {import("partykit/server").PartyKitServer} */
 export default {
   async onConnect(conn, room) {
@@ -305,6 +358,32 @@ export default {
       case "rejoin": {
         const state = await room.storage.get("state");
         if (!state) { conn.send(JSON.stringify({ type: "error", message: "Game not found." })); return; }
+
+        // If still within the grace period, player never left — just remap connId
+        if (pendingDisconnects.has(msg.oldConnId)) {
+          clearTimeout(pendingDisconnects.get(msg.oldConnId));
+          pendingDisconnects.delete(msg.oldConnId);
+          if (state.players[msg.oldConnId]) {
+            state.players[conn.id] = state.players[msg.oldConnId];
+            delete state.players[msg.oldConnId];
+            if (state.host === msg.oldConnId) state.host = conn.id;
+            if (state.cur === msg.oldConnId) state.cur = conn.id;
+            const ti = state.turnOrder.indexOf(msg.oldConnId);
+            if (ti !== -1) state.turnOrder[ti] = conn.id;
+            if (state.territory) for (let r = 0; r < state.territory.length; r++)
+              for (let c = 0; c < state.territory[r].length; c++)
+                if (state.territory[r][c] === msg.oldConnId) state.territory[r][c] = conn.id;
+            for (const claim of state.claimed ?? [])
+              if (claim.connId === msg.oldConnId) claim.connId = conn.id;
+            if (state.grid) for (let r = 0; r < state.grid.length; r++)
+              for (let c = 0; c < state.grid[r].length; c++)
+                if (state.grid[r][c]?.pi === msg.oldConnId) state.grid[r][c].pi = conn.id;
+            await room.storage.put("state", state);
+            room.broadcast(JSON.stringify({ type: "state", state }));
+            return;
+          }
+        }
+
         const saved = state.disconnectedPlayers?.[msg.oldConnId];
         if (!saved) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please join normally." })); return; }
         state.players[conn.id] = saved.player;
@@ -516,6 +595,7 @@ export default {
   },
 
   async onClose(conn, room) {
+    // Spectators: handle immediately, no grace period needed
     if (spectatorConns.has(conn.id)) {
       spectatorConns.delete(conn.id);
       const state = await room.storage.get("state");
@@ -524,7 +604,6 @@ export default {
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "request_cancelled" }));
       }
-      // End game if only bots remain and no humans will drive them
       if (state?.phase === "playing" && !Object.values(state.players ?? {}).some(p => !p.isBot)) {
         state.phase = "ended";
         if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
@@ -535,44 +614,13 @@ export default {
       broadcastSpectatorCount(room);
       return;
     }
-    const state = await room.storage.get("state");
-    if (!state) return;
 
-    // Host leaving the lobby — send all remaining players home
-    if (state.phase === "lobby" && state.host === conn.id) {
-      if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
-      state.phase = "ended";
-      await room.storage.put("state", state);
-      room.broadcast(JSON.stringify({ type: "host_left" }), [conn.id]);
-      return;
-    }
-
-    const player = state.players[conn.id];
-    if (player && !player.isBot) {
-      if (!state.disconnectedPlayers) state.disconnectedPlayers = {};
-      state.disconnectedPlayers[conn.id] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(conn.id) };
-      delete state.players[conn.id];
-      if (state.phase === "playing") {
-        const wasTheirTurn = state.cur === conn.id;
-        state.turnOrder = state.turnOrder.filter(id => id !== conn.id);
-        if (wasTheirTurn) {
-          if (state.turnOrder.length === 0) {
-            state.phase = "ended";
-            await notifyStats(room, state, "abandoned");
-          } else {
-            const next = state.turnOrder[0];
-            state.cur = next;
-            Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
-            state.players[next].lettersLeft = 1;
-          }
-        }
-        // Don't auto-end when only bots remain — the host may be reloading
-        // and will rejoin via the auto-rejoin mechanism.
-      }
-      await room.storage.put("state", state);
-      room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
-      room.broadcast(JSON.stringify({ type: "state", state }), [conn.id]);
-    }
+    // Players: grace period — mobile users briefly switching apps won't be booted
+    const tid = setTimeout(async () => {
+      pendingDisconnects.delete(conn.id);
+      await processDisconnect(conn.id, room);
+    }, DISCONNECT_GRACE_MS);
+    pendingDisconnects.set(conn.id, tid);
   },
 
   async onAlarm(room) {
