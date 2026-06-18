@@ -364,6 +364,14 @@ export default {
           if (botIdx !== -1) state.turnOrder[botIdx] = requestConnId;
           if (state.cur === botId) state.cur = requestConnId;
           delete state.players[botId];
+          if (state.territory) for (let r = 0; r < state.territory.length; r++)
+            for (let c = 0; c < state.territory[r].length; c++)
+              if (state.territory[r][c] === botId) state.territory[r][c] = requestConnId;
+          for (const claim of state.claimed ?? [])
+            if (claim.connId === botId) claim.connId = requestConnId;
+          if (state.grid) for (let r = 0; r < state.grid.length; r++)
+            for (let c = 0; c < state.grid[r].length; c++)
+              if (state.grid[r][c]?.pi === botId) state.grid[r][c].pi = requestConnId;
         }
 
         delete state.pendingJoinRequest;
