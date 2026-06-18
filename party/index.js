@@ -43,6 +43,12 @@ async function notifyStats(room, state, outcome) {
   } catch {}
 }
 
+const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes of no player action → end game
+
+async function resetAlarm(room) {
+  try { await room.storage.setAlarm(Date.now() + INACTIVITY_MS); } catch {}
+}
+
 // In-memory spectator tracking (per room instance, resets on DO restart — fine)
 const spectatorConns = new Set();
 
@@ -210,6 +216,7 @@ export default {
         state.players[state.cur].lettersLeft = 1;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
+        await resetAlarm(room);
         break;
       }
 
@@ -227,6 +234,7 @@ export default {
         state.players[state.cur].passesThisRound = 0;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
+        await resetAlarm(room);
         break;
       }
 
@@ -260,6 +268,7 @@ export default {
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
+        await resetAlarm(room);
         break;
       }
 
@@ -288,6 +297,7 @@ export default {
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
+        if (state.phase === "playing") await resetAlarm(room);
         break;
       }
 
@@ -564,5 +574,15 @@ export default {
       room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
       room.broadcast(JSON.stringify({ type: "state", state }), [conn.id]);
     }
+  },
+
+  async onAlarm(room) {
+    const state = await room.storage.get("state");
+    if (!state || state.phase !== "playing") return;
+    state.phase = "ended";
+    if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+    await notifyStats(room, state, "abandoned");
+    await room.storage.put("state", state);
+    room.broadcast(JSON.stringify({ type: "state", state }));
   },
 };

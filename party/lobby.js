@@ -2,7 +2,7 @@
 // A single shared room that acts as a registry for public games.
 
 const LOBBY_TTL_MS  = 5 * 60 * 1000;   // 5 min for games awaiting players
-const PLAYING_TTL_MS = 60 * 60 * 1000; // 1 hour for in-progress games
+const PLAYING_TTL_MS = 25 * 60 * 1000; // 25 min for in-progress games (alarm ends them after 20 min)
 
 // In-memory set of connection IDs that are on the home/join page.
 // Resets on Durable Object restart (fine — connections are lost too).
