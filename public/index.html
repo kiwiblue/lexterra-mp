@@ -1767,17 +1767,20 @@
     const { boardSize } = state.settings;
     const topLetters = 'ETAOINSHRD';
     const testCells = [...emptyCells].sort(() => Math.random() - 0.5).slice(0, 12);
-    let best = null, bestScore = -1;
+    let bestScore = -1;
+    let candidates = [];
     for (const cell of testCells) {
       for (const letter of topLetters) {
         const g = state.grid.map(row => row.map(c => c ? { ...c } : null));
         g[cell.r][cell.c] = { letter, pi: state.cur };
         // Cube-weight scores so placing for one long word beats placing for many short words
         const score = findBotWords(g, state.cur).reduce((s, w) => s + Math.pow(w.score, 3), 0);
-        if (score > bestScore) { bestScore = score; best = { cell, letter }; }
+        if (score > bestScore) { bestScore = score; candidates = [{ cell, letter }]; }
+        else if (score === bestScore) { candidates.push({ cell, letter }); }
       }
     }
-    return best ?? { cell: emptyCells[0], letter: randomLetter() };
+    if (!candidates.length) return { cell: emptyCells[0], letter: randomLetter() };
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   async function runBotTurn(botId) {
@@ -1902,7 +1905,7 @@
 </div>
 
 <div id="site-footer" style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:0.65rem;color:#475569;pointer-events:none;user-select:none;padding:5px 0;z-index:5">
-  © <span id="footer-year"></span> · Chris Sandford · v0.4.69 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · Chris Sandford · v0.4.70 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
