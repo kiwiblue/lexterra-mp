@@ -329,7 +329,7 @@
         spectatorCount = msg.count ?? 0;
         updateSpectatorTag();
       }
-      if (msg.type === "spectator_request") {
+      if (msg.type === "spectator_request" && isHost) {
         pendingRequestConnId = msg.connId;
         showJoinRequestPanel(msg.name, msg.connId, msg.expiresAt);
       }
@@ -1002,7 +1002,7 @@
     const el = document.getElementById('spectator-tag');
     if (!el) return;
     if (spectatorCount > 0) {
-      el.textContent = `${spectatorCount} watching`;
+      el.textContent = `${spectatorCount} spectator${spectatorCount !== 1 ? 's' : ''}`;
       el.style.display = '';
     } else {
       el.style.display = 'none';
@@ -1817,6 +1817,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.61</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.62</p>
 </body>
 </html>
