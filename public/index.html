@@ -442,6 +442,11 @@
     }
     if (state?.phase === 'playing' && newState?.phase === 'ended') frozenPlayers = { ...state.players };
     if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; highlightedWord = null; }
+    if (newState?.phase === 'lobby' && newState?.host === myConnId && soundEnabled) {
+      const prevHumans = Object.values(state?.players ?? {}).filter(p => !p.isBot).length;
+      const nextHumans = Object.values(newState.players ?? {}).filter(p => !p.isBot).length;
+      if (nextHumans > prevHumans) playJoinSound();
+    }
     state = newState;
     if (!state) return;
     if (state.abandonedMessage) {
@@ -811,6 +816,23 @@
   document.addEventListener('click', () => {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }, { once: true });
+
+  function playJoinSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = audioCtx.currentTime;
+      [[523, 0, 0.18], [659, 0.12, 0.28], [784, 0.24, 0.5]].forEach(([freq, start, end]) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.18, t + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + end);
+        osc.start(t + start); osc.stop(t + end);
+      });
+    } catch(e) {}
+  }
 
   function playTurnSound() {
     try {
@@ -1905,7 +1927,7 @@
 </div>
 
 <div id="site-footer" style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:0.65rem;color:#475569;pointer-events:auto;user-select:none;padding:5px 0;z-index:5">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.74 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.75 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
