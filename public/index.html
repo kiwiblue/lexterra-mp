@@ -721,9 +721,10 @@
   // ── GAME BOARD ───────────────────────────────────────────────
   function initGame() {
     show("game-screen");
-    const modeLabel = ({conquest:'CONQUEST MODE', exclusive:'KEEPS MODE', off:'SEARCH MODE'})[state.settings?.territoryMode] ?? 'MULTIPLAYER';
+    const modeLabel = ({conquest:'CONQUEST MODE', exclusive:'KEEPS MODE', off:'SEARCH MODE'})[state.settings?.territoryMode] ?? 'SEARCH MODE';
+    const visLabel = state.isPublic ? 'PUBLIC' : 'PRIVATE';
     const sub = document.getElementById('subtitle');
-    if (sub) sub.textContent = `MULTIPLAYER · ${modeLabel}`;
+    if (sub) sub.textContent = `${visLabel} · ${modeLabel}`;
     const { boardSize } = state.settings;
     const gs = document.getElementById("game-screen");
     clearSpectatorEyes();
@@ -2038,7 +2039,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.78 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.79 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
