@@ -1525,11 +1525,11 @@
         <div class="public-game-row">
           <div>
             <span style="font-weight:bold">${g.hostName}</span>
-            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}${isPlaying ? ' · <span style="color:#22c55e;font-weight:bold">In progress</span>' : ''}</span>
+            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}</span>
           </div>
           ${isPlaying
-            ? `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#22c55e;color:#22c55e" onclick="watchGame('${g.roomId}')">Watch</button>`
-            : `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
+            ? `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#f97316;color:#f97316" onclick="watchGame('${g.roomId}')">Watch</button>`
+            : `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#22c55e;color:#22c55e" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
         </div>`;
     }).join('');
   }
@@ -1817,6 +1817,6 @@
   <div id="jr-body"></div>
 </div>
 
-<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.62</p>
+<p style="position:fixed;bottom:6px;right:10px;font-size:0.65rem;color:rgba(255,255,255,0.15);pointer-events:none;user-select:none">v0.4.63</p>
 </body>
 </html>
