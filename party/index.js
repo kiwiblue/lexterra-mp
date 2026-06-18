@@ -224,6 +224,7 @@ export default {
         state.grid[r][c] = { letter, pi: state.cur };
         state.players[state.cur].lettersLeft--;
         state.consecutivePasses = 0;
+        state.players[state.cur].passesThisRound = 0;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -251,6 +252,7 @@ export default {
         state.players[state.cur].lettersLeft++;
         state.consecutivePasses = 0;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
+        state.players[state.cur].passesThisRound = 0;
         state.lastActivity = Date.now();
         if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { lastActivity: state.lastActivity } });
         if (state.territory) {
@@ -269,6 +271,10 @@ export default {
         if (state.cur !== conn.id && !(passCurBot && state.host === conn.id)) return;
         state.consecutivePasses++;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
+        if (msg.isRealPass !== false) {
+          state.players[state.cur].passesThisRound = (state.players[state.cur].passesThisRound ?? 0) + 1;
+          state.players[state.cur].totalPasses = (state.players[state.cur].totalPasses ?? 0) + 1;
+        }
         const idx = state.turnOrder.indexOf(state.cur);
         const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
         state.players[state.cur].lettersLeft = 0;
@@ -446,6 +452,8 @@ export default {
           fresh.players[id].wordsFound = 0;
           fresh.players[id].lettersLeft = 0;
           fresh.players[id].isReady = false;
+          fresh.players[id].passesThisRound = 0;
+          fresh.players[id].totalPasses = 0;
         });
         await room.storage.put("state", fresh);
         room.broadcast(JSON.stringify({ type: "state", state: fresh }));

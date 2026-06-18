@@ -251,6 +251,7 @@
   let claimStart = null;
   let claimPath = null;
   let lastCur = null;
+  let hasActedThisTurn = false;
   let lastMoveDesc = "";
   let frozenPlayers = null;
   let otherHovers = {};
@@ -711,6 +712,10 @@
           <h2>Words Claimed</h2>
           <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.5rem"></div>
         </div>
+        <div class="card" style="padding:1rem;max-width:100%">
+          <h2>Player Stats</h2>
+          <div id="player-stats-detail" style="margin-top:0.5rem"></div>
+        </div>
         <div id="jr-quiet" style="display:none;padding:0.5rem 0.75rem;background:#1e293b;border-radius:8px;border:1px solid #334155;max-width:100%"></div>
         <div class="card" style="padding:0.7rem 1rem;max-width:100%">
           <div class="info-tags">
@@ -808,6 +813,7 @@
     if (turnChanged) {
       lastCur = state.cur;
       selLetter = null; claimMode = false; claimStart = null; claimPath = null;
+      if (state.cur === myConnId) hasActedThisTurn = false;
       restartTimer();
       const hasHumanOpponent = Object.values(state.players).some(p => !p.isBot && p !== state.players[myConnId]);
       if (state.cur === myConnId && soundEnabled && hasHumanOpponent && !isSpectating) playTurnSound();
@@ -838,21 +844,64 @@
       const nameLabel = p.isBot
         ? `${p.name}<span style="font-size:0.6rem;color:#64748b;font-weight:normal;margin-left:0.25rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
         : p.name;
+      const passes = p.passesThisRound ?? 0;
+      const passText = passes > 0
+        ? `<span style="color:#f97316;font-size:0.7rem;margin-left:0.25rem">${passes} pass${passes !== 1 ? 'es' : ''}</span>`
+        : '';
       const pinfo = isTerritoryMode
         ? `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${tileCounts[id] ?? 0}</span>
-            <span style="color:#475569;font-size:0.72rem">&nbsp;${p.score}pts · ${p.wordsFound ?? 0} ${(p.wordsFound ?? 0) === 1 ? 'word' : 'words'}</span>
+            <span style="color:#475569;font-size:0.72rem">&nbsp;tiles</span>
+            ${passText}
           </div>`
         : `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
-            <span style="color:#64748b;font-size:0.78rem">${p.score} pts</span>
+            <span style="font-weight:900;font-size:0.85rem">${p.score}</span>
+            <span style="color:#475569;font-size:0.72rem">&nbsp;pts</span>
+            ${passText}
           </div>`;
       return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
         <span class="pname">${nameLabel}</span>
         ${pinfo}
       </div>`;
     }).join("");
+
+    const detail = document.getElementById("player-stats-detail");
+    if (detail) {
+      const players = Object.entries(frozenPlayers ?? state.players);
+      detail.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead>
+          <tr style="color:#64748b;font-size:0.7rem;text-align:left;border-bottom:1px solid #334155">
+            <th style="padding:0.25rem 0.5rem 0.4rem 0;font-weight:500">Player</th>
+            <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Pts</th>
+            <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Words</th>
+            ${isTerritoryMode ? `<th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Tiles</th>` : ''}
+            <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Passes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${players.map(([id, p]) => {
+            const c = COLORS[p.color] ?? "#9ca3af";
+            const label = p.isBot
+              ? `${p.name} <span style="font-size:0.6rem;color:#64748b">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+              : p.name;
+            return `<tr style="border-bottom:1px solid #1e293b">
+              <td style="padding:0.35rem 0.5rem 0.35rem 0">
+                <div style="display:flex;align-items:center;gap:0.4rem">
+                  <div style="width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0"></div>
+                  <span>${label}</span>
+                </div>
+              </td>
+              <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.score}</td>
+              <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.wordsFound ?? 0}</td>
+              ${isTerritoryMode ? `<td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${tileCounts[id] ?? 0}</td>` : ''}
+              <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.totalPasses ?? 0}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+    }
   }
 
   function pColor(id) { return COLORS[(frozenPlayers ?? state.players)[id]?.color]; }
@@ -1152,7 +1201,7 @@
       <button class="btn ${claimMode ? "btn-primary" : "btn-secondary"}" onclick="toggleClaimMode()" style="flex:1">
         ${claimMode ? "Cancel Claim" : "Claim Word"}
       </button>
-      ${!claimMode ? `<button class="btn btn-secondary" onclick="doPass()" style="flex:1">Pass</button>` : ""}
+      ${!claimMode ? `<button class="btn btn-secondary" onclick="doPass()" style="flex:1">${hasActedThisTurn ? "Finish Turn" : "Pass"}</button>` : ""}
     </div>`;
     card.innerHTML = html;
   }
@@ -1230,6 +1279,7 @@
           const v = validateClaim(claimPath);
           if (v.valid) {
             socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+            hasActedThisTurn = true;
             claimMode = false; claimStart = null; claimPath = null;
             updateControls(); updateGridCells(); updateClaimLines(); return;
           }
@@ -1245,6 +1295,7 @@
     const me = state.players[myConnId];
     if (!me || me.lettersLeft <= 0) return;
     socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter }));
+    hasActedThisTurn = true;
     selLetter = null;
   }
 
@@ -1258,9 +1309,10 @@
     const v = validateClaim(claimPath);
     if (!v.valid) return;
     socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+    hasActedThisTurn = true;
     claimMode = false; claimStart = null; claimPath = null;
   };
-  window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass" })); };
+  window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass", isRealPass: !hasActedThisTurn })); };
 
   window.showHelp = function() {
     const modal = document.getElementById('help-modal');
@@ -1702,6 +1754,7 @@
   }
 
   async function runBotTurn(botId) {
+    let botActed = false;
     try {
       const bot = state.players[botId];
       const isHard = bot?.botDifficulty === 'hard';
@@ -1718,6 +1771,7 @@
         if (empty.length) {
           const { cell, letter } = chooseBestPlacement(empty);
           socket.send(JSON.stringify({ type: 'place', r: cell.r, c: cell.c, letter }));
+          botActed = true;
           await waitForNextState();
           await delay(600);
           if (state.cur !== botId || state.phase !== 'playing') return;
@@ -1727,7 +1781,7 @@
       // 2. Claim a word (skip if humans have passed enough times to signal board exhaustion)
       const humanPlayerCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
       const humanPasses = state.consecutiveHumanPasses ?? 0;
-      const claimPassThreshold = isHard ? 4 * Math.max(1, humanPlayerCount) : 2 * Math.max(1, humanPlayerCount);
+      const claimPassThreshold = isHard ? 2 * Math.max(1, humanPlayerCount) : Math.max(1, humanPlayerCount);
       if (humanPasses < claimPassThreshold) {
         const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
         if (found.length) {
@@ -1744,6 +1798,7 @@
           }
           if (pick) {
             socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+            botActed = true;
             await waitForNextState();
             await delay(400);
           }
@@ -1752,11 +1807,11 @@
 
       // 3. Pass — always, no looping
       if (state.cur === botId && state.phase === 'playing')
-        socket.send(JSON.stringify({ type: 'pass' }));
+        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
     } catch (e) {
       console.warn('Bot error:', e);
       if (state?.cur === botId && state?.phase === 'playing')
-        socket.send(JSON.stringify({ type: 'pass' }));
+        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
     }
   }
 
@@ -1820,7 +1875,7 @@
 </div>
 
 <div id="site-footer" style="position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:0.65rem;color:#475569;pointer-events:none;user-select:none;padding:5px 0;z-index:5">
-  © <span id="footer-year"></span> · Chris Sandford · v0.4.65 · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · Chris Sandford · v0.4.67 · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
