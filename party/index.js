@@ -507,12 +507,8 @@ export default {
             state.players[next].lettersLeft = 1;
           }
         }
-        const humanCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
-        if (humanCount === 0 && state.phase === "playing") {
-          state.phase = "ended";
-          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
-          await notifyStats(room, state, "abandoned");
-        }
+        // Don't auto-end when only bots remain — the host may be reloading
+        // and will rejoin via the auto-rejoin mechanism.
       }
       await room.storage.put("state", state);
       room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
