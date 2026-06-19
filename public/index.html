@@ -1996,12 +1996,20 @@
         const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
         if (found.length) {
           const minLen = state.settings?.minWordLen ?? 4;
+          const { boardSize } = state.settings;
+          let boardFull = true;
+          outer: for (let r = 0; r < boardSize; r++) for (let c = 0; c < boardSize; c++) if (!state.grid?.[r]?.[c]) { boardFull = false; break outer; }
           let pick;
           if (isHard) {
-            // Prefer words well above the minimum; only occasionally claim short ones
-            pick = found.find(w => w.score >= minLen + 2)
-                ?? found.find(w => w.score >= minLen + 1)
-                ?? (Math.random() < 0.25 ? found[0] : null);
+            if (boardFull) {
+              // Endgame: board is full, claim any word we can find
+              pick = found[0];
+            } else {
+              // Normal: prefer words well above the minimum; only occasionally claim short ones
+              pick = found.find(w => w.score >= minLen + 2)
+                  ?? found.find(w => w.score >= minLen + 1)
+                  ?? (Math.random() < 0.25 ? found[0] : null);
+            }
           } else {
             // Easy: random selection so it doesn't always grab the best word
             pick = found[Math.floor(Math.random() * found.length)];
@@ -2085,7 +2093,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.87 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.88 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
