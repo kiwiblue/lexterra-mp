@@ -212,6 +212,7 @@
 </div>
 
 <script src="words.js"></script>
+<script src="botwords.js"></script>
 <script type="module">
   import PartySocket from "https://esm.sh/partysocket@1.0.2";
 
@@ -327,6 +328,15 @@
     return wordSet;
   }
   function isValidWord(w) { const s = getWordSet(); return s ? s.has(w) : false; }
+
+  let botWordSet = null;
+  function getBotWordSet() {
+    if (botWordSet) return botWordSet;
+    if (!window.BOT_WORDS) return null;
+    botWordSet = new Set(window.BOT_WORDS.split('\n').map(w => w.trim()).filter(Boolean));
+    return botWordSet;
+  }
+  function isBotWord(w) { const s = getBotWordSet(); return s ? s.has(w.toUpperCase()) : true; }
 
   function randomRoomCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -1925,7 +1935,7 @@
             if (isClaimedVariant(word)) continue;
             if (territoryMode === 'exclusive' && state.territory)
               if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
-            if (isValidWord(word) && !isBannedWord(word)) results.push({ word, path: sub, score: len });
+            if (isValidWord(word) && !isBannedWord(word) && isBotWord(word)) results.push({ word, path: sub, score: len });
           }
         }
       }
@@ -2075,7 +2085,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.86 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.87 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
