@@ -139,7 +139,8 @@ export default {
           turnOrder: [],          // [connId, ...]
           consecutivePasses: 0,
         };
-        state.players[conn.id] = { name: msg.name, color: msg.color, score: 0, wordsFound: 0, isReady: false, isHost: true };
+        const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
+        state.players[conn.id] = { name: msg.name, color: VALID_COLORS.includes(msg.color) ? msg.color : "Red", score: 0, wordsFound: 0, isReady: false, isHost: true };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -175,10 +176,14 @@ export default {
           delete state.players[bots[bots.length - 1][0]];
         }
         const takenColors = Object.values(state.players).map(p => p.color);
-        const available = ["Red","Blue","Yellow","Green","Grey"].filter(c => !takenColors.includes(c));
+        const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
+        const preferred = msg.color && VALID_COLORS.includes(msg.color) ? msg.color : null;
+        const joinColor = (preferred && !takenColors.includes(preferred))
+          ? preferred
+          : ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
         state.players[conn.id] = {
           name: msg.name,
-          color: available[0] ?? "Grey",
+          color: joinColor,
           score: 0,
           wordsFound: 0,
           isReady: false,
@@ -445,7 +450,7 @@ export default {
         if (!state || state.phase !== "playing") return;
         if (!spectatorConns.has(conn.id)) return;
         const expiresAt = Date.now() + 30000;
-        state.pendingJoinRequest = { connId: conn.id, name: msg.name, expiresAt };
+        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, expiresAt };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: msg.name, expiresAt }));
         break;
@@ -462,7 +467,11 @@ export default {
 
         if (mode === "add") {
           const takenColors = Object.values(state.players).map(p => p.color);
-          const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+          const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
+          const preferred = req.color && VALID_COLORS.includes(req.color) ? req.color : null;
+          const color = (preferred && !takenColors.includes(preferred))
+            ? preferred
+            : ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
           state.players[requestConnId] = {
             name: req.name, color, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
           };
