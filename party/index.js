@@ -37,7 +37,10 @@ async function notifyStats(room, state, outcome) {
         mode: state.settings?.territoryMode ?? "off",
         boardSize: state.settings?.boardSize ?? 5,
         minWordLen: state.settings?.minWordLen ?? 3,
+        timeLimit: state.settings?.timeLimit ?? 120,
         botCount: all.filter(p => p.isBot).length,
+        easyBots: all.filter(p => p.isBot && p.botDifficulty !== 'hard').length,
+        hardBots: all.filter(p => p.isBot && p.botDifficulty === 'hard').length,
         humanCount: humanPlayers.length,
         players: humanPlayers.map(p => ({
           uuid: p.uuid ?? null,

@@ -124,7 +124,7 @@
     .help-mode-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(var(--clr-primary-rgb),0.2); border:1px solid var(--clr-primary); color:var(--clr-primary-light); font-size:0.72rem; font-weight:bold; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.25rem; }
     .mode-desc { font-size:0.78rem; color:#94a3b8; padding:0.6rem 0.75rem; background:#0f172a; border-radius:8px; border-left:3px solid #334155; line-height:1.5; }
     .mode-bg-desc { font-size:0.78rem; color:#64748b; line-height:1.5; text-align:center; margin:0; }
-    .lb-row { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0; border-bottom:1px solid #1e293b; font-size:0.82rem; }
+    .lb-row { display:flex; align-items:flex-start; gap:0.5rem; padding:0.4rem 0; border-bottom:1px solid #1e293b; font-size:0.82rem; }
     .lb-row:last-child { border-bottom:none; }
     .size-pill { padding:0.28rem 0.65rem; border:1px solid #334155; background:#0f172a; color:#64748b; border-radius:999px; font-size:0.78rem; font-weight:bold; cursor:pointer; transition:all 0.15s; }
     @media (hover:hover) { .size-pill:hover { border-color:var(--clr-secondary); color:#e2e8f0; } }
@@ -186,7 +186,13 @@
   </div>
 
   <div class="card" id="high-scores-card">
-    <h2>High Scores</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
+      <h2 style="margin:0">High Scores</h2>
+      <div style="display:flex;gap:0.25rem;flex-shrink:0">
+        <button class="toggle-btn" id="lb-filter-all" onclick="lbSetCompetitive(false)" style="padding:0.22rem 0.55rem;font-size:0.7rem">All</button>
+        <button class="toggle-btn selected" id="lb-filter-comp" onclick="lbSetCompetitive(true)" style="padding:0.22rem 0.55rem;font-size:0.7rem">Competitive</button>
+      </div>
+    </div>
     <div style="display:flex;gap:0.35rem;margin-bottom:0.5rem">
       <button class="toggle-btn selected" id="lb-tab-conquest" onclick="lbSetMode('conquest')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Conquest</button>
       <button class="toggle-btn" id="lb-tab-off" onclick="lbSetMode('off')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Search</button>
@@ -308,7 +314,7 @@
   let state = null;
   let lobbySocket = null;
   let publicGames = {};
-  let lbMode = 'conquest', lbSize = 5, lbExpanded = false, lbData = [];
+  let lbMode = 'conquest', lbSize = 5, lbExpanded = false, lbCompetitive = true, lbData = [];
   let makePublic = true;
   let hasRegisteredPublic = false;
   let lastLobbySnapshot = null;
@@ -1937,6 +1943,21 @@
     }).join('');
   }
 
+  function fmtOpponents(e) {
+    const parts = [];
+    const humans = e.otherHumans ?? 0;
+    const hard = e.hardBots ?? 0;
+    const easy = e.easyBots ?? 0;
+    if (humans > 0) parts.push(`${humans} human${humans > 1 ? 's' : ''}`);
+    if (hard > 0) parts.push(`${hard} hard bot${hard > 1 ? 's' : ''}`);
+    if (easy > 0) parts.push(`${easy} easy bot${easy > 1 ? 's' : ''}`);
+    return parts.length ? 'vs ' + parts.join(' + ') : 'solo';
+  }
+
+  function isCompetitive(e) {
+    return (e.otherHumans ?? 0) > 0 || (e.hardBots ?? 0) > 0;
+  }
+
   async function fetchLeaderboard() {
     const rows = document.getElementById('lb-rows');
     if (rows) rows.innerHTML = '<p class="placeholder">Loading…</p>';
@@ -1952,28 +1973,42 @@
     const expandWrap = document.getElementById('lb-expand');
     const expandBtn = expandWrap?.querySelector('button');
     if (!rows) return;
-    if (!lbData.length) {
-      rows.innerHTML = '<p class="placeholder">No scores yet.</p>';
+    const filtered = lbCompetitive ? lbData.filter(isCompetitive) : lbData;
+    if (!filtered.length) {
+      rows.innerHTML = `<p class="placeholder">${lbCompetitive && lbData.length ? 'No competitive scores yet.<br><span style="font-size:0.78rem">Try switching to All.</span>' : 'No scores yet.'}</p>`;
       if (expandWrap) expandWrap.style.display = 'none';
       return;
     }
-    const visible = lbData.slice(0, lbExpanded ? 10 : 5);
+    const visible = filtered.slice(0, lbExpanded ? 10 : 5);
     const myUUID = getPlayerUUID();
     rows.innerHTML = visible.map((e, i) => {
       const date = new Date(e.date).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' });
       const isMe = e.uuid === myUUID;
       return `<div class="lb-row">
-        <span style="width:1.5rem;color:#64748b;font-size:0.75rem;flex-shrink:0">${i + 1}.</span>
-        <span style="flex:1;font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''}">${e.name}${isMe ? ' ★' : ''}</span>
-        <span style="color:var(--clr-primary-light);font-weight:bold;flex-shrink:0">${e.score}</span>
-        <span style="font-size:0.7rem;color:#64748b;flex-shrink:0;margin-left:0.25rem">min-${e.minWordLen} · ${date}</span>
+        <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name}${isMe ? ' ★' : ''}</div>
+          <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
+          <div style="color:var(--clr-primary-light);font-weight:bold">${e.score}</div>
+          <div style="font-size:0.7rem;color:#64748b">${e.wordsFound ?? 0} words</div>
+        </div>
       </div>`;
     }).join('');
     if (expandWrap) {
-      expandWrap.style.display = lbData.length > 5 ? 'block' : 'none';
+      expandWrap.style.display = filtered.length > 5 ? 'block' : 'none';
       if (expandBtn) expandBtn.textContent = lbExpanded ? 'Show less' : 'Show more';
     }
   }
+
+  window.lbSetCompetitive = function(val) {
+    lbCompetitive = val;
+    document.getElementById('lb-filter-all')?.classList.toggle('selected', !val);
+    document.getElementById('lb-filter-comp')?.classList.toggle('selected', val);
+    lbExpanded = false;
+    renderLeaderboard();
+  };
 
   window.lbSetMode = function(mode) {
     lbMode = mode;
@@ -2020,10 +2055,15 @@
         const isMe = e.uuid === myUUID;
         const date = new Date(e.date).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' });
         return `<div class="lb-row">
-          <span style="width:1.5rem;color:#64748b;font-size:0.75rem;flex-shrink:0">${i + 1}.</span>
-          <span style="flex:1;font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''}">${e.name}${isMe ? ' ★' : ''}</span>
-          <span style="color:var(--clr-primary-light);font-weight:bold;flex-shrink:0">${e.score}</span>
-          <span style="font-size:0.7rem;color:#64748b;flex-shrink:0;margin-left:0.25rem">min-${e.minWordLen} · ${date}</span>
+          <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name}${isMe ? ' ★' : ''}</div>
+            <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
+            <div style="color:var(--clr-primary-light);font-weight:bold">${e.score}</div>
+            <div style="font-size:0.7rem;color:#64748b">${e.wordsFound ?? 0} words</div>
+          </div>
         </div>`;
       }).join('');
     } catch { el.innerHTML = '<p style="font-size:0.8rem;color:#64748b;margin:0">Could not load scores.</p>'; }
@@ -2343,7 +2383,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.98 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.99 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

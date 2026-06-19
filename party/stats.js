@@ -61,7 +61,12 @@ export default {
             name: p.name,
             score: p.score,
             wordsFound: p.wordsFound ?? 0,
+            won: p.won ?? false,
             minWordLen: msg.minWordLen ?? 3,
+            timeLimit: msg.timeLimit ?? 120,
+            otherHumans: Math.max(0, (msg.humanCount ?? 1) - 1),
+            easyBots: msg.easyBots ?? 0,
+            hardBots: msg.hardBots ?? 0,
             date: Date.now(),
           });
         }
