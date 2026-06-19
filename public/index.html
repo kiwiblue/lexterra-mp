@@ -1064,6 +1064,11 @@
     const myColor = state.players[myConnId]?.color;
     const popup = document.createElement('div');
     popup.className = 'color-popup';
+    function closePopup() {
+      if (colorPopup) { colorPopup.remove(); colorPopup = null; }
+      document.removeEventListener('click', outsideHandler);
+    }
+    function outsideHandler() { closePopup(); }
     Object.entries(COLORS).forEach(([name, hex]) => {
       const sw = document.createElement('div');
       sw.className = 'cswatch';
@@ -1076,7 +1081,7 @@
         sw.addEventListener('click', e => {
           e.stopPropagation();
           socket.send(JSON.stringify({ type: 'recolor', color: name }));
-          popup.remove(); colorPopup = null;
+          closePopup();
         });
       }
       popup.appendChild(sw);
@@ -1092,10 +1097,7 @@
     if (top + ph > window.innerHeight - 8) top = rect.top - ph - 8;
     popup.style.left = left + 'px';
     popup.style.top = top + 'px';
-    setTimeout(() => document.addEventListener('click', function h() {
-      if (colorPopup) { colorPopup.remove(); colorPopup = null; }
-      document.removeEventListener('click', h);
-    }), 0);
+    setTimeout(() => document.addEventListener('click', outsideHandler), 0);
   };
 
   window.sendJoinRequest = function() {
@@ -2202,7 +2204,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.91 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.92 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
