@@ -525,6 +525,29 @@ export default {
         break;
       }
 
+      // Player intentionally leaves the settings lobby (Return to Lobby button before game starts)
+      case "leave_lobby": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "lobby") return;
+        if (pendingDisconnects.has(conn.id)) {
+          clearTimeout(pendingDisconnects.get(conn.id));
+          pendingDisconnects.delete(conn.id);
+        }
+        if (state.host === conn.id) {
+          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          state.phase = "ended";
+          await room.storage.put("state", state);
+          room.broadcast(JSON.stringify({ type: "host_left" }));
+        } else {
+          const player = state.players[conn.id];
+          if (!player || player.isBot) return;
+          delete state.players[conn.id];
+          await room.storage.put("state", state);
+          room.broadcast(JSON.stringify({ type: "state", state }));
+        }
+        break;
+      }
+
       // Player intentionally leaves the game (Return to Lobby button)
       case "leave_game": {
         const state = await room.storage.get("state");
