@@ -1,6 +1,7 @@
 // Lexterra MP — Stats accumulator
-// POST { type:"game_end", outcome:"completed"|"abandoned", mode, boardSize, minWordLen, botCount, humanCount }
-// GET  → JSON report with totals and percentages
+// POST { type:"game_end", outcome, mode, boardSize, minWordLen, botCount, humanCount, players:[{uuid,name,score,wordsFound}] }
+// GET  → aggregate report
+// GET ?mode=conquest&size=5 → leaderboard array for that combo
 
 const EMPTY = () => ({
   totalGames: 0,
@@ -15,6 +16,17 @@ const EMPTY = () => ({
 
 function inc(obj, key) {
   obj[String(key)] = (obj[String(key)] ?? 0) + 1;
+}
+
+function updateLeaderboard(lb, entry) {
+  const idx = lb.findIndex(e => e.uuid === entry.uuid);
+  if (idx >= 0) {
+    if (entry.score > lb[idx].score) lb[idx] = entry;
+  } else {
+    lb.push(entry);
+  }
+  lb.sort((a, b) => b.score - a.score);
+  return lb.slice(0, 10);
 }
 
 const MODE_LABEL = { conquest: "Conquest", exclusive: "Keeps", off: "Search" };
@@ -36,10 +48,41 @@ export default {
       s.totalBots += msg.botCount ?? 0;
       if ((msg.botCount ?? 0) === 0) s.humanOnlyGames++;
       await room.storage.put("stats", s);
+
+      if (msg.outcome === "completed" && Array.isArray(msg.players)) {
+        const mode = msg.mode ?? "off";
+        const size = msg.boardSize ?? 5;
+        const key = `lb_${mode}_${size}`;
+        let lb = (await room.storage.get(key)) ?? [];
+        for (const p of msg.players) {
+          if (!p.uuid || !(p.score > 0)) continue;
+          lb = updateLeaderboard(lb, {
+            uuid: p.uuid,
+            name: p.name,
+            score: p.score,
+            wordsFound: p.wordsFound ?? 0,
+            minWordLen: msg.minWordLen ?? 3,
+            date: Date.now(),
+          });
+        }
+        await room.storage.put(key, lb);
+      }
+
       return new Response("ok");
     }
 
     if (req.method === "GET") {
+      const url = new URL(req.url);
+      const mode = url.searchParams.get("mode");
+      const size = url.searchParams.get("size");
+
+      if (mode && size) {
+        const lb = (await room.storage.get(`lb_${mode}_${size}`)) ?? [];
+        return new Response(JSON.stringify(lb), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
       const s = (await room.storage.get("stats")) ?? EMPTY();
       const total = s.totalGames || 1;
       const pct = n => Math.round((n / total) * 100);
