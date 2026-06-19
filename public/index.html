@@ -1676,22 +1676,37 @@
     const gs = document.getElementById("game-screen");
     const mode = state.settings?.territoryMode;
     const useTiles = mode && mode !== "off" && state.territory;
-    let ranked;
+    const players = Object.entries(frozenPlayers ?? state.players);
+
+    const tileCounts = {};
     if (useTiles) {
-      const counts = {};
       const n = state.settings.boardSize;
       for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
-        const o = state.territory[r]?.[c]; if (o) counts[o] = (counts[o] ?? 0) + 1;
+        const o = state.territory[r]?.[c]; if (o) tileCounts[o] = (tileCounts[o] ?? 0) + 1;
       }
-      ranked = Object.entries(state.players)
-        .sort(([a], [b]) => (counts[b] ?? 0) - (counts[a] ?? 0))
-        .map(([id, p]) => ({ p, stat: `${counts[id] ?? 0} tiles` }));
-    } else {
-      ranked = Object.values(state.players)
-        .sort((a, b) => b.score - a.score)
-        .map(p => ({ p, stat: `${p.score} pts` }));
     }
+    const ranked = useTiles
+      ? [...players].sort(([a], [b]) => (tileCounts[b] ?? 0) - (tileCounts[a] ?? 0)).map(([id, p]) => ({ p, stat: `${tileCounts[id] ?? 0} tiles` }))
+      : [...players].sort(([,a], [,b]) => b.score - a.score).map(([, p]) => ({ p, stat: `${p.score} pts` }));
     const winner = ranked[0]?.p;
+
+    const claimedHtml = [...(state.claimed ?? [])].reverse().map(c => {
+      const color = pColor(c.connId) ?? '#9ca3af';
+      return `<span style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color}">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+    }).join('');
+
+    const statsRows = players.map(([id, p]) => {
+      const col = COLORS[p.color] ?? '#9ca3af';
+      const label = p.isBot ? `${p.name} <span style="font-size:0.6rem;color:#64748b">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : p.name;
+      return `<tr style="border-bottom:1px solid #1e293b">
+        <td style="padding:0.35rem 0.5rem 0.35rem 0"><div style="display:flex;align-items:center;gap:0.4rem"><div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div><span>${label}</span></div></td>
+        <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.score}</td>
+        <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.wordsFound ?? 0}</td>
+        ${useTiles ? `<td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${tileCounts[id] ?? 0}</td>` : ''}
+        <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.totalPasses ?? 0}</td>
+      </tr>`;
+    }).join('');
+
     gs.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:0.75rem;width:100%;max-width:420px;margin:0 auto">
         <div class="card" style="margin-bottom:0">
@@ -1708,6 +1723,25 @@
         <div class="card" style="padding:1rem;margin-top:0">
           <h2 style="margin-bottom:0.75rem">Final Board</h2>
           ${buildStaticBoard()}
+        </div>
+        <div class="card" style="padding:1rem;margin-top:0">
+          <h2 style="margin-bottom:0.5rem">Words Claimed</h2>
+          <div style="display:flex;flex-wrap:wrap;gap:0.35rem">${claimedHtml || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>'}</div>
+        </div>
+        <div class="card" style="padding:1rem;margin-top:0">
+          <h2 style="margin-bottom:0.75rem">Player Stats</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+            <thead>
+              <tr style="color:#64748b;font-size:0.7rem;text-align:left;border-bottom:1px solid #334155">
+                <th style="padding:0.25rem 0.5rem 0.4rem 0;font-weight:500">Player</th>
+                <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Pts</th>
+                <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Words</th>
+                ${useTiles ? `<th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Tiles</th>` : ''}
+                <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Passes</th>
+              </tr>
+            </thead>
+            <tbody>${statsRows}</tbody>
+          </table>
         </div>
         <div style="display:flex;gap:0.5rem">
           <button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>
@@ -2093,7 +2127,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.88 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.89 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
