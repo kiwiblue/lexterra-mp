@@ -27,16 +27,25 @@ async function notifyStats(room, state, outcome) {
       ...Object.values(state.players),
       ...Object.values(state.disconnectedPlayers ?? {}).map(d => d.player),
     ];
+    const humanPlayers = all.filter(p => !p.isBot);
+    const scores = humanPlayers.map(p => p.score ?? 0).sort((a, b) => b - a);
     await room.context.parties.stats.get("main").fetch("/", {
       method: "POST",
       body: JSON.stringify({
         type: "game_end",
         outcome,
         mode: state.settings?.territoryMode ?? "off",
-        boardSize: state.settings?.boardSize ?? 10,
-        minWordLen: state.settings?.minWordLen ?? 4,
+        boardSize: state.settings?.boardSize ?? 5,
+        minWordLen: state.settings?.minWordLen ?? 3,
         botCount: all.filter(p => p.isBot).length,
-        humanCount: all.filter(p => !p.isBot).length,
+        humanCount: humanPlayers.length,
+        players: humanPlayers.map(p => ({
+          uuid: p.uuid ?? null,
+          name: p.name,
+          score: p.score ?? 0,
+          wordsFound: p.wordsFound ?? 0,
+          won: (p.score ?? 0) === scores[0] && scores[0] > 0,
+        })),
       }),
       headers: { "Content-Type": "application/json" },
     });
@@ -140,7 +149,7 @@ export default {
           consecutivePasses: 0,
         };
         const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
-        state.players[conn.id] = { name: msg.name, color: VALID_COLORS.includes(msg.color) ? msg.color : "Red", score: 0, wordsFound: 0, isReady: false, isHost: true };
+        state.players[conn.id] = { name: msg.name, color: VALID_COLORS.includes(msg.color) ? msg.color : "Red", uuid: msg.uuid ?? null, score: 0, wordsFound: 0, isReady: false, isHost: true };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -184,6 +193,7 @@ export default {
         state.players[conn.id] = {
           name: msg.name,
           color: joinColor,
+          uuid: msg.uuid ?? null,
           score: 0,
           wordsFound: 0,
           isReady: false,
@@ -473,7 +483,7 @@ export default {
             ? preferred
             : ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
           state.players[requestConnId] = {
-            name: req.name, color, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
+            name: req.name, color, uuid: req.uuid ?? null, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
           };
           state.turnOrder.push(requestConnId);
         } else {

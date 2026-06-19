@@ -1104,7 +1104,7 @@
   window.sendJoinRequest = function() {
     if (joinRequestPending) return;
     const name = localStorage.getItem('lexterra_name') ?? 'PLAYER';
-    socket.send(JSON.stringify({ type: 'join_request', name, color: getPlayerColor() }));
+    socket.send(JSON.stringify({ type: 'join_request', name, color: getPlayerColor(), uuid: getPlayerUUID() }));
     joinRequestPending = true;
     joinRequestExpiry = Date.now() + 30000;
     updateControls();
@@ -1921,6 +1921,15 @@
     return localStorage.getItem("lexterra_color") ?? "Red";
   }
 
+  function getPlayerUUID() {
+    let id = localStorage.getItem("lexterra_uuid");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("lexterra_uuid", id);
+    }
+    return id;
+  }
+
   // Restore saved name on load
   const savedName = localStorage.getItem("lexterra_name");
   if (savedName) {
@@ -1933,7 +1942,7 @@
     document.getElementById("room-code-input").value = code;
     connect(code);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor() }));
+      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID() }));
     }, { once: true });
   };
 
@@ -1954,7 +1963,7 @@
     const room = randomRoomCode();
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "create", name, color: getPlayerColor(), isPublic: makePublic, settings: { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 } }));
+      socket.send(JSON.stringify({ type: "create", name, color: getPlayerColor(), uuid: getPlayerUUID(), isPublic: makePublic, settings: { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 } }));
       isHost = true;
     }, { once: true });
   };
@@ -1966,7 +1975,7 @@
     if (!room) { document.getElementById("join-status").textContent = "Enter a room code."; return; }
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor() }));
+      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID() }));
     }, { once: true });
   };
 
@@ -2209,7 +2218,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.93 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.94 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
