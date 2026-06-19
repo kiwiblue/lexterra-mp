@@ -613,6 +613,14 @@ export default {
           fresh.players[id].totalPasses = 0;
         });
         await room.storage.put("state", fresh);
+        // Spectators can't follow a reset back to settings — send them home
+        for (const c of room.getConnections()) {
+          if (spectatorConns.has(c.id)) {
+            spectatorConns.delete(c.id);
+            c.send(JSON.stringify({ type: "host_left" }));
+          }
+        }
+        broadcastSpectatorCount(room);
         room.broadcast(JSON.stringify({ type: "state", state: fresh }));
         if (fresh.isPublic) {
           const freshPlayers = Object.values(fresh.players);
