@@ -51,8 +51,7 @@ export default {
 
       if (msg.outcome === "completed" && Array.isArray(msg.players)) {
         const mode = msg.mode ?? "off";
-        const size = msg.boardSize ?? 5;
-        const key = `lb_${mode}_${size}`;
+        const key = `lb_${mode}`;
         let lb = (await room.storage.get(key)) ?? [];
         for (const p of msg.players) {
           if (!p.uuid || !(p.score > 0)) continue;
@@ -62,6 +61,7 @@ export default {
             score: p.score,
             wordsFound: p.wordsFound ?? 0,
             won: p.won ?? false,
+            boardSize: msg.boardSize ?? 5,
             minWordLen: msg.minWordLen ?? 3,
             timeLimit: msg.timeLimit ?? 120,
             otherHumans: Math.max(0, (msg.humanCount ?? 1) - 1),
@@ -81,8 +81,8 @@ export default {
       const mode = url.searchParams.get("mode");
       const size = url.searchParams.get("size");
 
-      if (mode && size) {
-        const lb = (await room.storage.get(`lb_${mode}_${size}`)) ?? [];
+      if (mode) {
+        const lb = (await room.storage.get(`lb_${mode}`)) ?? [];
         return new Response(JSON.stringify(lb), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
