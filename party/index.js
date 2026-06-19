@@ -68,7 +68,7 @@ function broadcastSpectatorCount(room) {
 // Grace period before processing a disconnect — gives mobile users time to
 // reconnect after briefly switching apps without being booted from the game.
 const pendingDisconnects = new Map(); // connId → timeoutId
-const DISCONNECT_GRACE_MS = 8000;
+const DISCONNECT_GRACE_MS = 30000;
 
 async function processDisconnect(connId, room) {
   const state = await room.storage.get("state");
@@ -399,49 +399,72 @@ export default {
         const state = await room.storage.get("state");
         if (!state) { conn.send(JSON.stringify({ type: "error", message: "Game not found." })); return; }
 
-        // If still within the grace period, player never left — just remap connId
-        if (pendingDisconnects.has(msg.oldConnId)) {
-          clearTimeout(pendingDisconnects.get(msg.oldConnId));
-          pendingDisconnects.delete(msg.oldConnId);
-          if (state.players[msg.oldConnId]) {
-            state.players[conn.id] = state.players[msg.oldConnId];
-            delete state.players[msg.oldConnId];
-            if (state.host === msg.oldConnId) state.host = conn.id;
-            if (state.cur === msg.oldConnId) state.cur = conn.id;
-            const ti = state.turnOrder.indexOf(msg.oldConnId);
-            if (ti !== -1) state.turnOrder[ti] = conn.id;
-            if (state.territory) for (let r = 0; r < state.territory.length; r++)
-              for (let c = 0; c < state.territory[r].length; c++)
-                if (state.territory[r][c] === msg.oldConnId) state.territory[r][c] = conn.id;
-            for (const claim of state.claimed ?? [])
-              if (claim.connId === msg.oldConnId) claim.connId = conn.id;
-            if (state.grid) for (let r = 0; r < state.grid.length; r++)
-              for (let c = 0; c < state.grid[r].length; c++)
-                if (state.grid[r][c]?.pi === msg.oldConnId) state.grid[r][c].pi = conn.id;
-            await room.storage.put("state", state);
-            room.broadcast(JSON.stringify({ type: "state", state }));
-            return;
-          }
+        // Remap every reference to an active player's old connId → new connId
+        function remapActiveId(oldId) {
+          state.players[conn.id] = state.players[oldId];
+          delete state.players[oldId];
+          if (state.host === oldId) state.host = conn.id;
+          if (state.cur === oldId) state.cur = conn.id;
+          const ti = state.turnOrder.indexOf(oldId);
+          if (ti !== -1) state.turnOrder[ti] = conn.id;
+          if (state.territory) for (let r = 0; r < state.territory.length; r++)
+            for (let c = 0; c < state.territory[r].length; c++)
+              if (state.territory[r][c] === oldId) state.territory[r][c] = conn.id;
+          for (const claim of state.claimed ?? []) if (claim.connId === oldId) claim.connId = conn.id;
+          if (state.grid) for (let r = 0; r < state.grid.length; r++)
+            for (let c = 0; c < state.grid[r].length; c++)
+              if (state.grid[r][c]?.pi === oldId) state.grid[r][c].pi = conn.id;
         }
 
-        const saved = state.disconnectedPlayers?.[msg.oldConnId];
-        if (!saved) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please join normally." })); return; }
+        // Path 1: Still within grace period — player never officially left.
+        // Find by connId first, then fall back to UUID (covers DO-restart edge case
+        // where pendingDisconnects survived but connId rotated).
+        const pendingId = pendingDisconnects.has(msg.oldConnId) ? msg.oldConnId
+          : msg.uuid ? [...pendingDisconnects.keys()].find(id => state.players[id]?.uuid === msg.uuid) : null;
+        if (pendingId && state.players[pendingId]) {
+          clearTimeout(pendingDisconnects.get(pendingId));
+          pendingDisconnects.delete(pendingId);
+          remapActiveId(pendingId);
+          await room.storage.put("state", state);
+          room.broadcast(JSON.stringify({ type: "state", state }));
+          return;
+        }
+
+        // Path 2: Player is still in active state (DO restart wiped pendingDisconnects
+        // before the grace-period timer fired, so processDisconnect never ran).
+        // Find by connId first, then UUID.
+        const activeId = (state.players[msg.oldConnId] && !state.players[msg.oldConnId].isBot) ? msg.oldConnId
+          : msg.uuid ? Object.keys(state.players).find(id => !state.players[id].isBot && state.players[id].uuid === msg.uuid) : null;
+        if (activeId && activeId !== conn.id) {
+          if (pendingDisconnects.has(activeId)) { clearTimeout(pendingDisconnects.get(activeId)); pendingDisconnects.delete(activeId); }
+          remapActiveId(activeId);
+          await room.storage.put("state", state);
+          room.broadcast(JSON.stringify({ type: "state", state }));
+          return;
+        }
+
+        // Path 3: Post-grace — restore from disconnectedPlayers.
+        // Find by connId first, then UUID (covers stale-connId edge case).
+        const savedKey = state.disconnectedPlayers?.[msg.oldConnId] ? msg.oldConnId
+          : msg.uuid ? Object.keys(state.disconnectedPlayers ?? {}).find(k => state.disconnectedPlayers[k].player.uuid === msg.uuid) : null;
+        if (!savedKey) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please rejoin." })); return; }
+
+        const saved = state.disconnectedPlayers[savedKey];
         state.players[conn.id] = saved.player;
-        delete state.disconnectedPlayers[msg.oldConnId];
+        delete state.disconnectedPlayers[savedKey];
         if (state.phase === "playing") {
           const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
           state.turnOrder.splice(insertAt, 0, conn.id);
         }
-        if (state.host === msg.oldConnId) state.host = conn.id;
-        if (state.cur === msg.oldConnId) { state.cur = conn.id; }
+        if (state.host === savedKey) state.host = conn.id;
+        if (state.cur === savedKey) state.cur = conn.id;
         if (state.territory) for (let r = 0; r < state.territory.length; r++)
           for (let c = 0; c < state.territory[r].length; c++)
-            if (state.territory[r][c] === msg.oldConnId) state.territory[r][c] = conn.id;
-        for (const claim of state.claimed ?? [])
-          if (claim.connId === msg.oldConnId) claim.connId = conn.id;
+            if (state.territory[r][c] === savedKey) state.territory[r][c] = conn.id;
+        for (const claim of state.claimed ?? []) if (claim.connId === savedKey) claim.connId = conn.id;
         if (state.grid) for (let r = 0; r < state.grid.length; r++)
           for (let c = 0; c < state.grid[r].length; c++)
-            if (state.grid[r][c]?.pi === msg.oldConnId) state.grid[r][c].pi = conn.id;
+            if (state.grid[r][c]?.pi === savedKey) state.grid[r][c].pi = conn.id;
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -460,7 +483,7 @@ export default {
         if (!state || state.phase !== "playing") return;
         if (!spectatorConns.has(conn.id)) return;
         const expiresAt = Date.now() + 30000;
-        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, expiresAt };
+        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, uuid: msg.uuid ?? null, expiresAt };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: msg.name, expiresAt }));
         break;

@@ -437,7 +437,7 @@
       const isReconnect = !isSpectating && savedConnId && savedConnId !== socket.id && state !== null;
       myConnId = socket.id;
       if (isReconnect) {
-        socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId }));
+        socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId, uuid: getPlayerUUID() }));
       }
       if (!isSpectating) {
         localStorage.setItem("lexterra_room", room);
@@ -2170,7 +2170,7 @@
   if (_savedRoom && _savedConnId) {
     connect(_savedRoom);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "rejoin", oldConnId: _savedConnId }));
+      socket.send(JSON.stringify({ type: "rejoin", oldConnId: _savedConnId, uuid: getPlayerUUID() }));
     }, { once: true });
   }
 </script>
@@ -2218,7 +2218,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.94 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.95 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
