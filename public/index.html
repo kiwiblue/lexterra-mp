@@ -51,7 +51,14 @@
     #join-screen { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 1rem; }
     .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
     .player-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
-    .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; transition: transform 0.1s; }
+    .pdot-mine { cursor: pointer; }
+    .pdot-mine:hover { transform: scale(1.4); }
+    .color-popup { position: fixed; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.6rem; display: grid; grid-template-columns: repeat(3, 28px); gap: 6px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .color-popup .cswatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
+    .color-popup .cswatch:hover:not(.taken) { transform: scale(1.2); }
+    .color-popup .cswatch.selected { border-color: white; transform: scale(1.15); }
+    .color-popup .cswatch.taken { opacity: 0.2; cursor: not-allowed; }
     .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: var(--clr-primary-light); text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
     .copy-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0.25rem; line-height: 1; flex-shrink: 0; transition: color 0.15s; }
     .copy-btn:hover { color: var(--clr-primary-light); }
@@ -303,6 +310,7 @@
   let botStateResolver = null;
   let isSpectating = false;
   let spectatorCount = 0;
+  let colorPopup = null;
   let joinRequestPending = false;
   let joinRequestExpiry = 0;
   let joinRequestCountdownTimer = null;
@@ -629,7 +637,9 @@
       } else {
         const isMe = id === myConnId;
         pHtml += `<div class="player-row">
-          <div class="pdot" style="background:${color}"></div>
+          ${isMe
+            ? `<div class="pdot pdot-mine" style="background:${color}" onclick="showColorPicker(this)" title="Change colour"></div>`
+            : `<div class="pdot" style="background:${color}"></div>`}
           ${isMe
             ? `<input class="name-input" id="name-field" value="${p.name}" maxlength="12" placeholder="Enter your name" autocomplete="off">`
             : `<span style="font-weight:bold;flex:1">${p.name}</span>`}
@@ -1043,6 +1053,50 @@
       if (secsLeft <= 0) clearInterval(tick);
     }, 1000);
   }
+
+  window.showColorPicker = function(dotEl) {
+    if (colorPopup) { colorPopup.remove(); colorPopup = null; return; }
+    const takenColors = new Set(
+      Object.entries(state.players)
+        .filter(([id]) => id !== myConnId)
+        .map(([, p]) => p.color)
+    );
+    const myColor = state.players[myConnId]?.color;
+    const popup = document.createElement('div');
+    popup.className = 'color-popup';
+    Object.entries(COLORS).forEach(([name, hex]) => {
+      const sw = document.createElement('div');
+      sw.className = 'cswatch';
+      sw.style.background = hex;
+      sw.title = name;
+      if (name === myColor) sw.classList.add('selected');
+      if (takenColors.has(name)) {
+        sw.classList.add('taken');
+      } else {
+        sw.addEventListener('click', e => {
+          e.stopPropagation();
+          socket.send(JSON.stringify({ type: 'recolor', color: name }));
+          popup.remove(); colorPopup = null;
+        });
+      }
+      popup.appendChild(sw);
+    });
+    document.body.appendChild(popup);
+    colorPopup = popup;
+    const rect = dotEl.getBoundingClientRect();
+    const pw = 3 * 28 + 2 * 6 + 2 * 10;
+    const ph = 2 * 28 + 6 + 2 * 10;
+    let left = rect.left + rect.width / 2 - pw / 2;
+    let top = rect.bottom + 8;
+    left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+    if (top + ph > window.innerHeight - 8) top = rect.top - ph - 8;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    setTimeout(() => document.addEventListener('click', function h() {
+      if (colorPopup) { colorPopup.remove(); colorPopup = null; }
+      document.removeEventListener('click', h);
+    }), 0);
+  };
 
   window.sendJoinRequest = function() {
     if (joinRequestPending) return;
@@ -2148,7 +2202,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.90 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.4.91 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

@@ -175,7 +175,7 @@ export default {
           delete state.players[bots[bots.length - 1][0]];
         }
         const takenColors = Object.values(state.players).map(p => p.color);
-        const available = ["Red","Blue","Pink","Yellow","Green","Grey"].filter(c => !takenColors.includes(c));
+        const available = ["Red","Blue","Yellow","Green","Grey"].filter(c => !takenColors.includes(c));
         state.players[conn.id] = {
           name: msg.name,
           color: available[0] ?? "Grey",
@@ -210,6 +210,19 @@ export default {
         break;
       }
 
+      case "recolor": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "lobby" || !state.players[conn.id]) return;
+        const valid = ["Red","Blue","Pink","Yellow","Green","Grey"];
+        if (!valid.includes(msg.color)) return;
+        const takenByOther = Object.entries(state.players).some(([id, p]) => id !== conn.id && p.color === msg.color);
+        if (takenByOther) return;
+        state.players[conn.id].color = msg.color;
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        break;
+      }
+
       // Host adds a bot
       case "add-bot": {
         const state = await room.storage.get("state");
@@ -218,8 +231,8 @@ export default {
         const bots = Object.values(state.players).filter(p => p.isBot);
         const botId = `bot_${conn.id}_${bots.length}`;
         const takenColors = Object.values(state.players).map(p => p.color);
-        const color = ["Red","Blue","Pink","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
-        state.players[botId] = { name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "easy" };
+        const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+        state.players[botId] ={ name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "easy" };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -449,7 +462,7 @@ export default {
 
         if (mode === "add") {
           const takenColors = Object.values(state.players).map(p => p.color);
-          const color = ["Red","Blue","Pink","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+          const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
           state.players[requestConnId] = {
             name: req.name, color, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
           };
