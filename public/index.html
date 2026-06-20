@@ -282,10 +282,46 @@
   ]);
   function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
 
-  // Words bots will never claim, even though humans can.
-  // Populate with mild profanity once the full list is ready.
+  // Words bots will never claim, even though humans can. Source: OFCOM list.
   const BOT_BANNED_WORDS = new Set([
-    // add words here in lowercase
+    "arse","arsed","arsehole","arseholes","arses","arsey",
+    "ballocks","ballocksed","ballockses","ballocksing","balls",
+    "bastard","bastardies","bastardisation","bastardisations","bastardise","bastardised","bastardises","bastardising",
+    "bastardism","bastardisms","bastardization","bastardizations","bastardize","bastardized","bastardizes","bastardizing",
+    "bastardly","bastardries","bastardry","bastards","bastardy",
+    "beaver","beavers","bint","bints",
+    "bitch","bitched","bitchen","bitcheries","bitchery","bitches","bitchfest","bitchfests",
+    "bitchier","bitchiest","bitchily","bitchiness","bitchinesses","bitching","bitchy",
+    "bloody","bloodying",
+    "bollock","bollocked","bollocking","bollockings","bollocks","bollocksed","bollockses","bollocksing",
+    "bollox","bolloxed","bolloxes","bolloxing",
+    "bugger","buggered","buggeries","buggering","buggers","buggery",
+    "bullshit","bullshits","bullshitted","bullshitter","bullshitters","bullshitting","bullshittings",
+    "cock","cocks","cocksucker","cocksuckers","cockteaser","cockteasers",
+    "crap","crapola","crapolas","crapped","crapper","crappers","crappier","crappiest","crapping","crappy","craps",
+    "cunt","cunts",
+    "damn","damnable","damnably","damnation","damnations","damndest","damndests",
+    "damned","damneder","damnedest","damnedests","damner","damners","damning","damns",
+    "dick","dicked","dickhead","dickheads","dicking","dicks",
+    "fanny","feck","fecked","feckin","fecking","fecks","flaps",
+    "fuck","fucked","fucker","fuckers","fucking","fuckings","fuckoff","fuckoffs",
+    "fucks","fuckup","fuckups","fuckwit","fuckwits",
+    "gash","gashed","gashes","gashing","git","gits",
+    "goddam","goddammed","goddamming","goddamn","goddamndest","goddamned","goddamnedest","goddamning","goddamns","goddams",
+    "headfuck","headfucks",
+    "knob","knobbing","knobhead","knobheads","knobs",
+    "mindfuck","mindfucks","minge","minged","minger","mingers","minges",
+    "motherfucker","motherfuckers","motherfucking","munter","munters",
+    "piss","pissant","pissants","pissed","pisser","pissers","pisses","pisshead","pissheads","pissing",
+    "prick","pricked","pricker","prickers","pricking","prickings","pricks","pussy",
+    "shit","shite","shited","shites","shitfaced","shithead","shitheads","shithole","shitholes",
+    "shiting","shitless","shitlist","shitlists","shitload","shitloads","shits","shitted",
+    "shittier","shittiest","shittily","shittiness","shittinesses","shitting","shitty",
+    "snatch","snatched","snatcher","snatchers","snatches","snatching",
+    "sod","sodding","sods",
+    "starfucker","starfuckers","starfucking","starfuckings",
+    "tit","tits","titted","tittie","titties","titting","titty",
+    "twat","twats",
   ]);
   function isBotBannedWord(w) { return BOT_BANNED_WORDS.has(w.toLowerCase()); }
 
@@ -2653,7 +2689,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.19 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.20 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
