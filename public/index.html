@@ -336,6 +336,7 @@
   let highlightedWord = null;
   let endHighlightWord = null;
   let endUnclaimedWords = [];
+  let endClaimedSortMode = 'recent';
   let timerInterval = null;
   let timerEndsAt = 0;
   let gameCellSize = 0;
@@ -1727,7 +1728,6 @@
   function countUnclaimedWords(grid, n, minLen, claimed) {
     const words = getWordSet();
     if (!words) return null;
-    const claimedSet = new Set(claimed.map(c => c.word));
     const found = new Map(); // word -> path (first occurrence)
     const DIRS = [[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]];
     for (let r = 0; r < n; r++) {
@@ -1740,7 +1740,8 @@
             if (!letter) break;
             word += letter;
             path.push({ r: nr, c: nc });
-            if (word.length >= minLen && words.has(word) && !claimedSet.has(word) && !found.has(word)) {
+            if (word.length >= minLen && words.has(word) && !found.has(word)
+                && !claimedVariant(word) && !isBannedWord(word)) {
               found.set(word, [...path]);
             }
             nr += dr; nc += dc;
@@ -1800,6 +1801,7 @@
   function renderEndScreen() {
     clearSpectatorEyes();
     endHighlightWord = null;
+    endClaimedSortMode = 'recent';
     show("game-screen");
     const gs = document.getElementById("game-screen");
     const mode = state.settings?.territoryMode;
@@ -1853,7 +1855,13 @@
           <div id="end-board-container">${buildStaticBoard()}</div>
         </div>
         <div class="card" style="padding:1rem;margin-top:0">
-          <h2 style="margin-bottom:0.5rem">Words Claimed</h2>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+            <h2 style="margin:0">Words Claimed</h2>
+            <div style="display:flex;gap:0.25rem">
+              <button class="toggle-btn selected" id="end-sort-recent" onclick="setEndClaimedSort('recent')" style="padding:0.2rem 0.5rem;font-size:0.72rem">Recent</button>
+              <button class="toggle-btn" id="end-sort-alpha" onclick="setEndClaimedSort('alpha')" style="padding:0.2rem 0.5rem;font-size:0.72rem">A–Z</button>
+            </div>
+          </div>
           <div id="end-claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem">${claimedHtml || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>'}</div>
           ${mode !== 'exclusive' ? `
             <p id="end-unclaimed-count" style="font-size:0.75rem;color:#475569;margin-top:0.6rem;text-align:right">Calculating…</p>
@@ -1940,6 +1948,23 @@
         el.style.outline = 'none';
       });
     });
+
+    window.setEndClaimedSort = function(mode) {
+      endClaimedSortMode = mode;
+      document.getElementById('end-sort-recent')?.classList.toggle('selected', mode === 'recent');
+      document.getElementById('end-sort-alpha')?.classList.toggle('selected', mode === 'alpha');
+      const sorted = mode === 'alpha'
+        ? [...(state.claimed ?? [])].sort((a, b) => a.word.localeCompare(b.word))
+        : [...(state.claimed ?? [])].reverse();
+      const listEl = document.getElementById('end-claimed-list');
+      if (!listEl) return;
+      listEl.innerHTML = sorted.map(c => {
+        const color = pColor(c.connId) ?? '#9ca3af';
+        return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+      }).join('') || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>';
+      endHighlightWord = null;
+      document.getElementById('end-board-container').innerHTML = buildStaticBoard(null);
+    };
   }
 
   function sendLobbyHello(location) {
@@ -2462,7 +2487,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.4 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.5 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
