@@ -1,13 +1,45 @@
 // Lexterra MP — Stats accumulator
 // POST { type:"game_end", ... }
 // POST { type:"coins_update", uuid, name, delta, reason } → add/subtract coins (delta may be negative; floored at 0)
+// POST { type:"config_update", password, config } → save coin earn/spend weights (admin)
+// POST { type:"admin_data", password } → return all player coin records (admin)
 // GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
 // GET ?snapId=X → full game snapshot for the end-screen replay
 // GET ?xp=true → XP leaderboard [{ uuid, name, xp, gamesPlayed }] sorted by xp desc
 // GET ?coins=UUID → { uuid, name, coins } for one player (coins: 0 if not found)
+// GET ?config=true → current coin earn/spend config (public)
 // GET (no params) → aggregate report
 
 const TOP_SNAPS = 5;
+
+// ── Admin password ─────────────────────────────────────────────────────────
+// Change this before deploying; keep it secret.
+const ADMIN_PASSWORD = "lexterra-admin";
+
+// ── Coin earn/spend config defaults ───────────────────────────────────────
+// All values are coin amounts. pointsInterval is a points-per-coin divisor.
+// Override via admin page; stored in "coin_config" storage key.
+const DEFAULT_COIN_CONFIG = {
+  // Earn
+  firstPlayOfDay:   1,
+  firstWinOfDay:    1,
+  gameWin_5:        1,
+  gameWin_8:        2,
+  gameWin_10:       3,
+  gameWinHuman_5:   1,
+  gameWinHuman_8:   2,
+  gameWinHuman_10:  3,
+  highScoreDay:     1,
+  highScoreMonth:   2,
+  highScoreYear:    5,
+  pointsInterval:   50,  // 1 coin per this many points scored
+  longWordBonus:    1,   // per qualifying long word (5+/6+/7+ letters by board size)
+  // Spend
+  spendUndoLetter:      1,
+  spendViewUnclaimed:   1,
+  spendPremiumColor:    10,
+  spendCustomTile:      5,
+};
 
 const EMPTY = () => ({
   totalGames: 0,
@@ -64,10 +96,14 @@ function updateAll(all, entry) {
 
 const MODE_LABEL = { conquest: "Conquest", exclusive: "Keeps", off: "Search" };
 
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+
 export default {
   async onConnect() {},
 
   async onRequest(req, room) {
+    if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+
     if (req.method === "POST") {
       const msg = await req.json();
       if (msg.type === "name_update" && msg.uuid && msg.name) {
@@ -108,6 +144,22 @@ export default {
         }
         await room.storage.put("player_coins", coins);
         return new Response("ok");
+      }
+
+      if (msg.type === "config_update") {
+        if (msg.password !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401, headers: CORS });
+        if (!msg.config || typeof msg.config !== "object") return new Response("Bad request", { status: 400, headers: CORS });
+        await room.storage.put("coin_config", msg.config);
+        return new Response("ok", { headers: CORS });
+      }
+
+      if (msg.type === "admin_data") {
+        if (msg.password !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+        const coins = (await room.storage.get("player_coins")) ?? [];
+        const sorted = [...coins].sort((a, b) => (b.coins ?? 0) - (a.coins ?? 0));
+        return new Response(JSON.stringify(sorted), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
       }
 
       if (msg.type !== "game_end") return new Response("ok");
@@ -187,6 +239,63 @@ export default {
         }
         xp.sort((a, b) => b.xp - a.xp);
         await room.storage.put("player_xp", xp);
+
+        // ── Coin earning ────────────────────────────────────────────────
+        const stored = (await room.storage.get("coin_config")) ?? {};
+        const cfg = { ...DEFAULT_COIN_CONFIG, ...stored };
+        let coinStore = (await room.storage.get("player_coins")) ?? [];
+        const now = new Date();
+        const today = now.toISOString().slice(0, 10);
+        const thisMonth = today.slice(0, 7);
+        const thisYear = today.slice(0, 4);
+
+        for (const p of msg.players) {
+          if (!p.uuid || !(p.score > 0)) continue;
+          let ci = coinStore.findIndex(e => e.uuid === p.uuid);
+          if (ci < 0) {
+            coinStore.push({ uuid: p.uuid, name: p.name ?? "Unknown", coins: 0 });
+            ci = coinStore.length - 1;
+          }
+          const rec = coinStore[ci];
+          if (p.name) rec.name = p.name;
+          let earned = 0;
+
+          if (rec.lastPlayDate !== today) {
+            earned += cfg.firstPlayOfDay;
+            rec.lastPlayDate = today;
+          }
+          earned += Math.floor((p.score ?? 0) / cfg.pointsInterval);
+          earned += (p.longWordCount ?? 0) * cfg.longWordBonus;
+
+          if (p.won) {
+            earned += cfg[`gameWin_${boardSize}`] ?? cfg.gameWin_5;
+            if (rec.lastWinDate !== today) {
+              earned += cfg.firstWinOfDay;
+              rec.lastWinDate = today;
+            }
+            if ((msg.humanCount ?? 1) > 1) {
+              earned += cfg[`gameWinHuman_${boardSize}`] ?? cfg.gameWinHuman_5;
+            }
+            const prevDay = rec.dailyBest?.date === today ? rec.dailyBest.score : 0;
+            if ((p.score ?? 0) > prevDay) {
+              earned += cfg.highScoreDay;
+              rec.dailyBest = { date: today, score: p.score };
+            }
+            const prevMonth = rec.monthlyBest?.month === thisMonth ? rec.monthlyBest.score : 0;
+            if ((p.score ?? 0) > prevMonth) {
+              earned += cfg.highScoreMonth;
+              rec.monthlyBest = { month: thisMonth, score: p.score };
+            }
+            const prevYear = rec.yearlyBest?.year === thisYear ? rec.yearlyBest.score : 0;
+            if ((p.score ?? 0) > prevYear) {
+              earned += cfg.highScoreYear;
+              rec.yearlyBest = { year: thisYear, score: p.score };
+            }
+          }
+
+          rec.coins = Math.max(0, (rec.coins ?? 0) + earned);
+        }
+        await room.storage.put("player_coins", coinStore);
       }
 
       return new Response("ok");
@@ -195,6 +304,13 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
+
+      if (url.searchParams.get("config") !== null) {
+        const storedCfg = (await room.storage.get("coin_config")) ?? {};
+        return new Response(JSON.stringify({ ...DEFAULT_COIN_CONFIG, ...storedCfg }), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
 
       const coinsUuid = url.searchParams.get("coins");
       if (coinsUuid) {

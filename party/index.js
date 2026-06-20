@@ -23,24 +23,27 @@ async function notifyLobby(room, msg) {
 
 async function notifyStats(room, state, outcome) {
   try {
-    const all = [
-      ...Object.values(state.players),
-      ...Object.values(state.disconnectedPlayers ?? {}).map(d => d.player),
+    const allEntries = [
+      ...Object.entries(state.players ?? {}).map(([connId, p]) => ({ connId, ...p })),
+      ...Object.entries(state.disconnectedPlayers ?? {}).map(([connId, d]) => ({ connId, ...d.player })),
     ];
-    const humanPlayers = all.filter(p => !p.isBot);
+    const humanPlayers = allEntries.filter(p => !p.isBot);
     const scores = humanPlayers.map(p => p.score ?? 0).sort((a, b) => b - a);
+    const boardSize = state.settings?.boardSize ?? 5;
+    const longThreshold = boardSize >= 10 ? 7 : boardSize >= 8 ? 6 : 5;
+    const claimed = state.claimed ?? [];
     await room.context.parties.stats.get("main").fetch("/", {
       method: "POST",
       body: JSON.stringify({
         type: "game_end",
         outcome,
         mode: state.settings?.territoryMode ?? "off",
-        boardSize: state.settings?.boardSize ?? 5,
+        boardSize,
         minWordLen: state.settings?.minWordLen ?? 3,
         timeLimit: state.settings?.timeLimit ?? 120,
-        botCount: all.filter(p => p.isBot).length,
-        easyBots: all.filter(p => p.isBot && p.botDifficulty !== 'hard').length,
-        hardBots: all.filter(p => p.isBot && p.botDifficulty === 'hard').length,
+        botCount: allEntries.filter(p => p.isBot).length,
+        easyBots: allEntries.filter(p => p.isBot && p.botDifficulty !== 'hard').length,
+        hardBots: allEntries.filter(p => p.isBot && p.botDifficulty === 'hard').length,
         humanCount: humanPlayers.length,
         players: humanPlayers.map(p => ({
           uuid: p.uuid ?? null,
@@ -48,6 +51,7 @@ async function notifyStats(room, state, outcome) {
           score: p.score ?? 0,
           wordsFound: p.wordsFound ?? 0,
           won: (p.score ?? 0) === scores[0] && scores[0] > 0,
+          longWordCount: claimed.filter(c => c.connId === p.connId && (c.word?.length ?? 0) >= longThreshold).length,
         })),
         snapshot: {
           grid: state.grid ?? null,
