@@ -23,13 +23,25 @@ function isCompetitive(e) {
 }
 
 // Per-player best: one entry per UUID, tracking best overall and best competitive separately.
+// Name is always updated so a rename is reflected on the next game played.
 function updatePlayers(players, entry) {
   const comp = isCompetitive(entry);
   const idx = players.findIndex(p => p.uuid === entry.uuid);
   if (idx >= 0) {
     const p = players[idx];
-    if (entry.score > p.best.score) { p.best = entry; p.name = entry.name; }
-    if (comp && (!p.bestComp || entry.score > p.bestComp.score)) p.bestComp = entry;
+    p.name = entry.name;
+    if (entry.score > p.best.score) {
+      p.best = entry;
+    } else {
+      p.best.name = entry.name;
+    }
+    if (comp) {
+      if (!p.bestComp || entry.score > p.bestComp.score) {
+        p.bestComp = entry;
+      } else {
+        p.bestComp.name = entry.name;
+      }
+    }
   } else {
     players.push({ uuid: entry.uuid, name: entry.name, best: entry, bestComp: comp ? entry : null });
   }
@@ -103,8 +115,20 @@ export default {
       const mode = url.searchParams.get("mode");
 
       if (mode) {
-        const players = (await room.storage.get(`lb_${mode}_players`)) ?? [];
-        const all = (await room.storage.get(`lb_${mode}_all`)) ?? [];
+        let players = (await room.storage.get(`lb_${mode}_players`)) ?? [];
+        let all = (await room.storage.get(`lb_${mode}_all`)) ?? [];
+        // One-time migration from old single-list format
+        if (!players.length && !all.length) {
+          const old = (await room.storage.get(`lb_${mode}`)) ?? [];
+          if (old.length) {
+            for (const entry of old) {
+              players = updatePlayers(players, entry);
+              all = updateAll(all, entry);
+            }
+            await room.storage.put(`lb_${mode}_players`, players);
+            await room.storage.put(`lb_${mode}_all`, all);
+          }
+        }
         return new Response(JSON.stringify({ players, all }), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });

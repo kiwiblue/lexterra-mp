@@ -195,8 +195,8 @@
     </div>
     <div style="display:flex;gap:0.35rem;margin-bottom:0.5rem">
       <button class="toggle-btn selected" id="lb-tab-conquest" onclick="lbSetMode('conquest')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Conquest</button>
-      <button class="toggle-btn" id="lb-tab-off" onclick="lbSetMode('off')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Search</button>
       <button class="toggle-btn" id="lb-tab-exclusive" onclick="lbSetMode('exclusive')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Keeps</button>
+      <button class="toggle-btn" id="lb-tab-off" onclick="lbSetMode('off')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Search</button>
     </div>
     <div id="lb-size-filter-row" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
       <span style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;flex-shrink:0">Size</span>
@@ -2135,7 +2135,7 @@
       : '';
 
     rows.innerHTML =
-      lbSectionLabel('Leaderboard') + playersHtml +
+      lbSectionLabel('Players') + playersHtml +
       lbSectionLabel('High Scores') + allHtml +
       showMoreBtn;
   }
@@ -2545,7 +2545,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.6 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.7 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
