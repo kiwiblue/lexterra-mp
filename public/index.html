@@ -350,6 +350,7 @@
   let botTurnRunning = false;
   let botStateResolver = null;
   let isSpectating = false;
+  let isSnapshotView = false;
   let spectatorCount = 0;
   let colorPopup = null;
   let joinRequestPending = false;
@@ -1922,8 +1923,8 @@
           <div id="end-lb-rows"><p style="font-size:0.8rem;color:#64748b;margin:0">Loading…</p></div>
         </div>
         <div style="display:flex;gap:0.5rem">
-          <button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>
-          ${!state.isPublic && !isSpectating ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
+          ${isSnapshotView ? `<button class="btn btn-secondary" onclick="location.href=location.pathname" style="flex:1">← Close Preview</button>` : `<button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>`}
+          ${!state.isPublic && !isSpectating && !isSnapshotView ? `<button class="btn btn-primary" onclick="playAgain()" style="flex:1">Play Again</button>` : ''}
         </div>
       </div>`;
 
@@ -2110,7 +2111,7 @@
     return `<div class="lb-row">
       <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${rank}.</span>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.name}${isMe ? ' ★' : ''}</div>
+        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.snapId ? `<a href="?view=${entry.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted #475569" target="_blank">${entry.name}${isMe ? ' ★' : ''}</a>` : `${entry.name}${isMe ? ' ★' : ''}`}</div>
         <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(entry)} · ${entry.boardSize ?? 5}×${entry.boardSize ?? 5} · min-${entry.minWordLen} · ${date}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
@@ -2236,7 +2237,7 @@
       return `<div class="lb-row">
         <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name}${isMe ? ' ★' : ''}</div>
+          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.snapId ? `<a href="?view=${e.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted #475569" target="_blank">${e.name}${isMe ? ' ★' : ''}</a>` : `${e.name}${isMe ? ' ★' : ''}`}</div>
           <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
@@ -2507,6 +2508,31 @@
     }
   }
 
+  async function loadAndRenderSnapshot(snapId) {
+    isSnapshotView = true;
+    show("game-screen");
+    document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem;color:#64748b">Loading game preview…</div>';
+    try {
+      const res = await fetch(`https://${PARTYKIT_HOST}/parties/stats/main?snapId=${snapId}`);
+      if (!res.ok) throw new Error("not found");
+      const snap = await res.json();
+      state = {
+        settings: snap.settings ?? {},
+        grid: snap.grid ?? null,
+        territory: snap.territory ?? null,
+        claimed: snap.claimed ?? [],
+        players: snap.players ?? {},
+        phase: 'ended',
+        isPublic: false,
+      };
+      frozenPlayers = snap.players ?? {};
+      gameInited = true;
+      renderEndScreen();
+    } catch {
+      document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem"><p style="color:#64748b;margin-bottom:1rem">Game preview not available.</p><button class="btn btn-secondary" onclick="location.href=location.pathname">← Back</button></div>';
+    }
+  }
+
   const PARTYKIT_HOST = "lexterra-mp.kiwiblue.partykit.dev";
 
   document.getElementById('footer-year').textContent = new Date().getFullYear();
@@ -2514,14 +2540,19 @@
   connectLobby();
   fetchLeaderboard();
 
-  // Auto-rejoin if player refreshed mid-game
-  const _savedRoom = localStorage.getItem("lexterra_room");
-  const _savedConnId = localStorage.getItem("lexterra_connId");
-  if (_savedRoom && _savedConnId) {
-    connect(_savedRoom);
-    socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "rejoin", oldConnId: _savedConnId, uuid: getPlayerUUID() }));
-    }, { once: true });
+  const _viewSnap = new URLSearchParams(location.search).get('view');
+  if (_viewSnap) {
+    loadAndRenderSnapshot(_viewSnap);
+  } else {
+    // Auto-rejoin if player refreshed mid-game
+    const _savedRoom = localStorage.getItem("lexterra_room");
+    const _savedConnId = localStorage.getItem("lexterra_connId");
+    if (_savedRoom && _savedConnId) {
+      connect(_savedRoom);
+      socket.addEventListener("open", () => {
+        socket.send(JSON.stringify({ type: "rejoin", oldConnId: _savedConnId, uuid: getPlayerUUID() }));
+      }, { once: true });
+    }
   }
 </script>
 
@@ -2568,7 +2599,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.11 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.12 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

@@ -1,7 +1,10 @@
 // Lexterra MP — Stats accumulator
 // POST { type:"game_end", ... }
 // GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
+// GET ?snapId=X → full game snapshot for the end-screen replay
 // GET (no params) → aggregate report
+
+const TOP_SNAPS = 5;
 
 const EMPTY = () => ({
   totalGames: 0,
@@ -78,10 +81,29 @@ export default {
 
       if (msg.outcome === "completed" && Array.isArray(msg.players)) {
         const mode = msg.mode ?? "off";
+        const boardSize = msg.boardSize ?? 5;
         const playersKey = `lb_${mode}_players`;
         const allKey = `lb_${mode}_all`;
         let players = (await room.storage.get(playersKey)) ?? [];
         let all = (await room.storage.get(allKey)) ?? [];
+        const gameDate = Date.now();
+
+        // Determine if this game qualifies for a snapshot (top-5 by highest player score)
+        let snapId = null;
+        if (msg.snapshot) {
+          const topScore = msg.players.reduce((m, p) => Math.max(m, p.score ?? 0), 0);
+          if (topScore > 0) {
+            const snKey = `snaps_${mode}_${boardSize}`;
+            let snaps = (await room.storage.get(snKey)) ?? [];
+            if (snaps.length < TOP_SNAPS || topScore > snaps[snaps.length - 1].topScore) {
+              snapId = `${mode}_${boardSize}_${gameDate}`;
+              const isComp = (msg.humanCount ?? 1) > 1 || (msg.hardBots ?? 0) > 0;
+              snaps.push({ id: snapId, topScore, isComp, date: gameDate, snapshot: msg.snapshot });
+              snaps.sort((a, b) => b.topScore - a.topScore);
+              await room.storage.put(snKey, snaps.slice(0, TOP_SNAPS));
+            }
+          }
+        }
 
         for (const p of msg.players) {
           if (!p.uuid || !(p.score > 0)) continue;
@@ -91,13 +113,14 @@ export default {
             score: p.score,
             wordsFound: p.wordsFound ?? 0,
             won: p.won ?? false,
-            boardSize: msg.boardSize ?? 5,
+            boardSize,
             minWordLen: msg.minWordLen ?? 3,
             timeLimit: msg.timeLimit ?? 120,
             otherHumans: Math.max(0, (msg.humanCount ?? 1) - 1),
             easyBots: msg.easyBots ?? 0,
             hardBots: msg.hardBots ?? 0,
-            date: Date.now(),
+            date: gameDate,
+            snapId,
           };
           players = updatePlayers(players, entry);
           all = updateAll(all, entry);
@@ -113,6 +136,21 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
+
+      const snapId = url.searchParams.get("snapId");
+      if (snapId) {
+        // ID format: "mode_boardSize_timestamp" (e.g. "conquest_5_1719123456789")
+        const parts = snapId.split('_');
+        const boardSizeStr = parts[parts.length - 2];
+        const modePart = parts.slice(0, parts.length - 2).join('_');
+        const snKey = `snaps_${modePart}_${boardSizeStr}`;
+        const snaps = (await room.storage.get(snKey)) ?? [];
+        const snap = snaps.find(s => s.id === snapId);
+        if (!snap) return new Response("Not found", { status: 404 });
+        return new Response(JSON.stringify(snap.snapshot), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
 
       if (mode) {
         let players = (await room.storage.get(`lb_${mode}_players`)) ?? [];

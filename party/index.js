@@ -49,6 +49,24 @@ async function notifyStats(room, state, outcome) {
           wordsFound: p.wordsFound ?? 0,
           won: (p.score ?? 0) === scores[0] && scores[0] > 0,
         })),
+        snapshot: {
+          grid: state.grid ?? null,
+          territory: state.territory ?? null,
+          claimed: state.claimed ?? [],
+          players: Object.fromEntries([
+            ...Object.entries(state.players ?? {}).map(([id, p]) => [id, {
+              name: p.name, color: p.color, score: p.score ?? 0,
+              wordsFound: p.wordsFound ?? 0, isBot: p.isBot ?? false,
+              botDifficulty: p.botDifficulty ?? null,
+            }]),
+            ...Object.entries(state.disconnectedPlayers ?? {}).map(([id, dp]) => [id, {
+              name: dp.player.name, color: dp.player.color, score: dp.player.score ?? 0,
+              wordsFound: dp.player.wordsFound ?? 0, isBot: dp.player.isBot ?? false,
+              botDifficulty: dp.player.botDifficulty ?? null,
+            }]),
+          ]),
+          settings: state.settings ?? {},
+        },
       }),
       headers: { "Content-Type": "application/json" },
     });
