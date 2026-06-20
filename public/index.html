@@ -1899,7 +1899,8 @@
       <div style="display:flex;flex-direction:column;gap:0.75rem;width:100%;max-width:420px;margin:0 auto">
         <div class="card" style="margin-bottom:0">
           <h2 style="text-align:center;font-size:1.4rem;color:var(--clr-primary-light);margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.05em">GAME OVER</h2>
-          <p style="text-align:center;color:#94a3b8;margin-bottom:1.25rem">${winner?.name ?? "?"} wins!</p>
+          <p style="text-align:center;color:#94a3b8;margin-bottom:0.25rem">${winner?.name ?? "?"} wins!</p>
+          <p style="text-align:center;color:#475569;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1.25rem">${({conquest:'Conquest Mode',exclusive:'Keeps Mode',off:'Search Mode'})[mode] ?? 'Search Mode'}</p>
           ${ranked.map(({ p, stat }, i) => `
             <div class="player-row" style="margin-bottom:0.5rem">
               <span style="color:#475569;width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
@@ -2631,7 +2632,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.16 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.17 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
