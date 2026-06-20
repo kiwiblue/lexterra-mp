@@ -1,8 +1,10 @@
 // Lexterra MP — Stats accumulator
 // POST { type:"game_end", ... }
+// POST { type:"coins_update", uuid, name, delta, reason } → add/subtract coins (delta may be negative; floored at 0)
 // GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
 // GET ?snapId=X → full game snapshot for the end-screen replay
 // GET ?xp=true → XP leaderboard [{ uuid, name, xp, gamesPlayed }] sorted by xp desc
+// GET ?coins=UUID → { uuid, name, coins } for one player (coins: 0 if not found)
 // GET (no params) → aggregate report
 
 const TOP_SNAPS = 5;
@@ -85,12 +87,29 @@ export default {
           for (const e of all) { if (e.uuid === msg.uuid) { e.name = msg.name; allChanged = true; } }
           if (allChanged) await room.storage.put(allKey, all);
         }
-        // Also update name in XP store
+        // Also update name in XP and coins stores
         let xp = (await room.storage.get("player_xp")) ?? [];
         const xi = xp.findIndex(p => p.uuid === msg.uuid);
         if (xi >= 0) { xp[xi].name = msg.name; await room.storage.put("player_xp", xp); }
+        let coins = (await room.storage.get("player_coins")) ?? [];
+        const ci = coins.findIndex(p => p.uuid === msg.uuid);
+        if (ci >= 0) { coins[ci].name = msg.name; await room.storage.put("player_coins", coins); }
         return new Response("ok");
       }
+
+      if (msg.type === "coins_update" && msg.uuid && typeof msg.delta === "number") {
+        let coins = (await room.storage.get("player_coins")) ?? [];
+        const ci = coins.findIndex(p => p.uuid === msg.uuid);
+        if (ci >= 0) {
+          coins[ci].coins = Math.max(0, coins[ci].coins + msg.delta);
+          if (msg.name) coins[ci].name = msg.name;
+        } else {
+          coins.push({ uuid: msg.uuid, name: msg.name ?? "Unknown", coins: Math.max(0, msg.delta) });
+        }
+        await room.storage.put("player_coins", coins);
+        return new Response("ok");
+      }
+
       if (msg.type !== "game_end") return new Response("ok");
 
       const s = (await room.storage.get("stats")) ?? EMPTY();
@@ -176,6 +195,15 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
+
+      const coinsUuid = url.searchParams.get("coins");
+      if (coinsUuid) {
+        const coins = (await room.storage.get("player_coins")) ?? [];
+        const entry = coins.find(p => p.uuid === coinsUuid);
+        return new Response(JSON.stringify(entry ?? { uuid: coinsUuid, coins: 0 }), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
 
       if (url.searchParams.get("xp") === "true") {
         const xp = (await room.storage.get("player_xp")) ?? [];
