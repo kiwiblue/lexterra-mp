@@ -2558,11 +2558,17 @@
   function updateHeaderStats() {
     const el = document.getElementById('header-stats');
     if (!el) return;
-    el.style.display = 'flex';
     const xpEl = document.getElementById('hstat-xp');
     const coinsEl = document.getElementById('hstat-coins');
-    if (xpEl) xpEl.textContent = playerXp >= 1000 ? (playerXp >= 10000 ? Math.floor(playerXp/1000)+'k' : (playerXp/1000).toFixed(1)+'k') : String(playerXp);
-    if (coinsEl) coinsEl.textContent = String(playerCoins);
+    if (xpEl) {
+      xpEl.textContent = playerXp >= 1000 ? (playerXp >= 10000 ? Math.floor(playerXp/1000)+'k' : (playerXp/1000).toFixed(1)+'k') : String(playerXp);
+      xpEl.closest('.hstat').style.display = playerXp > 0 ? '' : 'none';
+    }
+    if (coinsEl) {
+      coinsEl.textContent = String(playerCoins);
+      coinsEl.closest('.hstat').style.display = playerCoins > 0 ? '' : 'none';
+    }
+    el.style.display = (playerXp > 0 || playerCoins > 0) ? 'flex' : 'none';
   }
 
   async function loadPlayerStats() {
@@ -2918,7 +2924,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.25 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.26 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
