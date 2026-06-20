@@ -361,7 +361,7 @@
   let onlineCount = 0;
   let lobbyCount = 0;
   let preFortBoardSize = null;
-  let wordSet = null, _wordPrefixSet = null;
+  let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
     if (!window.WORDS) return null;
@@ -1726,40 +1726,22 @@
   function countUnclaimedWords(grid, n, minLen, claimed) {
     const words = getWordSet();
     if (!words) return null;
-    if (!_wordPrefixSet) {
-      _wordPrefixSet = new Set();
-      for (const w of words) {
-        if (w.length > 12) continue;
-        for (let i = 1; i <= w.length; i++) _wordPrefixSet.add(w.slice(0, i));
-      }
-    }
-    const prefixes = _wordPrefixSet;
     const claimedSet = new Set(claimed.map(c => c.word));
     const found = new Set();
-    const visited = new Uint8Array(n * n);
-    function dfs(r, c, prefix) {
-      if (prefix.length >= minLen && words.has(prefix) && !claimedSet.has(prefix)) found.add(prefix);
-      if (prefix.length >= 12) return;
-      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-        if (!dr && !dc) continue;
-        const nr = r + dr, nc = c + dc;
-        if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
-        if (visited[nr * n + nc]) continue;
-        const letter = grid[nr]?.[nc]?.letter;
-        if (!letter) continue;
-        const next = prefix + letter;
-        if (!prefixes.has(next)) continue;
-        visited[nr * n + nc] = 1;
-        dfs(nr, nc, next);
-        visited[nr * n + nc] = 0;
+    const DIRS = [[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]];
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        for (const [dr, dc] of DIRS) {
+          let word = '', nr = r, nc = c;
+          while (nr >= 0 && nr < n && nc >= 0 && nc < n) {
+            const letter = grid[nr]?.[nc]?.letter;
+            if (!letter) break;
+            word += letter;
+            if (word.length >= minLen && words.has(word) && !claimedSet.has(word)) found.add(word);
+            nr += dr; nc += dc;
+          }
+        }
       }
-    }
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
-      const letter = grid[r]?.[c]?.letter;
-      if (!letter || !prefixes.has(letter)) continue;
-      visited[r * n + c] = 1;
-      dfs(r, c, letter);
-      visited[r * n + c] = 0;
     }
     return found.size;
   }
@@ -2439,7 +2421,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.2 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.3 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
