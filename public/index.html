@@ -282,6 +282,13 @@
   ]);
   function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
 
+  // Words bots will never claim, even though humans can.
+  // Populate with mild profanity once the full list is ready.
+  const BOT_BANNED_WORDS = new Set([
+    // add words here in lowercase
+  ]);
+  function isBotBannedWord(w) { return BOT_BANNED_WORDS.has(w.toLowerCase()); }
+
   let soundEnabled = localStorage.getItem('lexterra_sound') !== 'off';
 
   function ghostIcon(hidden) {
@@ -2457,7 +2464,7 @@
             if (isClaimedVariant(word)) continue;
             if (territoryMode === 'exclusive' && state.territory)
               if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
-            if (isValidWord(word) && !isBannedWord(word) && isBotWord(word)) results.push({ word, path: sub, score: len });
+            if (isValidWord(word) && !isBannedWord(word) && !isBotBannedWord(word) && isBotWord(word)) results.push({ word, path: sub, score: len });
           }
         }
       }
@@ -2646,7 +2653,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.18 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.19 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
