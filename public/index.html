@@ -211,7 +211,7 @@
       <span style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;flex-shrink:0">Size</span>
       <button class="size-pill selected" id="lb-sf-all" onclick="lbSetSizeFilter(null)">All</button>
       <button class="size-pill" id="lb-sf-5" onclick="lbSetSizeFilter(5)">5×5</button>
-      <button class="size-pill" id="lb-sf-7" onclick="lbSetSizeFilter(7)">7×7</button>
+      <button class="size-pill" id="lb-sf-8" onclick="lbSetSizeFilter(8)">8×8</button>
       <button class="size-pill" id="lb-sf-10" onclick="lbSetSizeFilter(10)">10×10</button>
     </div>
     <div id="lb-rows"><p class="placeholder">Loading…</p></div>
@@ -547,7 +547,19 @@
       }
       frozenPlayers = fp;
     }
-    if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; highlightedWord = null; }
+    if (state?.phase === 'lobby' && newState?.phase === 'playing') { lastMoveDesc = ""; frozenPlayers = null; otherHovers = {}; highlightedWord = null; claimedSortMode = 'recent'; }
+    // If my name changed (lobby rename), update lbData immediately without waiting for a full refresh
+    if (newState?.phase === 'lobby' && myConnId && state?.players?.[myConnId]?.name !== newState?.players?.[myConnId]?.name) {
+      const newName = newState.players[myConnId].name;
+      const myUUID = getPlayerUUID();
+      if (newName && myUUID && lbData) {
+        for (const e of lbData.players ?? []) {
+          if (e.uuid === myUUID) { e.name = newName; if (e.best) e.best.name = newName; if (e.bestComp) e.bestComp.name = newName; }
+        }
+        for (const e of lbData.all ?? []) { if (e.uuid === myUUID) e.name = newName; }
+        renderLeaderboard();
+      }
+    }
     if (state && newState?.phase === 'lobby' && newState?.host === myConnId && soundEnabled) {
       const prevHumans = Object.values(state.players ?? {}).filter(p => !p.isBot).length;
       const nextHumans = Object.values(newState.players ?? {}).filter(p => !p.isBot).length;
@@ -849,8 +861,8 @@
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
             <h2 style="margin:0">Words Claimed</h2>
             <div style="display:flex;gap:0.25rem">
-              <button id="sort-recent-btn" onclick="setClaimedSort('recent')" class="toggle-btn selected" style="padding:0.2rem 0.5rem;font-size:0.72rem">Recent</button>
-              <button id="sort-alpha-btn"  onclick="setClaimedSort('alpha')"  class="toggle-btn"          style="padding:0.2rem 0.5rem;font-size:0.72rem">A–Z</button>
+              <button id="sort-recent-btn" onclick="setClaimedSort('recent')" class="toggle-btn${claimedSortMode !== 'alpha' ? ' selected' : ''}" style="padding:0.2rem 0.5rem;font-size:0.72rem">Recent</button>
+              <button id="sort-alpha-btn"  onclick="setClaimedSort('alpha')"  class="toggle-btn${claimedSortMode === 'alpha' ? ' selected' : ''}" style="padding:0.2rem 0.5rem;font-size:0.72rem">A–Z</button>
             </div>
           </div>
           <div id="claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem"></div>
@@ -2619,7 +2631,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.14 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.15 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

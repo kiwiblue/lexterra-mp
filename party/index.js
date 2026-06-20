@@ -240,7 +240,17 @@ export default {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "lobby" || !state.players[conn.id]) return;
         const name = (msg.name || '').trim().toUpperCase().slice(0, 12);
-        if (name) state.players[conn.id].name = name;
+        if (name) {
+          state.players[conn.id].name = name;
+          const uuid = state.players[conn.id].uuid;
+          if (uuid) {
+            room.context.parties.stats.get("main").fetch("/", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "name_update", uuid, name }),
+            }).catch(() => {});
+          }
+        }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;

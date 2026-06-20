@@ -67,6 +67,25 @@ export default {
   async onRequest(req, room) {
     if (req.method === "POST") {
       const msg = await req.json();
+      if (msg.type === "name_update" && msg.uuid && msg.name) {
+        for (const mode of ["conquest", "exclusive", "off"]) {
+          const playersKey = `lb_${mode}_players`;
+          const allKey = `lb_${mode}_all`;
+          let players = (await room.storage.get(playersKey)) ?? [];
+          let all = (await room.storage.get(allKey)) ?? [];
+          const pi = players.findIndex(p => p.uuid === msg.uuid);
+          if (pi >= 0) {
+            players[pi].name = msg.name;
+            if (players[pi].best) players[pi].best.name = msg.name;
+            if (players[pi].bestComp) players[pi].bestComp.name = msg.name;
+            await room.storage.put(playersKey, players);
+          }
+          let allChanged = false;
+          for (const e of all) { if (e.uuid === msg.uuid) { e.name = msg.name; allChanged = true; } }
+          if (allChanged) await room.storage.put(allKey, all);
+        }
+        return new Response("ok");
+      }
       if (msg.type !== "game_end") return new Response("ok");
 
       const s = (await room.storage.get("stats")) ?? EMPTY();
