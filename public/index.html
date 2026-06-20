@@ -1749,14 +1749,28 @@
     return Array.from({ length: len + 1 }, (_, i) => ({ r: a.r + i * sr, c: a.c + i * sc }));
   }
 
+  // Returns true if `long` has a better dictionary root than `short` (longer than short),
+  // preventing false blocks like SITES after SIT (real root is SITE, not SIT).
+  function hasBetterRoot(long, short) {
+    const ws = getWordSet();
+    if (!ws) return false;
+    for (const suf of ['S', 'ES', 'ING', 'ED', 'D']) {
+      if (long.endsWith(suf) && long.length > suf.length) {
+        const other = long.slice(0, long.length - suf.length);
+        if (other !== short && other.length > short.length && ws.has(other.toUpperCase())) return true;
+      }
+    }
+    return false;
+  }
+
   function claimedVariant(word) {
     const w = word.toLowerCase();
     for (const c of (state.claimed ?? [])) {
       const cw = c.word.toLowerCase();
       if (w === cw) return c.word;
-      if (w === cw + 's' || w === cw + 'es') return c.word;
+      if ((w === cw + 's' || w === cw + 'es') && !hasBetterRoot(w, cw)) return c.word;
       if (w.endsWith('ies') && cw === w.slice(0, -3) + 'y') return c.word;
-      if (cw === w + 's' || cw === w + 'es') return c.word;
+      if ((cw === w + 's' || cw === w + 'es') && !hasBetterRoot(cw, w)) return c.word;
       if (cw.endsWith('ies') && w === cw.slice(0, -3) + 'y') return c.word;
     }
     return null;
@@ -2632,7 +2646,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.17 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.18 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
