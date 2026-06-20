@@ -335,6 +335,7 @@
   let lastHoverSent = 0;
   let highlightedWord = null;
   let endHighlightWord = null;
+  let endUnclaimedWords = [];
   let timerInterval = null;
   let timerEndsAt = 0;
   let gameCellSize = 0;
@@ -1727,23 +1728,30 @@
     const words = getWordSet();
     if (!words) return null;
     const claimedSet = new Set(claimed.map(c => c.word));
-    const found = new Set();
+    const found = new Map(); // word -> path (first occurrence)
     const DIRS = [[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]];
     for (let r = 0; r < n; r++) {
       for (let c = 0; c < n; c++) {
         for (const [dr, dc] of DIRS) {
           let word = '', nr = r, nc = c;
+          const path = [];
           while (nr >= 0 && nr < n && nc >= 0 && nc < n) {
             const letter = grid[nr]?.[nc]?.letter;
             if (!letter) break;
             word += letter;
-            if (word.length >= minLen && words.has(word) && !claimedSet.has(word)) found.add(word);
+            path.push({ r: nr, c: nc });
+            if (word.length >= minLen && words.has(word) && !claimedSet.has(word) && !found.has(word)) {
+              found.set(word, [...path]);
+            }
             nr += dr; nc += dc;
           }
         }
       }
     }
-    return found.size;
+    const wordList = Array.from(found.entries())
+      .map(([word, path]) => ({ word, path }))
+      .sort((a, b) => a.word.localeCompare(b.word));
+    return { count: found.size, words: wordList };
   }
 
   // ── End screen ───────────────────────────────────────────────
@@ -1755,8 +1763,9 @@
     const gridW = boardSize * cellSize + (boardSize - 1) * 3;
     const tMode = state.settings?.territoryMode;
     const hlClaim = hw ? (state.claimed ?? []).find(c => c.word === hw) : null;
-    const hlPath = hlClaim?.path ?? [];
-    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? '#a78bfa') : null;
+    const hlUnc = !hlClaim && hw ? endUnclaimedWords.find(u => u.word === hw) : null;
+    const hlPath = hlClaim?.path ?? hlUnc?.path ?? [];
+    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? '#a78bfa') : (hlUnc ? '#f59e0b' : null);
     let cells = '';
     for (let r = 0; r < boardSize; r++) {
       for (let c = 0; c < boardSize; c++) {
@@ -1846,7 +1855,12 @@
         <div class="card" style="padding:1rem;margin-top:0">
           <h2 style="margin-bottom:0.5rem">Words Claimed</h2>
           <div id="end-claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem">${claimedHtml || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>'}</div>
-          ${mode !== 'exclusive' ? '<p id="end-unclaimed-count" style="font-size:0.75rem;color:#475569;margin-top:0.6rem;text-align:right">Calculating…</p>' : ''}
+          ${mode !== 'exclusive' ? `
+            <p id="end-unclaimed-count" style="font-size:0.75rem;color:#475569;margin-top:0.6rem;text-align:right">Calculating…</p>
+            <div id="end-unclaimed-section" style="display:none;margin-top:0.75rem;border-top:1px solid #1e293b;padding-top:0.75rem">
+              <h3 style="font-size:0.78rem;color:#64748b;margin:0 0 0.5rem 0;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Unclaimed Words</h3>
+              <div id="end-unclaimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem"></div>
+            </div>` : ''}
         </div>
         <div class="card" style="padding:1rem;margin-top:0">
           <h2 style="margin-bottom:0.75rem">Player Stats</h2>
@@ -1880,9 +1894,18 @@
       const _n = state.settings?.boardSize ?? 5;
       const _minLen = state.settings?.minWordLen ?? 3;
       setTimeout(() => {
-        const count = countUnclaimedWords(state.grid, _n, _minLen, state.claimed ?? []);
+        const result = countUnclaimedWords(state.grid, _n, _minLen, state.claimed ?? []);
         const el = document.getElementById('end-unclaimed-count');
-        if (el) el.textContent = count !== null ? `${count} word${count !== 1 ? 's' : ''} left unclaimed` : '';
+        if (el) el.textContent = result !== null ? `${result.count} word${result.count !== 1 ? 's' : ''} left unclaimed` : '';
+        if (result?.words) {
+          endUnclaimedWords = result.words;
+          const listEl = document.getElementById('end-unclaimed-list');
+          if (listEl) {
+            listEl.innerHTML = endUnclaimedWords.map(u =>
+              `<span data-unclaimed-word="${u.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid #475569;cursor:pointer">${u.word}</span>`
+            ).join('');
+          }
+        }
       }, 50);
     }
 
@@ -1897,6 +1920,24 @@
         const color = pColor(claim?.connId) ?? '#9ca3af';
         el.style.outline = el.dataset.claimWord === endHighlightWord ? `2px solid ${color}` : 'none';
         el.style.outlineOffset = '1px';
+      });
+      document.querySelectorAll('#end-unclaimed-list [data-unclaimed-word]').forEach(el => {
+        el.style.outline = 'none';
+      });
+    });
+
+    document.getElementById('end-unclaimed-section')?.addEventListener('click', e => {
+      const span = e.target.closest('[data-unclaimed-word]');
+      if (!span) return;
+      const word = span.dataset.unclaimedWord;
+      endHighlightWord = endHighlightWord === word ? null : word;
+      document.getElementById('end-board-container').innerHTML = buildStaticBoard(endHighlightWord);
+      document.querySelectorAll('#end-unclaimed-list [data-unclaimed-word]').forEach(el => {
+        el.style.outline = el.dataset.unclaimedWord === endHighlightWord ? '2px solid #f59e0b' : 'none';
+        el.style.outlineOffset = '1px';
+      });
+      document.querySelectorAll('#end-claimed-list [data-claim-word]').forEach(el => {
+        el.style.outline = 'none';
       });
     });
   }
@@ -2421,7 +2462,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.3 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.4 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
