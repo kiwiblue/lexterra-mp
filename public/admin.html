@@ -114,7 +114,9 @@
 </div>
 
 <script>
-const HOST = "https://lexterra-mp.kiwiblue.partykit.dev";
+const HOST = window.location.hostname === "localhost"
+  ? "http://localhost:1999"
+  : "https://lexterra-mp.kiwiblue.partykit.dev";
 const STATS = `${HOST}/parties/stats/main`;
 
 const FIELD_KEYS = [
