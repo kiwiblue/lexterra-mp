@@ -146,7 +146,7 @@ export default {
         return new Response("ok");
       }
 
-      if (msg.type === "colour_unlock" && msg.uuid && msg.colour) {
+      if (msg.type === "colour_unlock" && msg.uuid) {
         const stored2 = (await room.storage.get("coin_config")) ?? {};
         const cfg2 = { ...DEFAULT_COIN_CONFIG, ...stored2 };
         const cost = cfg2.spendPremiumColor;
@@ -160,7 +160,7 @@ export default {
         coins2[ci2].coins -= cost;
         if (!coins2[ci2].colorUnlocks) coins2[ci2].colorUnlocks = {};
         const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        coins2[ci2].colorUnlocks[msg.colour.toLowerCase()] = expiry;
+        coins2[ci2].colorUnlocks.premium = expiry;
         await room.storage.put("player_coins", coins2);
         return new Response(JSON.stringify({ coins: coins2[ci2].coins, expiry }), {
           headers: { "Content-Type": "application/json", ...CORS },

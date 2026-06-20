@@ -3,6 +3,9 @@
 
 // ── Banned claimable words (profanity filter) ────────────────────────
 // Add words in lowercase. Keep in sync with public/index.html.
+const BASE_COLORS = ["Red","Blue","Yellow","Green","Grey"];
+const PREMIUM_COLORS_SV = ["Orange","Pink","Purple","Teal"];
+
 const BANNED_WORDS = new Set([
   "cunt","cunts","fuck","fucked","fucker","fuckers","fucking","fuckings",
   "fuckoff","fuckoffs","fucks","fuckup","fuckups","fuckwit","fuckwits",
@@ -173,8 +176,8 @@ export default {
           turnOrder: [],          // [connId, ...]
           consecutivePasses: 0,
         };
-        const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
-        state.players[conn.id] = { name: msg.name, color: VALID_COLORS.includes(msg.color) ? msg.color : "Red", uuid: msg.uuid ?? null, score: 0, wordsFound: 0, isReady: false, isHost: true };
+        const validForHost = msg.hasPremium ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
+        state.players[conn.id] = { name: msg.name, color: validForHost.includes(msg.color) ? msg.color : "Red", uuid: msg.uuid ?? null, score: 0, wordsFound: 0, isReady: false, isHost: true };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         break;
@@ -210,11 +213,18 @@ export default {
           delete state.players[bots[bots.length - 1][0]];
         }
         const takenColors = Object.values(state.players).map(p => p.color);
-        const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
-        const preferred = msg.color && VALID_COLORS.includes(msg.color) ? msg.color : null;
-        const joinColor = (preferred && !takenColors.includes(preferred))
-          ? preferred
-          : ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+        const validJoin = msg.hasPremium ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
+        const preferred = msg.color && validJoin.includes(msg.color) ? msg.color : null;
+        let joinColor;
+        if (preferred && !takenColors.includes(preferred)) {
+          joinColor = preferred;
+        } else if (msg.hasPremium) {
+          joinColor = PREMIUM_COLORS_SV.find(c => !takenColors.includes(c))
+            ?? BASE_COLORS.find(c => !takenColors.includes(c))
+            ?? "Grey";
+        } else {
+          joinColor = BASE_COLORS.find(c => !takenColors.includes(c)) ?? "Grey";
+        }
         state.players[conn.id] = {
           name: msg.name,
           color: joinColor,
@@ -263,7 +273,7 @@ export default {
       case "recolor": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "lobby" || !state.players[conn.id]) return;
-        const valid = ["Red","Blue","Pink","Yellow","Green","Grey"];
+        const valid = msg.hasPremium ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
         if (!valid.includes(msg.color)) return;
         const takenByOther = Object.entries(state.players).some(([id, p]) => id !== conn.id && p.color === msg.color);
         if (takenByOther) return;
@@ -569,7 +579,7 @@ export default {
         if (!state || state.phase !== "playing") return;
         if (!spectatorConns.has(conn.id)) return;
         const expiresAt = Date.now() + 30000;
-        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, uuid: msg.uuid ?? null, expiresAt };
+        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, uuid: msg.uuid ?? null, hasPremium: msg.hasPremium ?? false, expiresAt };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: msg.name, expiresAt }));
         break;
@@ -586,11 +596,19 @@ export default {
 
         if (mode === "add") {
           const takenColors = Object.values(state.players).map(p => p.color);
-          const VALID_COLORS = ["Red","Blue","Pink","Yellow","Green","Grey"];
-          const preferred = req.color && VALID_COLORS.includes(req.color) ? req.color : null;
-          const color = (preferred && !takenColors.includes(preferred))
-            ? preferred
-            : ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
+          const hasPrem = req.hasPremium ?? false;
+          const validGrant = hasPrem ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
+          const preferred = req.color && validGrant.includes(req.color) ? req.color : null;
+          let color;
+          if (preferred && !takenColors.includes(preferred)) {
+            color = preferred;
+          } else if (hasPrem) {
+            color = PREMIUM_COLORS_SV.find(c => !takenColors.includes(c))
+              ?? BASE_COLORS.find(c => !takenColors.includes(c))
+              ?? "Grey";
+          } else {
+            color = BASE_COLORS.find(c => !takenColors.includes(c)) ?? "Grey";
+          }
           state.players[requestConnId] = {
             name: req.name, color, uuid: req.uuid ?? null, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
           };

@@ -649,6 +649,13 @@
       const nextHumans = Object.values(newState.players ?? {}).filter(p => !p.isBot).length;
       if (nextHumans > prevHumans) playJoinSound();
     }
+    if (myConnId && !state?.players?.[myConnId] && newState?.players?.[myConnId]) {
+      const assigned = newState.players[myConnId].color;
+      const preferred = getPlayerColor();
+      if (assigned !== preferred && PREMIUM_COLORS.has(preferred) && PREMIUM_COLORS.has(assigned)) {
+        showToast(`${preferred} was taken — using ${assigned} for this game`);
+      }
+    }
     state = newState;
     if (!state) return;
     if (state.abandonedMessage) {
@@ -1244,7 +1251,7 @@
           sw.addEventListener('click', e => {
             e.stopPropagation();
             localStorage.setItem('lexterra_color', name);
-            socket.send(JSON.stringify({ type: 'recolor', color: name }));
+            socket.send(JSON.stringify({ type: 'recolor', color: name, hasPremium: hasPremiumColors() }));
             closePopup();
           });
         }
@@ -1255,7 +1262,7 @@
       // Premium section label
       const lbl = document.createElement('div');
       lbl.className = 'color-popup-label';
-      lbl.textContent = `Premium — ${coinConfig.spendPremiumColor} coin/mo`;
+      lbl.textContent = hasPremiumColors() ? 'Premium — unlocked' : `Premium — ${coinConfig.spendPremiumColor} coins unlocks all · 30 days`;
       popup.appendChild(lbl);
 
       // Premium colours row
@@ -1265,21 +1272,19 @@
         const sw = document.createElement('div');
         sw.className = 'cswatch';
         sw.style.background = hex;
-        const key = name.toLowerCase();
-        const expiry = colorUnlocks[key];
-        const unlocked = expiry && expiry > Date.now();
+        const unlocked = hasPremiumColors();
         if (name === myColor) sw.classList.add('selected');
         if (takenColors.has(name)) {
           sw.classList.add('taken');
           sw.title = `${name} (taken)`;
         } else if (unlocked) {
           sw.classList.add('premium-unlocked');
-          const days = Math.ceil((expiry - Date.now()) / 86400000);
+          const days = Math.ceil((colorUnlocks.premium - Date.now()) / 86400000);
           sw.title = `${name} — unlocked (${days}d left)`;
           sw.addEventListener('click', e => {
             e.stopPropagation();
             localStorage.setItem('lexterra_color', name);
-            socket.send(JSON.stringify({ type: 'recolor', color: name }));
+            socket.send(JSON.stringify({ type: 'recolor', color: name, hasPremium: hasPremiumColors() }));
             closePopup();
           });
         } else {
@@ -1301,7 +1306,8 @@
       const canAfford = playerCoins >= cost;
       const info = document.createElement('div');
       info.style.cssText = 'font-size:0.78rem;color:#94a3b8;text-align:center;padding:0.25rem 0.1rem 0.5rem';
-      info.innerHTML = `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${hex};vertical-align:middle;margin-right:0.3rem"></span><strong style="color:#e2e8f0">${name}</strong><br><span style="font-size:0.68rem;color:#64748b">${cost} coins · 30 days · you have ${playerCoins}</span>`;
+      const swatchRow = Object.entries(COLORS).filter(([n]) => PREMIUM_COLORS.has(n)).map(([,h]) => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${h};vertical-align:middle;margin:0 2px"></span>`).join('');
+      info.innerHTML = `${swatchRow}<br><strong style="color:#e2e8f0">Unlock all 4 premium colours</strong><br><span style="font-size:0.68rem;color:#64748b">${cost} coins · 30 days · you have ${playerCoins}</span>`;
       popup.appendChild(info);
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;gap:6px;justify-content:center';
@@ -1323,15 +1329,15 @@
           const res = await fetch(`https://${PARTYKIT_HOST}/parties/stats/main`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'colour_unlock', uuid: getPlayerUUID(), colour: name }),
+            body: JSON.stringify({ type: 'colour_unlock', uuid: getPlayerUUID() }),
           });
           if (!res.ok) throw new Error('failed');
           const data = await res.json();
           playerCoins = data.coins;
-          colorUnlocks[name.toLowerCase()] = data.expiry;
+          colorUnlocks.premium = data.expiry;
           updateHeaderStats();
           localStorage.setItem('lexterra_color', name);
-          socket.send(JSON.stringify({ type: 'recolor', color: name }));
+          socket.send(JSON.stringify({ type: 'recolor', color: name, hasPremium: hasPremiumColors() }));
           closePopup();
         } catch {
           unlockBtn.textContent = 'Error';
@@ -1361,7 +1367,7 @@
   window.sendJoinRequest = function() {
     if (joinRequestPending) return;
     const name = localStorage.getItem('lexterra_name') ?? 'PLAYER';
-    socket.send(JSON.stringify({ type: 'join_request', name, color: getPlayerColor(), uuid: getPlayerUUID() }));
+    socket.send(JSON.stringify({ type: 'join_request', name, color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors() }));
     joinRequestPending = true;
     joinRequestExpiry = Date.now() + 30000;
     updateControls();
@@ -2545,6 +2551,10 @@
     return id;
   }
 
+  function hasPremiumColors() {
+    return !!(colorUnlocks.premium && colorUnlocks.premium > Date.now());
+  }
+
   function updateHeaderStats() {
     const el = document.getElementById('header-stats');
     if (!el) return;
@@ -2600,7 +2610,7 @@
     document.getElementById("room-code-input").value = code;
     connect(code);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID() }));
+      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors() }));
     }, { once: true });
   };
 
@@ -2621,7 +2631,7 @@
     const room = randomRoomCode();
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "create", name, color: getPlayerColor(), uuid: getPlayerUUID(), isPublic: makePublic, settings: { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 } }));
+      socket.send(JSON.stringify({ type: "create", name, color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors(), isPublic: makePublic, settings: { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 } }));
       isHost = true;
     }, { once: true });
   };
@@ -2633,7 +2643,7 @@
     if (!room) { document.getElementById("join-status").textContent = "Enter a room code."; return; }
     connect(room);
     socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID() }));
+      socket.send(JSON.stringify({ type: "join", name, color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors() }));
     }, { once: true });
   };
 
@@ -2908,7 +2918,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.23 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.24 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
