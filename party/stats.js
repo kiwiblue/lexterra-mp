@@ -1,7 +1,7 @@
 // Lexterra MP — Stats accumulator
-// POST { type:"game_end", outcome, mode, boardSize, minWordLen, botCount, humanCount, players:[{uuid,name,score,wordsFound}] }
-// GET  → aggregate report
-// GET ?mode=conquest&size=5 → leaderboard array for that combo
+// POST { type:"game_end", ... }
+// GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
+// GET (no params) → aggregate report
 
 const EMPTY = () => ({
   totalGames: 0,
@@ -18,15 +18,30 @@ function inc(obj, key) {
   obj[String(key)] = (obj[String(key)] ?? 0) + 1;
 }
 
-function updateLeaderboard(lb, entry) {
-  const idx = lb.findIndex(e => e.uuid === entry.uuid);
+function isCompetitive(e) {
+  return (e.otherHumans ?? 0) > 0 || (e.hardBots ?? 0) > 0;
+}
+
+// Per-player best: one entry per UUID, tracking best overall and best competitive separately.
+function updatePlayers(players, entry) {
+  const comp = isCompetitive(entry);
+  const idx = players.findIndex(p => p.uuid === entry.uuid);
   if (idx >= 0) {
-    if (entry.score > lb[idx].score) lb[idx] = entry;
+    const p = players[idx];
+    if (entry.score > p.best.score) { p.best = entry; p.name = entry.name; }
+    if (comp && (!p.bestComp || entry.score > p.bestComp.score)) p.bestComp = entry;
   } else {
-    lb.push(entry);
+    players.push({ uuid: entry.uuid, name: entry.name, best: entry, bestComp: comp ? entry : null });
   }
-  lb.sort((a, b) => b.score - a.score);
-  return lb.slice(0, 10);
+  players.sort((a, b) => b.best.score - a.best.score);
+  return players;
+}
+
+// All-time high scores: every game result kept (no dedup), top 100.
+function updateAll(all, entry) {
+  all.push(entry);
+  all.sort((a, b) => b.score - a.score);
+  return all.slice(0, 100);
 }
 
 const MODE_LABEL = { conquest: "Conquest", exclusive: "Keeps", off: "Search" };
@@ -51,11 +66,14 @@ export default {
 
       if (msg.outcome === "completed" && Array.isArray(msg.players)) {
         const mode = msg.mode ?? "off";
-        const key = `lb_${mode}`;
-        let lb = (await room.storage.get(key)) ?? [];
+        const playersKey = `lb_${mode}_players`;
+        const allKey = `lb_${mode}_all`;
+        let players = (await room.storage.get(playersKey)) ?? [];
+        let all = (await room.storage.get(allKey)) ?? [];
+
         for (const p of msg.players) {
           if (!p.uuid || !(p.score > 0)) continue;
-          lb = updateLeaderboard(lb, {
+          const entry = {
             uuid: p.uuid,
             name: p.name,
             score: p.score,
@@ -68,9 +86,13 @@ export default {
             easyBots: msg.easyBots ?? 0,
             hardBots: msg.hardBots ?? 0,
             date: Date.now(),
-          });
+          };
+          players = updatePlayers(players, entry);
+          all = updateAll(all, entry);
         }
-        await room.storage.put(key, lb);
+
+        await room.storage.put(playersKey, players);
+        await room.storage.put(allKey, all);
       }
 
       return new Response("ok");
@@ -79,11 +101,11 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
-      const size = url.searchParams.get("size");
 
       if (mode) {
-        const lb = (await room.storage.get(`lb_${mode}`)) ?? [];
-        return new Response(JSON.stringify(lb), {
+        const players = (await room.storage.get(`lb_${mode}_players`)) ?? [];
+        const all = (await room.storage.get(`lb_${mode}_all`)) ?? [];
+        return new Response(JSON.stringify({ players, all }), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
