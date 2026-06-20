@@ -2,6 +2,7 @@
 // POST { type:"game_end", ... }
 // GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
 // GET ?snapId=X → full game snapshot for the end-screen replay
+// GET ?xp=true → XP leaderboard [{ uuid, name, xp, gamesPlayed }] sorted by xp desc
 // GET (no params) → aggregate report
 
 const TOP_SNAPS = 5;
@@ -84,6 +85,10 @@ export default {
           for (const e of all) { if (e.uuid === msg.uuid) { e.name = msg.name; allChanged = true; } }
           if (allChanged) await room.storage.put(allKey, all);
         }
+        // Also update name in XP store
+        let xp = (await room.storage.get("player_xp")) ?? [];
+        const xi = xp.findIndex(p => p.uuid === msg.uuid);
+        if (xi >= 0) { xp[xi].name = msg.name; await room.storage.put("player_xp", xp); }
         return new Response("ok");
       }
       if (msg.type !== "game_end") return new Response("ok");
@@ -147,6 +152,22 @@ export default {
 
         await room.storage.put(playersKey, players);
         await room.storage.put(allKey, all);
+
+        // Accumulate XP — total points earned across all games, all modes
+        let xp = (await room.storage.get("player_xp")) ?? [];
+        for (const p of msg.players) {
+          if (!p.uuid || !(p.score > 0)) continue;
+          const xi = xp.findIndex(e => e.uuid === p.uuid);
+          if (xi >= 0) {
+            xp[xi].xp += p.score;
+            xp[xi].gamesPlayed++;
+            xp[xi].name = p.name;
+          } else {
+            xp.push({ uuid: p.uuid, name: p.name, xp: p.score, gamesPlayed: 1 });
+          }
+        }
+        xp.sort((a, b) => b.xp - a.xp);
+        await room.storage.put("player_xp", xp);
       }
 
       return new Response("ok");
@@ -155,6 +176,13 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
+
+      if (url.searchParams.get("xp") === "true") {
+        const xp = (await room.storage.get("player_xp")) ?? [];
+        return new Response(JSON.stringify(xp), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
 
       const snapId = url.searchParams.get("snapId");
       if (snapId) {
