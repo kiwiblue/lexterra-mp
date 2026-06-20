@@ -146,6 +146,27 @@ export default {
         return new Response("ok");
       }
 
+      if (msg.type === "colour_unlock" && msg.uuid && msg.colour) {
+        const stored2 = (await room.storage.get("coin_config")) ?? {};
+        const cfg2 = { ...DEFAULT_COIN_CONFIG, ...stored2 };
+        const cost = cfg2.spendPremiumColor;
+        let coins2 = (await room.storage.get("player_coins")) ?? [];
+        const ci2 = coins2.findIndex(p => p.uuid === msg.uuid);
+        if (ci2 < 0 || (coins2[ci2].coins ?? 0) < cost) {
+          return new Response(JSON.stringify({ error: "insufficient_coins", balance: coins2[ci2]?.coins ?? 0, cost }), {
+            status: 402, headers: { "Content-Type": "application/json", ...CORS },
+          });
+        }
+        coins2[ci2].coins -= cost;
+        if (!coins2[ci2].colorUnlocks) coins2[ci2].colorUnlocks = {};
+        const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
+        coins2[ci2].colorUnlocks[msg.colour.toLowerCase()] = expiry;
+        await room.storage.put("player_coins", coins2);
+        return new Response(JSON.stringify({ coins: coins2[ci2].coins, expiry }), {
+          headers: { "Content-Type": "application/json", ...CORS },
+        });
+      }
+
       if (msg.type === "config_update") {
         if (msg.password !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401, headers: CORS });
         if (!msg.config || typeof msg.config !== "object") return new Response("Bad request", { status: 400, headers: CORS });
@@ -304,6 +325,15 @@ export default {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const mode = url.searchParams.get("mode");
+
+      const playerXpUuid = url.searchParams.get("playerXp");
+      if (playerXpUuid) {
+        const xp = (await room.storage.get("player_xp")) ?? [];
+        const entry = xp.find(p => p.uuid === playerXpUuid);
+        return new Response(JSON.stringify(entry ?? { uuid: playerXpUuid, xp: 0, gamesPlayed: 0 }), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
 
       if (url.searchParams.get("config") !== null) {
         const storedCfg = (await room.storage.get("coin_config")) ?? {};

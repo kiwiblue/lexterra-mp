@@ -54,11 +54,30 @@
     .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; transition: transform 0.1s; }
     .pdot-mine { cursor: pointer; }
     .pdot-mine:hover { transform: scale(1.4); }
-    .color-popup { position: fixed; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.6rem; display: grid; grid-template-columns: repeat(3, 28px); gap: 6px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-    .color-popup .cswatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s; }
-    .color-popup .cswatch:hover:not(.taken) { transform: scale(1.2); }
+    .color-popup { position: fixed; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.6rem; display: flex; flex-direction: column; gap: 5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .color-popup-row { display: flex; gap: 6px; }
+    .color-popup-label { font-size: 0.58rem; color: #475569; text-transform: uppercase; letter-spacing: 0.07em; padding-top: 0.2rem; border-top: 1px solid #334155; }
+    .color-popup .cswatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s, opacity 0.1s; flex-shrink: 0; }
+    .color-popup .cswatch:hover:not(.taken):not(.premium-locked) { transform: scale(1.2); }
     .color-popup .cswatch.selected { border-color: white; transform: scale(1.15); }
     .color-popup .cswatch.taken { opacity: 0.2; cursor: not-allowed; }
+    .color-popup .cswatch.premium-locked { opacity: 0.35; position: relative; }
+    .color-popup .cswatch.premium-locked:hover { opacity: 0.6; }
+    .color-popup .cswatch.premium-unlocked { box-shadow: 0 0 0 1px #22c55e; }
+    /* Header layout */
+    #page-header { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; max-width: 520px; }
+    #header-brand { display: flex; flex-direction: column; cursor: pointer; }
+    #header-brand h1 { margin-bottom: 0.25rem; }
+    #header-stats { display: none; flex-direction: column; align-items: flex-end; gap: 0.15rem; padding-top: 0.45rem; min-width: 56px; }
+    .hstat { display: flex; align-items: baseline; gap: 0.25rem; }
+    .hstat-val { font-size: 0.88rem; font-weight: 900; color: var(--clr-primary-light); }
+    .hstat-label { font-size: 0.6rem; color: #475569; text-transform: uppercase; letter-spacing: 0.07em; }
+    /* Undo button */
+    .btn-undo { background: transparent; border: 1px solid var(--clr-primary); color: var(--clr-primary-light); border-radius: 8px; padding: 0.35rem 0.75rem; font-size: 0.78rem; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .btn-undo:hover { background: rgba(var(--clr-primary-rgb), 0.15); }
+    /* Reveal unclaimed words */
+    .btn-reveal { background: transparent; border: 1px solid #334155; color: #64748b; border-radius: 5px; padding: 0.15rem 0.5rem; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: all 0.15s; vertical-align: middle; margin-left: 0.4rem; }
+    .btn-reveal:hover { border-color: var(--clr-secondary); color: #2dd4bf; }
     .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: var(--clr-primary-light); text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
     .copy-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0.25rem; line-height: 1; flex-shrink: 0; transition: color 0.15s; }
     .copy-btn:hover { color: var(--clr-primary-light); }
@@ -159,8 +178,22 @@
 </head>
 <body>
 
-<h1 style="cursor:pointer" onclick="goHome()">LEXTERRA</h1>
-<p class="subtitle" id="subtitle">MULTIPLAYER</p>
+<div id="page-header">
+  <div id="header-brand" onclick="goHome()">
+    <h1>LEXTERRA</h1>
+    <p class="subtitle" id="subtitle">MULTIPLAYER</p>
+  </div>
+  <div id="header-stats">
+    <div class="hstat">
+      <span class="hstat-val" id="hstat-xp">0</span>
+      <span class="hstat-label">XP</span>
+    </div>
+    <div class="hstat">
+      <span class="hstat-val" id="hstat-coins">0</span>
+      <span class="hstat-label">coins</span>
+    </div>
+  </div>
+</div>
 
 <!-- Join / Create screen -->
 <div id="join-screen">
@@ -260,7 +293,8 @@
 <script type="module">
   import PartySocket from "https://esm.sh/partysocket@1.0.2";
 
-  const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Pink:'#f472b6', Yellow:'#eab308', Green:'#22c55e', Grey:'#9ca3af' };
+  const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Green:'#22c55e', Yellow:'#eab308', Grey:'#9ca3af', Orange:'#f97316', Pink:'#f472b6', Purple:'#a855f7', Teal:'#14b8a6' };
+  const PREMIUM_COLORS = new Set(['Orange','Pink','Purple','Teal']);
 
   const _bw = ["4r5e","5h1t","5hit","a55","anal","anus","ar5e","arrse","arse","ass","asses","assfucker","assfukka","asshole","assholes","asswhole","b17ch","b1tch","ballbag","balls","ballsack","bastard","beastial","beastiality","bellend","bestial","bestiality","biatch","bitch","bitcher","bitchers","bitches","bitchin","bitching","boiolas","bollock","bollok","boner","boob","boobs","buceta","bugger","bum","butthole","buttmuch","buttplug","c0ck","c0cksucker","cawk","chink","cipa","cl1t","clit","clitoris","clits","cnut","cock","cockface","cockhead","cockmunch","cockmuncher","cocks","cocksuck","cocksucked","cocksucker","cocksucking","cocksukka","cok","cokmuncher","coksucka","coon","crap","cum","cummer","cumming","cums","cumshot","cunilingus","cunillingus","cunnilingus","cunt","cuntlick","cuntlicker","cuntlicking","cunts","cyberfuc","cyberfuck","cyberfucked","cyberfucker","cyberfuckers","cyberfucking","d1ck","dick","dickhead","dildo","dildos","dink","dinks","dirsa","dlck","doggin","dogging","donkeyribber","doosh","duche","dyke","ejaculate","ejaculated","ejaculates","ejaculating","ejaculation","ejakulate","f4nny","fag","fagging","faggitt","faggot","faggs","fagot","fagots","fags","fanny","fannyflaps","fannyfucker","fanyy","fatass","fcuk","fcuker","fcuking","feck","fecker","felching","fellate","fellatio","fingerfuck","fingerfucked","fingerfucker","fingerfuckers","fingerfucking","fingerfucks","fistfuck","fistfucked","fistfucker","fistfuckers","fistfucking","fistfucks","flange","fook","fooker","fuck","fucka","fucked","fucker","fuckers","fuckhead","fuckheads","fuckin","fucking","fuckme","fucks","fuckwhit","fuckwit","fudgepacker","fuk","fuker","fukker","fukkin","fuks","fukwit","fux","gangbang","gangbanged","gangbangs","gaylord","gaysex","goatse","goddamn","goddamned","hardcoresex","heshe","hoar","hoare","hoer","homo","hore","horniest","horny","hotsex","jackoff","jap","jism","jiz","jizm","jizz","kawk","knob","knobead","knobed","knobend","knobhead","knobjocky","knobjokey","kock","kondum","kondums","kum","kummer","kumming","kums","kunilingus","l3itch","labia","lust","lusting","m0f0","m0fo","masochist","masterbate","masterbation","masterbations","masturbate","mof0","mofo","mothafuck","mothafucka","mothafucked","mothafucker","mothafuckers","mothafuckin","mothafucking","mothafucks","motherfuck","motherfucked","motherfucker","motherfuckers","motherfuckin","motherfucking","motherfuckka","motherfucks","muff","mutha","muthafecker","muthafuckker","muther","mutherfucker","n1gga","n1gger","nazi","nigg3r","nigg4h","nigga","niggah","niggas","niggaz","nigger","niggers","nob","nobhead","nobjocky","nobjokey","numbnuts","nutsack","orgasim","orgasims","orgasm","orgasms","pecker","penis","penisfucker","phonesex","phuck","phuk","phuked","phuking","phukked","phukking","phuks","phuq","pigfucker","pimpis","piss","pissed","pisser","pissers","pisses","pissflaps","pissin","pissing","pissoff","poop","porn","porno","pornography","pornos","prick","pricks","pron","pube","pusse","pussi","pussies","pussy","pussys","rectum","retard","rimjaw","rimming","sadist","schlong","screwing","scroat","scrote","scrotum","semen","shag","shagger","shaggin","shagging","shemale","shit","shitdick","shite","shited","shitey","shitfuck","shitfull","shithead","shiting","shits","shitted","shitter","shitters","shitting","shitty","skank","slut","sluts","smegma","smut","snatch","spunk","t1tties","teets","teez","testical","testicle","tit","titfuck","tits","titt","tittiefucker","titties","tittyfuck","tittywank","titwank","tosser","turd","twat","twathead","twatty","twunt","twunter","vagina","vulva","wang","wank","wanker","wanky","whoar","whore","willies","willy","xrated","xxx"];
   const _bwSet = new Set(_bw.map(w => w.replace(/[^a-z0-9]/g,'')));
@@ -370,6 +404,12 @@
   let hasRegisteredPublic = false;
   let lastLobbySnapshot = null;
 
+  // Player economy state
+  let playerCoins = 0;
+  let playerXp = 0;
+  let colorUnlocks = {};  // { "orange": expiryTimestamp, ... }
+  let coinConfig = { spendViewUnclaimed: 1, spendUndoLetter: 1, spendPremiumColor: 10 };
+
   // Game UI state
   let gameInited = false;
   let selLetter = null;
@@ -378,6 +418,7 @@
   let claimPath = null;
   let lastCur = null;
   let hasActedThisTurn = false;
+  let pendingUndo = false;
   let ghostMode = true;
   let lastMoveDesc = "";
   let frozenPlayers = null;
@@ -1185,29 +1226,129 @@
       document.removeEventListener('click', outsideHandler);
     }
     function outsideHandler() { closePopup(); }
-    Object.entries(COLORS).forEach(([name, hex]) => {
-      const sw = document.createElement('div');
-      sw.className = 'cswatch';
-      sw.style.background = hex;
-      sw.title = name;
-      if (name === myColor) sw.classList.add('selected');
-      if (takenColors.has(name)) {
-        sw.classList.add('taken');
-      } else {
-        sw.addEventListener('click', e => {
-          e.stopPropagation();
+
+    function buildSwatches() {
+      popup.innerHTML = '';
+      // Free colours row
+      const freeRow = document.createElement('div');
+      freeRow.className = 'color-popup-row';
+      Object.entries(COLORS).filter(([n]) => !PREMIUM_COLORS.has(n)).forEach(([name, hex]) => {
+        const sw = document.createElement('div');
+        sw.className = 'cswatch';
+        sw.style.background = hex;
+        sw.title = name;
+        if (name === myColor) sw.classList.add('selected');
+        if (takenColors.has(name)) {
+          sw.classList.add('taken');
+        } else {
+          sw.addEventListener('click', e => {
+            e.stopPropagation();
+            localStorage.setItem('lexterra_color', name);
+            socket.send(JSON.stringify({ type: 'recolor', color: name }));
+            closePopup();
+          });
+        }
+        freeRow.appendChild(sw);
+      });
+      popup.appendChild(freeRow);
+
+      // Premium section label
+      const lbl = document.createElement('div');
+      lbl.className = 'color-popup-label';
+      lbl.textContent = `Premium — ${coinConfig.spendPremiumColor} coin/mo`;
+      popup.appendChild(lbl);
+
+      // Premium colours row
+      const premRow = document.createElement('div');
+      premRow.className = 'color-popup-row';
+      Object.entries(COLORS).filter(([n]) => PREMIUM_COLORS.has(n)).forEach(([name, hex]) => {
+        const sw = document.createElement('div');
+        sw.className = 'cswatch';
+        sw.style.background = hex;
+        const key = name.toLowerCase();
+        const expiry = colorUnlocks[key];
+        const unlocked = expiry && expiry > Date.now();
+        if (name === myColor) sw.classList.add('selected');
+        if (takenColors.has(name)) {
+          sw.classList.add('taken');
+          sw.title = `${name} (taken)`;
+        } else if (unlocked) {
+          sw.classList.add('premium-unlocked');
+          const days = Math.ceil((expiry - Date.now()) / 86400000);
+          sw.title = `${name} — unlocked (${days}d left)`;
+          sw.addEventListener('click', e => {
+            e.stopPropagation();
+            localStorage.setItem('lexterra_color', name);
+            socket.send(JSON.stringify({ type: 'recolor', color: name }));
+            closePopup();
+          });
+        } else {
+          sw.classList.add('premium-locked');
+          sw.title = `${name} — unlock for ${coinConfig.spendPremiumColor} coins/month`;
+          sw.addEventListener('click', e => {
+            e.stopPropagation();
+            showUnlockConfirm(name, hex);
+          });
+        }
+        premRow.appendChild(sw);
+      });
+      popup.appendChild(premRow);
+    }
+
+    function showUnlockConfirm(name, hex) {
+      popup.innerHTML = '';
+      const cost = coinConfig.spendPremiumColor;
+      const canAfford = playerCoins >= cost;
+      const info = document.createElement('div');
+      info.style.cssText = 'font-size:0.78rem;color:#94a3b8;text-align:center;padding:0.25rem 0.1rem 0.5rem';
+      info.innerHTML = `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${hex};vertical-align:middle;margin-right:0.3rem"></span><strong style="color:#e2e8f0">${name}</strong><br><span style="font-size:0.68rem;color:#64748b">${cost} coins · 30 days · you have ${playerCoins}</span>`;
+      popup.appendChild(info);
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:6px;justify-content:center';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-secondary';
+      cancelBtn.style.cssText = 'flex:1;padding:0.3rem;font-size:0.75rem';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', e => { e.stopPropagation(); buildSwatches(); });
+      const unlockBtn = document.createElement('button');
+      unlockBtn.className = 'btn btn-primary';
+      unlockBtn.style.cssText = 'flex:1;padding:0.3rem;font-size:0.75rem';
+      unlockBtn.textContent = canAfford ? 'Unlock' : 'Not enough coins';
+      unlockBtn.disabled = !canAfford;
+      unlockBtn.addEventListener('click', async e => {
+        e.stopPropagation();
+        unlockBtn.disabled = true;
+        unlockBtn.textContent = '…';
+        try {
+          const res = await fetch(`https://${PARTYKIT_HOST}/parties/stats/main`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'colour_unlock', uuid: getPlayerUUID(), colour: name }),
+          });
+          if (!res.ok) throw new Error('failed');
+          const data = await res.json();
+          playerCoins = data.coins;
+          colorUnlocks[name.toLowerCase()] = data.expiry;
+          updateHeaderStats();
           localStorage.setItem('lexterra_color', name);
           socket.send(JSON.stringify({ type: 'recolor', color: name }));
           closePopup();
-        });
-      }
-      popup.appendChild(sw);
-    });
+        } catch {
+          unlockBtn.textContent = 'Error';
+          setTimeout(() => buildSwatches(), 1200);
+        }
+      });
+      btns.appendChild(cancelBtn);
+      btns.appendChild(unlockBtn);
+      popup.appendChild(btns);
+    }
+
+    buildSwatches();
     document.body.appendChild(popup);
     colorPopup = popup;
     const rect = dotEl.getBoundingClientRect();
-    const pw = 3 * 28 + 2 * 6 + 2 * 10;
-    const ph = 2 * 28 + 6 + 2 * 10;
+    const pw = 5 * 28 + 4 * 6 + 2 * 10;
+    const ph = 28 + 20 + 28 + 2 * 10;
     let left = rect.left + rect.width / 2 - pw / 2;
     let top = rect.bottom + 8;
     left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
@@ -1542,7 +1683,7 @@
       return;
     }
     const amActive = state.cur === myConnId;
-    if (!amActive) { card.innerHTML = ""; card.style.display = "none"; return; }
+    if (!amActive) { pendingUndo = false; card.innerHTML = ""; card.style.display = "none"; return; }
     card.style.display = "";
     const me = state.players[myConnId];
     const lettersLeft = me?.lettersLeft ?? 0;
@@ -1567,6 +1708,10 @@
       </button>
       ${!claimMode ? `<button class="btn btn-secondary" onclick="doPass()" style="flex:1">${hasActedThisTurn ? "Finish Turn" : "Pass"}</button>` : ""}
     </div>`;
+    if (pendingUndo && !claimMode) {
+      const cost = coinConfig.spendUndoLetter;
+      html += `<div style="text-align:center;margin-top:0.4rem"><button class="btn-undo" onclick="doUndo()">Undo placement — ${cost} coin${cost !== 1 ? 's' : ''}</button></div>`;
+    }
     const tMode = state.settings?.territoryMode;
     const badGuesses = state.boardFullBadGuesses ?? 0;
     if (badGuesses > 0 && isBoardFull() && tMode && tMode !== 'off') {
@@ -1680,12 +1825,14 @@
     if (!me || me.lettersLeft <= 0) return;
     socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter }));
     hasActedThisTurn = true;
+    pendingUndo = true;
     selLetter = null;
   }
 
   window.selectLetter = l => { selLetter = selLetter === l ? null : l; updateControls(); };
   window.toggleClaimMode = () => {
     claimMode = !claimMode; claimStart = null; claimPath = null;
+    if (claimMode) pendingUndo = false;
     updateControls(); updateGridCells(); updateClaimLines();
   };
   window.confirmClaim = () => {
@@ -1702,6 +1849,15 @@
     claimMode = false; claimStart = null; claimPath = null;
   };
   window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass", isRealPass: !hasActedThisTurn })); };
+  window.doUndo = () => {
+    if (!pendingUndo || !socket) return;
+    const cost = coinConfig.spendUndoLetter;
+    if (playerCoins < cost) { alert(`Not enough coins (need ${cost}, have ${playerCoins})`); return; }
+    spendCoins(cost);
+    pendingUndo = false;
+    socket.send(JSON.stringify({ type: "undo_place" }));
+    updateControls();
+  };
 
   window.showHelp = function() {
     const modal = document.getElementById('help-modal');
@@ -2029,7 +2185,13 @@
       setTimeout(() => {
         const result = countUnclaimedWords(state.grid, _n, _minLen, state.claimed ?? []);
         const el = document.getElementById('end-unclaimed-count');
-        if (el) el.textContent = result !== null ? `${result.count} word${result.count !== 1 ? 's' : ''} left unclaimed` : '';
+        if (el && result !== null) {
+          const cost = coinConfig.spendViewUnclaimed;
+          const w = result.count; const wLabel = `${w} word${w !== 1 ? 's' : ''} left unclaimed`;
+          el.innerHTML = w > 0
+            ? `${wLabel}<button class="btn-reveal" onclick="revealUnclaimedWords()">Reveal — ${cost} coin${cost !== 1 ? 's' : ''}</button>`
+            : wLabel;
+        }
         if (result?.words) {
           endUnclaimedWords = result.words;
           const listEl = document.getElementById('end-unclaimed-list');
@@ -2073,6 +2235,19 @@
         el.style.outline = 'none';
       });
     });
+
+    window.revealUnclaimedWords = function() {
+      const cost = coinConfig.spendViewUnclaimed;
+      if (playerCoins < cost) { alert(`Not enough coins (need ${cost}, have ${playerCoins})`); return; }
+      spendCoins(cost);
+      const section = document.getElementById('end-unclaimed-section');
+      if (section) section.style.display = '';
+      const countEl = document.getElementById('end-unclaimed-count');
+      if (countEl) {
+        const w = endUnclaimedWords?.length ?? 0;
+        countEl.innerHTML = `${w} word${w !== 1 ? 's' : ''} left unclaimed`;
+      }
+    };
 
     window.setEndClaimedSort = function(mode) {
       endClaimedSortMode = mode;
@@ -2370,6 +2545,49 @@
     return id;
   }
 
+  function updateHeaderStats() {
+    const el = document.getElementById('header-stats');
+    if (!el) return;
+    el.style.display = 'flex';
+    const xpEl = document.getElementById('hstat-xp');
+    const coinsEl = document.getElementById('hstat-coins');
+    if (xpEl) xpEl.textContent = playerXp >= 1000 ? (playerXp >= 10000 ? Math.floor(playerXp/1000)+'k' : (playerXp/1000).toFixed(1)+'k') : String(playerXp);
+    if (coinsEl) coinsEl.textContent = String(playerCoins);
+  }
+
+  async function loadPlayerStats() {
+    const uuid = getPlayerUUID();
+    const base = `https://${PARTYKIT_HOST}/parties/stats/main`;
+    try {
+      const [cr, xr, cfgr] = await Promise.all([
+        fetch(`${base}?coins=${uuid}`),
+        fetch(`${base}?playerXp=${uuid}`),
+        fetch(`${base}?config`),
+      ]);
+      const cd = await cr.json();
+      const xd = await xr.json();
+      const cfgd = await cfgr.json();
+      playerCoins = cd.coins ?? 0;
+      colorUnlocks = cd.colorUnlocks ?? {};
+      playerXp = xd.xp ?? 0;
+      if (cfgd.spendPremiumColor !== undefined) coinConfig.spendPremiumColor = cfgd.spendPremiumColor;
+      if (cfgd.spendUndoLetter !== undefined) coinConfig.spendUndoLetter = cfgd.spendUndoLetter;
+      if (cfgd.spendViewUnclaimed !== undefined) coinConfig.spendViewUnclaimed = cfgd.spendViewUnclaimed;
+    } catch {}
+    updateHeaderStats();
+  }
+
+  function spendCoins(amount) {
+    playerCoins = Math.max(0, playerCoins - amount);
+    updateHeaderStats();
+    const uuid = getPlayerUUID();
+    fetch(`https://${PARTYKIT_HOST}/parties/stats/main`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'coins_update', uuid, delta: -amount }),
+    }).catch(() => {});
+  }
+
   // Restore saved name on load
   const savedName = localStorage.getItem("lexterra_name");
   if (savedName) {
@@ -2627,6 +2845,7 @@
 
   document.getElementById('footer-year').textContent = new Date().getFullYear();
 
+  loadPlayerStats();
   connectLobby();
   fetchLeaderboard();
 
@@ -2689,7 +2908,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.22 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.23 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

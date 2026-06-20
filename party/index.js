@@ -359,6 +359,7 @@ export default {
         if (state.grid[r][c] !== null) return;
         state.grid[r][c] = { letter, pi: state.cur };
         state.players[state.cur].lettersLeft--;
+        state.players[state.cur].lastPlacement = { r, c };
         state.consecutivePasses = 0;
         state.players[state.cur].passesThisRound = 0;
         await room.storage.put("state", state);
@@ -387,6 +388,7 @@ export default {
         state.players[state.cur].score += score;
         state.players[state.cur].wordsFound++;
         state.players[state.cur].lettersLeft++;
+        delete state.players[state.cur].lastPlacement;
         state.consecutivePasses = 0;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
         state.players[state.cur].passesThisRound = 0;
@@ -402,12 +404,28 @@ export default {
         break;
       }
 
+      case "undo_place": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        if (state.cur !== conn.id) return;
+        const lp = state.players[state.cur].lastPlacement;
+        if (!lp) return;
+        if (state.grid[lp.r]?.[lp.c]?.pi !== state.cur) return;
+        state.grid[lp.r][lp.c] = null;
+        state.players[state.cur].lettersLeft++;
+        delete state.players[state.cur].lastPlacement;
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        break;
+      }
+
       // A player passes their turn
       case "pass": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         const passCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(passCurBot && state.host === conn.id)) return;
+        delete state.players[state.cur].lastPlacement;
         state.consecutivePasses++;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
         state.boardFullBadGuesses = 0;
