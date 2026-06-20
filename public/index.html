@@ -70,6 +70,10 @@
     @media (hover: hover) { .toggle-btn:hover:not(:disabled) { border-color: var(--clr-primary); color: #e2e8f0; } }
     .toggle-btn.selected { border-color: var(--clr-primary); background: rgba(var(--clr-primary-rgb),0.15); color: var(--clr-primary-light); }
     .toggle-btn:disabled { opacity: 0.35; cursor: default; }
+    .seg-tab-bar { display:flex; background:#0f172a; border-radius:10px; padding:3px; gap:2px; }
+    .seg-tab { flex:1; padding:0.45rem 0.6rem; background:transparent; border:none; color:#64748b; border-radius:7px; font-size:0.85rem; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+    .seg-tab.selected { background:var(--clr-primary); color:#fff; box-shadow:0 1px 5px rgba(0,0,0,0.4); }
+    @media (hover:hover) { .seg-tab:not(.selected):hover { color:#e2e8f0; } }
     .name-input { background: transparent; border: none; border-bottom: 2px solid #334155; color: white; padding: 0.2rem 0; font-size: 0.95rem; font-weight: bold; outline: none; flex: 1; min-width: 60px; text-transform: uppercase; letter-spacing: 0.05em; }
     .name-input:focus { border-bottom-color: var(--clr-primary); }
     .name-input::placeholder { color: #475569; font-weight: normal; text-transform: none; letter-spacing: 0; }
@@ -186,10 +190,10 @@
   </div>
 
   <div class="card" id="high-scores-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.5rem">
-      <div style="display:flex;gap:0.25rem">
-        <button class="toggle-btn selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')" style="padding:0.3rem 0.7rem;font-size:0.82rem;font-weight:600">Leaderboard</button>
-        <button class="toggle-btn" id="lb-view-highscores" onclick="lbSetTab('highscores')" style="padding:0.3rem 0.7rem;font-size:0.82rem;font-weight:600">High Scores</button>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+      <div class="seg-tab-bar" style="flex:1">
+        <button class="seg-tab selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')">Leaderboard</button>
+        <button class="seg-tab" id="lb-view-highscores" onclick="lbSetTab('highscores')">High Scores</button>
       </div>
       <div style="display:flex;gap:0.25rem;flex-shrink:0">
         <button class="toggle-btn" id="lb-filter-all" onclick="lbSetCompetitive(false)" style="padding:0.22rem 0.55rem;font-size:0.7rem">All</button>
@@ -2132,8 +2136,9 @@
 
   window.lbSetTab = function(tab) {
     lbTab = tab;
-    document.getElementById('lb-view-leaderboard')?.classList.toggle('selected', tab === 'leaderboard');
-    document.getElementById('lb-view-highscores')?.classList.toggle('selected', tab === 'highscores');
+    ['leaderboard', 'highscores'].forEach(t =>
+      document.getElementById(`lb-view-${t}`)?.classList.toggle('selected', t === tab)
+    );
     lbExpanded = false;
     renderLeaderboard();
   };
@@ -2543,7 +2548,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.8 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.9 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
