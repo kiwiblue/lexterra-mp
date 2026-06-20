@@ -325,6 +325,7 @@ export default {
         state.cur = state.turnOrder[0];
         state.consecutivePasses = 0;
         state.consecutiveHumanPasses = 0;
+        state.boardFullBadGuesses = 0;
         // Only the first player gets a letter; everyone else starts at 0
         Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
         state.players[state.cur].lettersLeft = 1;
@@ -375,6 +376,7 @@ export default {
         state.consecutivePasses = 0;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
         state.players[state.cur].passesThisRound = 0;
+        state.boardFullBadGuesses = 0;
         state.lastActivity = Date.now();
         if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { lastActivity: state.lastActivity } });
         if (state.territory) {
@@ -394,6 +396,7 @@ export default {
         if (state.cur !== conn.id && !(passCurBot && state.host === conn.id)) return;
         state.consecutivePasses++;
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
+        state.boardFullBadGuesses = 0;
         if (msg.isRealPass !== false) {
           state.players[state.cur].passesThisRound = (state.players[state.cur].passesThisRound ?? 0) + 1;
           state.players[state.cur].totalPasses = (state.players[state.cur].totalPasses ?? 0) + 1;
@@ -408,6 +411,36 @@ export default {
           state.phase = "ended";
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
           await notifyStats(room, state, "completed");
+        }
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        if (state.phase === "playing") await resetAlarm(room);
+        break;
+      }
+
+      // Board-full wrong guess — count toward auto-pass limit (conquest/exclusive only)
+      case "bad_guess": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing") return;
+        if (state.cur !== conn.id) return;
+        if (!state.settings?.territoryMode || state.settings.territoryMode === "off") return;
+        const boardFull = state.grid?.every(row => row.every(cell => cell !== null));
+        if (!boardFull) return;
+        state.boardFullBadGuesses = (state.boardFullBadGuesses ?? 0) + 1;
+        if (state.boardFullBadGuesses >= 5) {
+          state.boardFullBadGuesses = 0;
+          state.consecutivePasses++;
+          if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
+          const idx = state.turnOrder.indexOf(state.cur);
+          const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
+          state.players[state.cur].lettersLeft = 0;
+          state.players[nextId].lettersLeft = 1;
+          state.cur = nextId;
+          if (state.consecutivePasses >= state.turnOrder.length * 2) {
+            state.phase = "ended";
+            if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+            await notifyStats(room, state, "completed");
+          }
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
@@ -679,6 +712,7 @@ export default {
           turnOrder: [],
           consecutivePasses: 0,
           consecutiveHumanPasses: 0,
+          boardFullBadGuesses: 0,
         };
         Object.keys(fresh.players).forEach(id => {
           fresh.players[id].score = 0;
