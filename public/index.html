@@ -186,8 +186,11 @@
   </div>
 
   <div class="card" id="high-scores-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem">
-      <h2 style="margin:0">Leaderboard</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.5rem">
+      <div style="display:flex;gap:0.25rem">
+        <button class="toggle-btn selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')" style="padding:0.3rem 0.7rem;font-size:0.82rem;font-weight:600">Leaderboard</button>
+        <button class="toggle-btn" id="lb-view-highscores" onclick="lbSetTab('highscores')" style="padding:0.3rem 0.7rem;font-size:0.82rem;font-weight:600">High Scores</button>
+      </div>
       <div style="display:flex;gap:0.25rem;flex-shrink:0">
         <button class="toggle-btn" id="lb-filter-all" onclick="lbSetCompetitive(false)" style="padding:0.22rem 0.55rem;font-size:0.7rem">All</button>
         <button class="toggle-btn selected" id="lb-filter-comp" onclick="lbSetCompetitive(true)" style="padding:0.22rem 0.55rem;font-size:0.7rem">Competitive</button>
@@ -312,7 +315,7 @@
   let state = null;
   let lobbySocket = null;
   let publicGames = {};
-  let lbMode = 'conquest', lbSizeFilter = null, lbExpanded = false, lbCompetitive = true, lbData = { players: [], all: [] };
+  let lbMode = 'conquest', lbSizeFilter = null, lbExpanded = false, lbCompetitive = true, lbData = { players: [], all: [] }, lbTab = 'leaderboard';
   let endLbCompetitive = true, endLbAll = [], endLbBoardSize = 5;
   let makePublic = true;
   let hasRegisteredPublic = false;
@@ -2093,52 +2096,47 @@
     </div>`;
   }
 
-  function lbSectionLabel(text) {
-    return `<div style="font-size:0.68rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;padding:0.6rem 0 0.2rem 0;border-top:1px solid #1e293b;margin-top:0.25rem">${text}</div>`;
-  }
-
   function renderLeaderboard() {
     const rows = document.getElementById('lb-rows');
     if (!rows) return;
     const { players, all } = lbData;
-
-    // Players section: one per player, sorted by best or bestComp
-    let filteredPlayers = lbCompetitive
-      ? players.filter(p => p.bestComp).sort((a, b) => b.bestComp.score - a.bestComp.score)
-      : [...players];
-    if (lbSizeFilter !== null) {
-      filteredPlayers = filteredPlayers.filter(p => {
-        const e = lbCompetitive ? p.bestComp : p.best;
-        return (e?.boardSize ?? 5) === lbSizeFilter;
-      });
-    }
-
-    // All-scores section: every game result, filtered
-    let filteredAll = lbCompetitive ? all.filter(isCompetitive) : [...all];
-    if (lbSizeFilter !== null) filteredAll = filteredAll.filter(e => (e.boardSize ?? 5) === lbSizeFilter);
-
     const noEntry = lbCompetitive
       ? '<p class="placeholder" style="font-size:0.78rem">No competitive scores yet.</p>'
       : '<p class="placeholder" style="font-size:0.78rem">No scores yet.</p>';
-
     const cap = lbExpanded ? 50 : 5;
-    const playersHtml = filteredPlayers.length
-      ? filteredPlayers.slice(0, cap).map((p, i) => makeLbRow(lbCompetitive ? p.bestComp : p.best, i + 1)).join('')
-      : noEntry;
-    const allHtml = filteredAll.length
-      ? filteredAll.slice(0, cap).map((e, i) => makeLbRow(e, i + 1)).join('')
-      : noEntry;
 
-    const hasMore = filteredPlayers.length > 5 || filteredAll.length > 5;
-    const showMoreBtn = hasMore
+    let filtered, rowFn;
+    if (lbTab === 'leaderboard') {
+      filtered = lbCompetitive
+        ? players.filter(p => p.bestComp).sort((a, b) => b.bestComp.score - a.bestComp.score)
+        : [...players];
+      if (lbSizeFilter !== null) {
+        filtered = filtered.filter(p => {
+          const e = lbCompetitive ? p.bestComp : p.best;
+          return (e?.boardSize ?? 5) === lbSizeFilter;
+        });
+      }
+      rowFn = (p, i) => makeLbRow(lbCompetitive ? p.bestComp : p.best, i + 1);
+    } else {
+      filtered = lbCompetitive ? all.filter(isCompetitive) : [...all];
+      if (lbSizeFilter !== null) filtered = filtered.filter(e => (e.boardSize ?? 5) === lbSizeFilter);
+      rowFn = (e, i) => makeLbRow(e, i + 1);
+    }
+
+    const html = filtered.length ? filtered.slice(0, cap).map(rowFn).join('') : noEntry;
+    const showMore = filtered.length > 5
       ? `<div style="text-align:center;margin-top:0.5rem"><button class="btn btn-secondary" style="font-size:0.75rem;padding:0.3rem 0.75rem;width:100%" onclick="lbToggleExpand()">${lbExpanded ? 'Show less' : 'Show more'}</button></div>`
       : '';
-
-    rows.innerHTML =
-      lbSectionLabel('Players') + playersHtml +
-      lbSectionLabel('High Scores') + allHtml +
-      showMoreBtn;
+    rows.innerHTML = html + showMore;
   }
+
+  window.lbSetTab = function(tab) {
+    lbTab = tab;
+    document.getElementById('lb-view-leaderboard')?.classList.toggle('selected', tab === 'leaderboard');
+    document.getElementById('lb-view-highscores')?.classList.toggle('selected', tab === 'highscores');
+    lbExpanded = false;
+    renderLeaderboard();
+  };
 
   window.lbSetCompetitive = function(val) {
     lbCompetitive = val;
@@ -2545,7 +2543,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.7 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.8 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
