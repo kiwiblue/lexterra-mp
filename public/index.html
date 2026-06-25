@@ -728,9 +728,8 @@
     // Settings section
     const settingsSection = document.getElementById("settings-section");
     const boardSizes = [5, 8, 10];
-    const minWords = (gameMode === 'fort' && s.boardSize === 5) ? [2, 3, 4] : [3, 4, 5];
-
     const gameMode = s.territoryMode === 'conquest' ? 'conquest' : s.territoryMode === 'exclusive' ? 'fort' : 'search';
+    const minWords = (gameMode === 'fort' && s.boardSize === 5) ? [2, 3, 4] : [3, 4, 5];
     const modeDescs = {
       search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
       conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
@@ -2919,7 +2918,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.30 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.31 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
