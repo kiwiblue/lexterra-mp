@@ -728,7 +728,7 @@
     // Settings section
     const settingsSection = document.getElementById("settings-section");
     const boardSizes = [5, 8, 10];
-    const minWords = [3, 4, 5];
+    const minWords = (gameMode === 'fort' && s.boardSize === 5) ? [2, 3, 4] : [3, 4, 5];
 
     const gameMode = s.territoryMode === 'conquest' ? 'conquest' : s.territoryMode === 'exclusive' ? 'fort' : 'search';
     const modeDescs = {
@@ -768,7 +768,11 @@
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
           const val = (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
-          socket.send(JSON.stringify({ type: 'settings', settings: { [key]: val } }));
+          const settingsUpdate = { [key]: val };
+          if (key === 'boardSize' && val === 5 && state.settings.territoryMode === 'exclusive' && (state.settings.minWordLen ?? 3) > 4) {
+            settingsUpdate.minWordLen = 4;
+          }
+          socket.send(JSON.stringify({ type: 'settings', settings: settingsUpdate }));
         });
       });
     }
@@ -2668,6 +2672,8 @@
     const currentMode = state.settings.territoryMode === 'exclusive' ? 'fort' : null;
     const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive' }, search: { territoryMode: 'off' } }[mode];
     if (!updates) return;
+    if (mode === 'fort' && state.settings.boardSize === 5) updates.boardSize = 8;
+    if (mode !== 'fort' && (state.settings.minWordLen ?? 3) < 3) updates.minWordLen = 3;
     socket.send(JSON.stringify({ type: 'settings', settings: updates }));
   };
 
@@ -2913,7 +2919,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.29 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.30 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
