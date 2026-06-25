@@ -455,7 +455,6 @@
   let claimedSortMode = 'recent'; // 'recent' | 'alpha'
   let onlineCount = 0;
   let lobbyCount = 0;
-  let preFortBoardSize = null;
   let wordSet = null;
   function getWordSet() {
     if (wordSet) return wordSet;
@@ -748,13 +747,12 @@
       <p class="mode-bg-desc">${modeDescs[gameMode]}</p>
       <div class="card">
         <h2>Game Settings</h2>
-        ${gameMode !== 'fort' ? `
         <div class="setting-row">
           <span class="setting-label">Board</span>
           <div class="btn-group">
             ${boardSizes.map(n => `<button class="toggle-btn${s.boardSize===n?' selected':''}" data-key="boardSize" data-val="${n}"${!amHost?' disabled':''}>${n}×${n}</button>`).join('')}
           </div>
-        </div>` : ''}
+        </div>
         <div class="setting-row">
           <span class="setting-label">Min Word</span>
           <div class="btn-group">
@@ -2450,11 +2448,7 @@
       el.classList.toggle('selected', el.id === `lb-tab-${mode}`)
     );
     const sizeFilterRow = document.getElementById('lb-size-filter-row');
-    if (mode === 'exclusive') {
-      if (sizeFilterRow) sizeFilterRow.style.display = 'none';
-    } else {
-      if (sizeFilterRow) sizeFilterRow.style.display = 'flex';
-    }
+    if (sizeFilterRow) sizeFilterRow.style.display = 'flex';
     lbSizeFilter = null;
     document.querySelectorAll('#lb-sf-all,#lb-sf-5,#lb-sf-7,#lb-sf-10').forEach(el =>
       el.classList.toggle('selected', el.id === 'lb-sf-all')
@@ -2672,14 +2666,8 @@
   window.setGameMode = function(mode) {
     if (!socket || !isHost) return;
     const currentMode = state.settings.territoryMode === 'exclusive' ? 'fort' : null;
-    const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive', boardSize: 10 }, search: { territoryMode: 'off' } }[mode];
+    const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive' }, search: { territoryMode: 'off' } }[mode];
     if (!updates) return;
-    if (mode === 'fort' && currentMode !== 'fort') {
-      preFortBoardSize = state.settings.boardSize;
-    } else if (currentMode === 'fort' && mode !== 'fort') {
-      updates.boardSize = preFortBoardSize ?? 5;
-      preFortBoardSize = null;
-    }
     socket.send(JSON.stringify({ type: 'settings', settings: updates }));
   };
 
@@ -2925,7 +2913,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.28 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.29 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
