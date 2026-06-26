@@ -729,7 +729,7 @@
     const settingsSection = document.getElementById("settings-section");
     const boardSizes = [5, 8, 10];
     const gameMode = s.territoryMode === 'conquest' ? 'conquest' : s.territoryMode === 'exclusive' ? 'fort' : 'search';
-    const minWords = (gameMode === 'fort' && s.boardSize === 5) ? [2, 3, 4] : [3, 4, 5];
+    const minWords = [3, 4, 5];
     const modeDescs = {
       search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
       conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
@@ -767,13 +767,7 @@
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
           const val = (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
-          const settingsUpdate = { [key]: val };
-          if (key === 'boardSize' && val === 5 && state.settings.territoryMode === 'exclusive') {
-            const cur = state.settings.minWordLen ?? 3;
-            if (cur === 3) settingsUpdate.minWordLen = 2;
-            else if (cur > 4) settingsUpdate.minWordLen = 4;
-          }
-          socket.send(JSON.stringify({ type: 'settings', settings: settingsUpdate }));
+          socket.send(JSON.stringify({ type: 'settings', settings: { [key]: val } }));
         });
       });
     }
@@ -2674,7 +2668,6 @@
     const updates = { conquest: { territoryMode: 'conquest' }, fort: { territoryMode: 'exclusive' }, search: { territoryMode: 'off' } }[mode];
     if (!updates) return;
     if (mode === 'fort' && state.settings.boardSize === 5) updates.boardSize = 8;
-    if (mode !== 'fort' && (state.settings.minWordLen ?? 3) < 3) updates.minWordLen = 3;
     socket.send(JSON.stringify({ type: 'settings', settings: updates }));
   };
 
@@ -2920,7 +2913,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.32 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.33 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
