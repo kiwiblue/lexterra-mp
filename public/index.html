@@ -2987,6 +2987,8 @@
         localStorage.setItem("lexterra_email", email);
         document.getElementById("auth-input-view").style.display = "none";
         document.getElementById("auth-sent-view").style.display  = "";
+        const card = document.getElementById("auth-card");
+        if (card) { card.style.background = "#1c1200"; card.style.borderColor = "#d97706"; }
       } else {
         status.textContent = data.error || "Something went wrong.";
         btn.disabled = false;
@@ -3076,7 +3078,7 @@
 </div>
 
 <div id="auth-bar" style="display:none;max-width:420px;margin:0 auto;padding:12px 12px 12px">
-  <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;position:relative">
+  <div id="auth-card" style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;position:relative">
     <button id="auth-dismiss-btn" onclick="dismissAuthBar()" title="Dismiss" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#475569;font-size:1rem;cursor:pointer;line-height:1;padding:0">✕</button>
     <div id="auth-input-view">
       <p style="font-size:0.75rem;color:#94a3b8;margin:0 0 8px;padding-right:1.5rem">Enter your email to save or restore your coins, high scores, and game history.</p>
@@ -3087,7 +3089,8 @@
       <p id="auth-status" style="font-size:0.72rem;color:#ef4444;margin:6px 0 0;min-height:1em"></p>
     </div>
     <div id="auth-sent-view" style="display:none;text-align:center">
-      <p style="font-size:0.8rem;color:#94a3b8;margin:0">Check your inbox and click the link to save your coins, high scores, and game history to your account.</p>
+      <p style="font-size:0.95rem;font-weight:700;color:#fbbf24;margin:0 0 6px;letter-spacing:0.03em">Waiting…</p>
+      <p style="font-size:0.75rem;color:#fcd87a;margin:0">Check your inbox and click the link to save your coins, high scores, and game history to your account.</p>
     </div>
     <div id="auth-loggedin-view" style="display:none;align-items:center;justify-content:space-between;gap:8px">
       <p style="font-size:0.75rem;color:#94a3b8;margin:0">Logged in as <strong id="auth-loggedin-email" style="color:#e2e8f0;font-weight:600"></strong></p>
@@ -3097,7 +3100,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.42 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.43 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
