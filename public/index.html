@@ -266,6 +266,13 @@
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
         </svg>
       </button>
+      <button class="copy-btn" id="share-room-btn" onclick="shareGame()" title="Share game link">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+          <polyline points="16 6 12 2 8 6"/>
+          <line x1="12" y1="2" x2="12" y2="15"/>
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -2676,6 +2683,28 @@
     socket.send(JSON.stringify({ type: "start" }));
   };
 
+  window.shareGame = async function() {
+    const url = `${location.origin}/?room=${roomId}`;
+    const btn = document.getElementById("share-room-btn");
+    const flash = (ok) => {
+      if (!btn) return;
+      const orig = btn.innerHTML;
+      btn.innerHTML = ok
+        ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+        : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Join my Lexterra game!", text: `Join my Lexterra game — room code: ${roomId}`, url });
+      } catch (e) {
+        if (e.name !== "AbortError") navigator.clipboard.writeText(url).then(() => flash(true)).catch(() => flash(false));
+      }
+    } else {
+      navigator.clipboard.writeText(url).then(() => flash(true)).catch(() => flash(false));
+    }
+  };
+
   window.copyRoomCode = function() {
     navigator.clipboard.writeText(roomId).then(() => {
       const btn = document.getElementById("copy-code-btn-game") ?? document.getElementById("copy-code-btn");
@@ -2977,8 +3006,19 @@
   initAuthBar();
 
   const _viewSnap = new URLSearchParams(location.search).get('view');
+  const _roomParam = new URLSearchParams(location.search).get('room');
   if (_viewSnap) {
     loadAndRenderSnapshot(_viewSnap);
+  } else if (_roomParam) {
+    // Auto-join from share link — clear any pending rejoin so it doesn't conflict
+    window.history.replaceState({}, '', location.pathname);
+    localStorage.removeItem("lexterra_room");
+    localStorage.removeItem("lexterra_connId");
+    const _shareCode = _roomParam.toUpperCase().slice(0, 6);
+    connect(_shareCode);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "join", name: getPlayerName(), color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors() }));
+    }, { once: true });
   } else {
     // Auto-rejoin if player refreshed mid-game
     const _savedRoom = localStorage.getItem("lexterra_room");
@@ -3056,7 +3096,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.40 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.41 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
