@@ -2874,18 +2874,29 @@
   })();
 
   // ── Auth bar ───────────────────────────────────────────────────────────
+  function showLoggedInState(email) {
+    document.getElementById("auth-loggedin-email").textContent = email;
+    document.getElementById("auth-input-view").style.display  = "none";
+    document.getElementById("auth-sent-view").style.display   = "none";
+    document.getElementById("auth-loggedin-view").style.display = "flex";
+    document.getElementById("auth-dismiss-btn").style.display = "none";
+    document.getElementById("auth-bar").style.display = "";
+  }
+
   async function initAuthBar() {
     const bar = document.getElementById("auth-bar");
     if (!bar) return;
-    const saved = localStorage.getItem("lexterra_email");
-    if (saved) { bar.style.display = "none"; return; }
+    let email = localStorage.getItem("lexterra_email");
+    if (!email) {
+      // Server lookup — handles the case where the user cleared only lexterra_email
+      try {
+        const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "lookup", uuid: getPlayerUUID() }) });
+        const data = await res.json();
+        if (data.email) { email = data.email; localStorage.setItem("lexterra_email", data.email); }
+      } catch {}
+    }
+    if (email) { showLoggedInState(email); return; }
     if (localStorage.getItem("lexterra_auth_dismissed")) { bar.style.display = "none"; return; }
-    // Check server in case this UUID already has an email (e.g. same device, cleared email key)
-    try {
-      const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "lookup", uuid: getPlayerUUID() }) });
-      const data = await res.json();
-      if (data.email) { localStorage.setItem("lexterra_email", data.email); bar.style.display = "none"; return; }
-    } catch {}
     bar.style.display = "";
   }
 
@@ -2893,6 +2904,16 @@
     localStorage.setItem("lexterra_auth_dismissed", "1");
     const bar = document.getElementById("auth-bar");
     if (bar) bar.style.display = "none";
+  };
+
+  window.authSignOut = function() {
+    localStorage.removeItem("lexterra_email");
+    localStorage.removeItem("lexterra_auth_dismissed");
+    document.getElementById("auth-loggedin-view").style.display = "none";
+    document.getElementById("auth-input-view").style.display   = "";
+    document.getElementById("auth-dismiss-btn").style.display  = "";
+    document.getElementById("auth-status").textContent = "";
+    document.getElementById("auth-bar").style.display  = "";
   };
 
   window.authSubmitEmail = async function() {
@@ -2994,9 +3015,9 @@
 
 <div id="auth-bar" style="display:none;max-width:420px;margin:0 auto;padding:12px 12px 12px">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;position:relative">
-    <button onclick="dismissAuthBar()" title="Dismiss" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#475569;font-size:1rem;cursor:pointer;line-height:1;padding:0">✕</button>
+    <button id="auth-dismiss-btn" onclick="dismissAuthBar()" title="Dismiss" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#475569;font-size:1rem;cursor:pointer;line-height:1;padding:0">✕</button>
     <div id="auth-input-view">
-      <p style="font-size:0.75rem;color:#94a3b8;margin:0 0 8px;padding-right:1.5rem">Don't lose your coins &amp; high scores — save your progress with your email.</p>
+      <p style="font-size:0.75rem;color:#94a3b8;margin:0 0 8px;padding-right:1.5rem">Enter your email to save or restore your coins, high scores, and game history.</p>
       <div style="display:flex;gap:8px">
         <input type="email" id="auth-email-input" placeholder="your@email.com" onkeydown="if(event.key==='Enter')authSubmitEmail()" style="flex:1;min-width:0;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:6px 10px;color:#e2e8f0;font-size:0.8rem;outline:none">
         <button id="auth-submit-btn" onclick="authSubmitEmail()" style="background:#4a90d9;color:white;border:none;border-radius:6px;padding:6px 12px;font-size:0.8rem;cursor:pointer;white-space:nowrap;font-weight:600">Save Progress</button>
@@ -3006,11 +3027,15 @@
     <div id="auth-sent-view" style="display:none;text-align:center">
       <p style="font-size:0.8rem;color:#94a3b8;margin:0">Check your inbox and click the link to save your coins, high scores, and game history to your account.</p>
     </div>
+    <div id="auth-loggedin-view" style="display:none;align-items:center;justify-content:space-between;gap:8px">
+      <p style="font-size:0.75rem;color:#94a3b8;margin:0">Logged in as <strong id="auth-loggedin-email" style="color:#e2e8f0;font-weight:600"></strong></p>
+      <button onclick="authSignOut()" style="background:none;border:1px solid #334155;border-radius:6px;padding:4px 10px;color:#64748b;font-size:0.72rem;cursor:pointer;white-space:nowrap">Sign out</button>
+    </div>
   </div>
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.38 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.39 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
