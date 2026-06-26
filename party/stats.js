@@ -183,6 +183,79 @@ export default {
         });
       }
 
+      // ── UUID merge (called by auth party when a returning player links a second browser) ──
+      if (msg.type === "merge_uuid" && msg.fromUuid && msg.toUuid && msg.secret === "lx-p4rty-merge") {
+        const { fromUuid, toUuid } = msg;
+        if (fromUuid === toUuid) return new Response("ok", { headers: CORS });
+
+        // Leaderboards
+        for (const mode of ["conquest", "exclusive", "off"]) {
+          const playersKey = `lb_${mode}_players`;
+          const allKey     = `lb_${mode}_all`;
+
+          let players  = (await room.storage.get(playersKey)) ?? [];
+          const fromPi = players.findIndex(p => p.uuid === fromUuid);
+          const toPi   = players.findIndex(p => p.uuid === toUuid);
+          if (fromPi >= 0) {
+            if (toPi >= 0) {
+              const from = players[fromPi], to = players[toPi];
+              if (from.best.score > to.best.score) to.best = { ...from.best, uuid: toUuid };
+              if (from.bestComp && (!to.bestComp || from.bestComp.score > to.bestComp.score))
+                to.bestComp = { ...from.bestComp, uuid: toUuid };
+              players.splice(fromPi, 1);
+            } else {
+              players[fromPi].uuid = toUuid;
+              if (players[fromPi].best)     players[fromPi].best.uuid     = toUuid;
+              if (players[fromPi].bestComp) players[fromPi].bestComp.uuid = toUuid;
+            }
+            players.sort((a, b) => b.best.score - a.best.score);
+            await room.storage.put(playersKey, players);
+          }
+
+          let all = (await room.storage.get(allKey)) ?? [];
+          let allChanged = false;
+          for (const e of all) { if (e.uuid === fromUuid) { e.uuid = toUuid; allChanged = true; } }
+          if (allChanged) { all.sort((a, b) => b.score - a.score); await room.storage.put(allKey, all.slice(0, 100)); }
+        }
+
+        // XP
+        let xp = (await room.storage.get("player_xp")) ?? [];
+        const fromXi = xp.findIndex(p => p.uuid === fromUuid);
+        const toXi   = xp.findIndex(p => p.uuid === toUuid);
+        if (fromXi >= 0) {
+          if (toXi >= 0) { xp[toXi].xp += xp[fromXi].xp; xp[toXi].gamesPlayed += xp[fromXi].gamesPlayed; xp.splice(fromXi, 1); }
+          else { xp[fromXi].uuid = toUuid; }
+          xp.sort((a, b) => b.xp - a.xp);
+          await room.storage.put("player_xp", xp);
+        }
+
+        // Coins, colorUnlocks, dates
+        let coins = (await room.storage.get("player_coins")) ?? [];
+        const fromCi = coins.findIndex(p => p.uuid === fromUuid);
+        const toCi   = coins.findIndex(p => p.uuid === toUuid);
+        if (fromCi >= 0) {
+          if (toCi >= 0) {
+            coins[toCi].coins = (coins[toCi].coins ?? 0) + (coins[fromCi].coins ?? 0);
+            if (coins[fromCi].colorUnlocks) {
+              if (!coins[toCi].colorUnlocks) coins[toCi].colorUnlocks = {};
+              for (const [k, v] of Object.entries(coins[fromCi].colorUnlocks)) {
+                if (!coins[toCi].colorUnlocks[k] || v > coins[toCi].colorUnlocks[k]) coins[toCi].colorUnlocks[k] = v;
+              }
+            }
+            if (coins[fromCi].lastPlayDate && (!coins[toCi].lastPlayDate || coins[fromCi].lastPlayDate > coins[toCi].lastPlayDate))
+              coins[toCi].lastPlayDate = coins[fromCi].lastPlayDate;
+            if (coins[fromCi].lastWinDate && (!coins[toCi].lastWinDate || coins[fromCi].lastWinDate > coins[toCi].lastWinDate))
+              coins[toCi].lastWinDate = coins[fromCi].lastWinDate;
+            coins.splice(fromCi, 1);
+          } else {
+            coins[fromCi].uuid = toUuid;
+          }
+          await room.storage.put("player_coins", coins);
+        }
+
+        return new Response("ok", { headers: CORS });
+      }
+
       if (msg.type !== "game_end") return new Response("ok");
 
       const s = (await room.storage.get("stats")) ?? EMPTY();

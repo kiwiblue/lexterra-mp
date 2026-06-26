@@ -6,6 +6,8 @@
 // ── Config ────────────────────────────────────────────────────────────────
 const SITE_URL   = "https://lexterragame.com";
 const FROM_EMAIL = "Lexterra <noreply@lexterragame.com>";
+const STATS_URL  = "https://lexterra-mp.kiwiblue.partykit.dev/parties/stats/main";
+const MERGE_SECRET = "lx-p4rty-merge";
 
 const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MS   =  5 * 60 * 1000; //  5 minutes between requests per email
@@ -101,7 +103,9 @@ export default {
         if (v.expiry < now) delete tokens[k];
       }
       const token = generateToken();
-      tokens[token] = { email: emailNorm, uuid: canonical, expiry: now + TOKEN_EXPIRY_MS };
+      // mergeFrom: if this is a returning user from a new browser, record their current UUID so we can merge on verify
+      const mergeFrom = (existing && uuid !== canonical) ? uuid : null;
+      tokens[token] = { email: emailNorm, uuid: canonical, mergeFrom, expiry: now + TOKEN_EXPIRY_MS };
       await room.storage.put("tokens", tokens);
 
       rateLimits[emailNorm] = now;
@@ -131,6 +135,17 @@ export default {
 
       delete tokens[token]; // single-use
       await room.storage.put("tokens", tokens);
+
+      // Merge the old UUID's stats/coins/XP into the canonical UUID (best-effort)
+      if (entry.mergeFrom && entry.mergeFrom !== entry.uuid) {
+        try {
+          await fetch(STATS_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "merge_uuid", fromUuid: entry.mergeFrom, toUuid: entry.uuid, secret: MERGE_SECRET }),
+          });
+        } catch {}
+      }
 
       return json({ ok: true, uuid: entry.uuid, email: entry.email });
     }
