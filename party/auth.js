@@ -4,9 +4,6 @@
 // POST { action: "lookup",   uuid }        → find email;       returns { ok, email }
 
 // ── Config ────────────────────────────────────────────────────────────────
-// TODO: Update SITE_URL to your production domain.
-// TODO: Update FROM_EMAIL to a verified sender in your Resend account.
-//       (Resend → Domains → Add domain, then verify DNS records)
 const SITE_URL   = "https://lexterragame.com";
 const FROM_EMAIL = "Lexterra <noreply@lexterragame.com>";
 
