@@ -2889,13 +2889,13 @@
     bar.style.display = "";
   }
 
-  function dismissAuthBar() {
+  window.dismissAuthBar = function() {
     localStorage.setItem("lexterra_auth_dismissed", "1");
     const bar = document.getElementById("auth-bar");
     if (bar) bar.style.display = "none";
-  }
+  };
 
-  async function authSubmitEmail() {
+  window.authSubmitEmail = async function() {
     const input  = document.getElementById("auth-email-input");
     const btn    = document.getElementById("auth-submit-btn");
     const status = document.getElementById("auth-status");
@@ -2925,7 +2925,7 @@
       btn.disabled = false;
       btn.textContent = "Save Progress";
     }
-  }
+  };
 
   document.getElementById('footer-year').textContent = new Date().getFullYear();
 
@@ -3010,7 +3010,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.36 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.37 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
