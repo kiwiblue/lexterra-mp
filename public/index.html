@@ -2850,12 +2850,89 @@
   }
 
   const PARTYKIT_HOST = "lexterra-mp.kiwiblue.partykit.dev";
+  const AUTH_URL = `https://${PARTYKIT_HOST}/parties/auth/main`;
+
+  // ── Magic link verification ────────────────────────────────────────────
+  // Runs on page load; if ?auth=TOKEN is present, verify it and swap UUID.
+  (async function checkAuthToken() {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("auth");
+    if (!token) return;
+    window.history.replaceState({}, "", location.pathname);
+    try {
+      const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify", token }) });
+      const data = await res.json();
+      if (data.ok) {
+        localStorage.setItem("lexterra_uuid",  data.uuid);
+        localStorage.setItem("lexterra_email", data.email);
+        location.reload();
+      } else {
+        const bar = document.getElementById("auth-bar");
+        if (bar) bar.querySelector("#auth-status").textContent = data.error || "Invalid or expired link.";
+      }
+    } catch {}
+  })();
+
+  // ── Auth bar ───────────────────────────────────────────────────────────
+  async function initAuthBar() {
+    const bar = document.getElementById("auth-bar");
+    if (!bar) return;
+    const saved = localStorage.getItem("lexterra_email");
+    if (saved) { bar.style.display = "none"; return; }
+    if (localStorage.getItem("lexterra_auth_dismissed")) { bar.style.display = "none"; return; }
+    // Check server in case this UUID already has an email (e.g. same device, cleared email key)
+    try {
+      const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "lookup", uuid: getPlayerUUID() }) });
+      const data = await res.json();
+      if (data.email) { localStorage.setItem("lexterra_email", data.email); bar.style.display = "none"; return; }
+    } catch {}
+    bar.style.display = "";
+  }
+
+  function dismissAuthBar() {
+    localStorage.setItem("lexterra_auth_dismissed", "1");
+    const bar = document.getElementById("auth-bar");
+    if (bar) bar.style.display = "none";
+  }
+
+  async function authSubmitEmail() {
+    const input  = document.getElementById("auth-email-input");
+    const btn    = document.getElementById("auth-submit-btn");
+    const status = document.getElementById("auth-status");
+    const email  = input.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      input.style.borderColor = "#ef4444";
+      return;
+    }
+    input.style.borderColor = "#334155";
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+    status.textContent = "";
+    try {
+      const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "register", email, uuid: getPlayerUUID() }) });
+      const data = await res.json();
+      if (data.ok) {
+        localStorage.setItem("lexterra_email", email);
+        document.getElementById("auth-input-view").style.display = "none";
+        document.getElementById("auth-sent-view").style.display  = "";
+      } else {
+        status.textContent = data.error || "Something went wrong.";
+        btn.disabled = false;
+        btn.textContent = "Save Progress";
+      }
+    } catch {
+      status.textContent = "Network error. Please try again.";
+      btn.disabled = false;
+      btn.textContent = "Save Progress";
+    }
+  }
 
   document.getElementById('footer-year').textContent = new Date().getFullYear();
 
   loadPlayerStats();
   connectLobby();
   fetchLeaderboard();
+  initAuthBar();
 
   const _viewSnap = new URLSearchParams(location.search).get('view');
   if (_viewSnap) {
@@ -2915,8 +2992,25 @@
   <div id="jr-body"></div>
 </div>
 
+<div id="auth-bar" style="display:none;max-width:420px;margin:0 auto;padding:0 12px 12px">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;position:relative">
+    <button onclick="dismissAuthBar()" title="Dismiss" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#475569;font-size:1rem;cursor:pointer;line-height:1;padding:0">✕</button>
+    <div id="auth-input-view">
+      <p style="font-size:0.75rem;color:#94a3b8;margin:0 0 8px;padding-right:1.5rem">Don't lose your coins &amp; high scores — save your progress with your email.</p>
+      <div style="display:flex;gap:8px">
+        <input type="email" id="auth-email-input" placeholder="your@email.com" onkeydown="if(event.key==='Enter')authSubmitEmail()" style="flex:1;min-width:0;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:6px 10px;color:#e2e8f0;font-size:0.8rem;outline:none">
+        <button id="auth-submit-btn" onclick="authSubmitEmail()" style="background:#4a90d9;color:white;border:none;border-radius:6px;padding:6px 12px;font-size:0.8rem;cursor:pointer;white-space:nowrap;font-weight:600">Save Progress</button>
+      </div>
+      <p id="auth-status" style="font-size:0.72rem;color:#ef4444;margin:6px 0 0;min-height:1em"></p>
+    </div>
+    <div id="auth-sent-view" style="display:none;text-align:center">
+      <p style="font-size:0.8rem;color:#94a3b8;margin:0">Check your inbox — a login link is on its way.</p>
+    </div>
+  </div>
+</div>
+
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.34 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.35 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

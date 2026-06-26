@@ -3,7 +3,8 @@
   "main": "party/index.js",
   "parties": {
     "lobby": "party/lobby.js",
-    "stats": "party/stats.js"
+    "stats": "party/stats.js",
+    "auth": "party/auth.js"
   },
   "serve": "public",
   "compatibilityDate": "2026-06-16"
