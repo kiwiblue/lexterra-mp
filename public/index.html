@@ -2586,6 +2586,12 @@
       if (cfgd.spendPremiumColor !== undefined) coinConfig.spendPremiumColor = cfgd.spendPremiumColor;
       if (cfgd.spendUndoLetter !== undefined) coinConfig.spendUndoLetter = cfgd.spendUndoLetter;
       if (cfgd.spendViewUnclaimed !== undefined) coinConfig.spendViewUnclaimed = cfgd.spendViewUnclaimed;
+      // Sync canonical name from server for logged-in users on new/fresh devices
+      if (localStorage.getItem("lexterra_email") && cd.name && cd.name !== "Unknown") {
+        localStorage.setItem("lexterra_name", cd.name);
+        const inp = document.getElementById("player-name");
+        if (inp && !inp.matches(":focus")) inp.value = cd.name;
+      }
     } catch {}
     updateHeaderStats();
   }
@@ -2606,6 +2612,21 @@
   if (savedName) {
     const inp = document.getElementById("player-name");
     if (inp) inp.value = savedName;
+  }
+
+  // Sync name to stats party when the pre-lobby name field changes
+  const _nameInp = document.getElementById("player-name");
+  if (_nameInp) {
+    _nameInp.addEventListener("blur", () => {
+      const n = _nameInp.value.trim().toUpperCase();
+      if (!n || n === "PLAYER") return;
+      localStorage.setItem("lexterra_name", n);
+      fetch(`https://${PARTYKIT_HOST}/parties/stats/main`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "name_update", uuid: getPlayerUUID(), name: n }),
+      }).catch(() => {});
+    });
   }
 
   window.joinPublicGame = function(code) {
@@ -3035,7 +3056,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.39 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.40 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
