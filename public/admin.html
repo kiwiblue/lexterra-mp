@@ -28,6 +28,8 @@
   .field label { display: block; font-size: 0.78rem; color: #aaa; margin-bottom: 4px; }
   .field input[type=number] { width: 100%; background: #252525; border: 1px solid #383838; border-radius: 6px; padding: 8px 10px; color: #e8e8e8; font-size: 0.9rem; outline: none; }
   .field input[type=number]:focus { border-color: #f5c842; }
+  .field select { width: 100%; background: #252525; border: 1px solid #383838; border-radius: 6px; padding: 8px 10px; color: #e8e8e8; font-size: 0.9rem; outline: none; }
+  .field select:focus { border-color: #f5c842; }
   .form-footer { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
   .form-footer .save-msg { flex: 1; font-size: 0.82rem; color: #aaa; }
   table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
@@ -99,6 +101,25 @@
       <div class="field"><label>Premium colour (1 month)</label><input type="number" id="spendPremiumColor" min="0"></div>
       <div class="field"><label>Custom tile pattern</label><input type="number" id="spendCustomTile" min="0"></div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>High Stakes Timings</h2>
+    <p class="subtitle" style="margin-bottom:16px">Chess-clock timer — each player's bank only ticks during their own turn.</p>
+    <div class="grid">
+      <div class="field"><label>Starting Timer (seconds)</label><input type="number" id="highStakesStart" min="0"></div>
+      <div class="field"><label>Maximum Accumulated Time (seconds)</label><input type="number" id="highStakesMax" min="0"></div>
+      <div class="field"><label>Letter Bonus (seconds)</label><input type="number" id="highStakesLetterBonus" min="0"></div>
+      <div class="field"><label>Word Claim Bonus (seconds)</label><input type="number" id="highStakesClaimBonus" min="0"></div>
+      <div class="field"><label>Minimum Turn Time (seconds)</label><input type="number" id="highStakesMinTurn" min="0"></div>
+      <div class="field">
+        <label>Timeout Action</label>
+        <select id="highStakesTimeoutAction">
+          <option value="pass">Auto-Pass (skip turn)</option>
+          <option value="lose">Lose (forfeit game)</option>
+        </select>
+      </div>
+    </div>
 
     <div class="form-footer">
       <button class="btn" onclick="saveConfig()">Save changes</button>
@@ -126,6 +147,7 @@ const FIELD_KEYS = [
   "highScoreDay","highScoreMonth","highScoreYear",
   "pointsInterval","longWordBonus",
   "spendUndoLetter","spendViewUnclaimed","spendPremiumColor","spendCustomTile",
+  "highStakesStart","highStakesMax","highStakesLetterBonus","highStakesClaimBonus","highStakesMinTurn",
 ];
 
 function showMsg(id, text, type) {
@@ -172,6 +194,8 @@ async function loadAll() {
     const el = document.getElementById(key);
     if (el && cfg[key] !== undefined) el.value = cfg[key];
   }
+  const timeoutEl = document.getElementById("highStakesTimeoutAction");
+  if (timeoutEl && cfg.highStakesTimeoutAction) timeoutEl.value = cfg.highStakesTimeoutAction;
 
   // Populate players table
   renderPlayers(players);
@@ -210,6 +234,8 @@ async function saveConfig() {
     const el = document.getElementById(key);
     if (el) config[key] = Number(el.value);
   }
+  const timeoutEl = document.getElementById("highStakesTimeoutAction");
+  if (timeoutEl) config.highStakesTimeoutAction = timeoutEl.value;
   try {
     const r = await fetch(STATS, {
       method: "POST",

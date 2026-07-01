@@ -438,6 +438,7 @@
   let endClaimedSortMode = 'recent';
   let timerInterval = null;
   let timerEndsAt = 0;
+  let highStakesTimedOut = false;
   let advancedSettingsOpen = false;
   let gameCellSize = 0;
   let botTurnRunning = false;
@@ -778,11 +779,12 @@
             <div class="btn-group">
               <button class="toggle-btn${timerVal===60?' selected':''}" data-key="timeLimit" data-val="60"${!amHost?' disabled':''}>1 Min</button>
               <button class="toggle-btn${timerVal===120?' selected':''}" data-key="timeLimit" data-val="120"${!amHost?' disabled':''}>2 Mins</button>
-              <button class="toggle-btn" disabled title="Coming soon">High Stakes</button>
+              <button class="toggle-btn${timerVal==='high'?' selected':''}" data-key="timeLimit" data-val="high"${!amHost?' disabled':''}>High Stakes</button>
               <button class="toggle-btn${timerVal===null?' selected':''}" data-key="timeLimit" data-val="none"${!amHost?' disabled':''}>None</button>
             </div>
           </div>
           ${timerVal === null ? `<p style="font-size:0.72rem;color:#eab308;margin:0">⚠️ With no timer, leaving or backgrounding the game window may stall your turn or cause you to be dropped from the game.</p>` : ''}
+          ${timerVal === 'high' ? `<p style="font-size:0.72rem;color:#94a3b8;margin:0">Each player has their own time bank that only ticks on their turn. Earn bonus time by placing letters and claiming words.</p>` : ''}
         </div>
       </div>
     `;
@@ -792,7 +794,7 @@
         btn.addEventListener('click', () => {
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
-          const val = key === 'timeLimit' ? (raw === 'none' ? null : parseInt(raw))
+          const val = key === 'timeLimit' ? (raw === 'none' ? null : raw === 'high' ? 'high' : parseInt(raw))
             : (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
           if (key === 'boardSize') hostSelectedBoardSize = true;
           socket.send(JSON.stringify({ type: 'settings', settings: { [key]: val } }));
@@ -1130,6 +1132,7 @@
       lastCur = state.cur;
       selLetter = null; claimMode = false; claimStart = null; claimPath = null;
       if (state.cur === myConnId) hasActedThisTurn = false;
+      highStakesTimedOut = false;
       restartTimer();
       const hasHumanOpponent = Object.values(state.players).some(p => !p.isBot && p !== state.players[myConnId]);
       if (state.cur === myConnId && soundEnabled && hasHumanOpponent && !isSpectating) playTurnSound();
@@ -1154,6 +1157,7 @@
         if (o) tileCounts[o] = (tileCounts[o] ?? 0) + 1;
       }
     }
+    const highStakesOn = state.settings?.timeLimit === 'high' && state.timeBank;
     wrap.innerHTML = Object.entries(frozenPlayers ?? state.players).map(([id, p]) => {
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
@@ -1164,18 +1168,21 @@
       const passText = passes > 0
         ? `<span style="color:#f97316;font-size:0.7rem;margin-left:0.25rem">${passes} pass${passes !== 1 ? 'es' : ''}</span>`
         : '';
+      const clockText = highStakesOn
+        ? `<span id="tb-${id}" style="font-size:0.7rem;color:#94a3b8;margin-left:0.25rem;font-variant-numeric:tabular-nums">${fmtClock(state.timeBank[id] ?? 0)}</span>`
+        : '';
       const pinfo = isTerritoryMode
         ? `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${tileCounts[id] ?? 0}</span>
             <span style="color:#475569;font-size:0.72rem">&nbsp;tiles</span>
-            ${passText}
+            ${passText}${clockText}
           </div>`
         : `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${p.score}</span>
             <span style="color:#475569;font-size:0.72rem">&nbsp;pts</span>
-            ${passText}
+            ${passText}${clockText}
           </div>`;
       return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
         <span class="pname">${nameLabel}</span>
@@ -1814,10 +1821,21 @@
   }
 
   // ── Timer ────────────────────────────────────────────────────
+  function fmtClock(s) {
+    const r = Math.max(0, Math.ceil(s));
+    return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, "0")}`;
+  }
+
   function restartTimer() {
     stopTimer();
-    const secs = state.settings?.timeLimit === undefined ? 120 : state.settings.timeLimit;
+    const tl = state.settings?.timeLimit;
     const el = document.getElementById("timer-label");
+    if (tl === 'high') {
+      updateHighStakesClocks();
+      timerInterval = setInterval(updateHighStakesClocks, 250);
+      return;
+    }
+    const secs = tl === undefined ? 120 : tl;
     if (secs === null) {
       if (el) el.textContent = "";
       return;
@@ -1832,6 +1850,29 @@
       }
       if (rem === 0 && state.cur === myConnId) window.doPass();
     }, 500);
+  }
+
+  // High Stakes: recompute each player's live remaining time from the shared
+  // bank + turnStartedAt (only the current mover's clock is actually ticking).
+  function updateHighStakesClocks() {
+    const bank = state.timeBank ?? {};
+    const startedAt = state.turnStartedAt ?? Date.now();
+    const elapsed = (Date.now() - startedAt) / 1000;
+    const el = document.getElementById("timer-label");
+    Object.keys(bank).forEach(id => {
+      const remaining = id === state.cur ? Math.max(0, bank[id] - elapsed) : bank[id];
+      const badge = document.getElementById(`tb-${id}`);
+      const color = remaining <= 15 ? "#ef4444" : remaining <= 40 ? "#eab308" : "#94a3b8";
+      if (badge) { badge.textContent = fmtClock(remaining); badge.style.color = color; }
+      if (id === state.cur && el) { el.textContent = fmtClock(remaining); el.style.color = remaining <= 15 ? "#ef4444" : remaining <= 40 ? "#eab308" : "var(--clr-primary-light)"; }
+    });
+    if (state.cur === myConnId && !highStakesTimedOut) {
+      const mine = Math.max(0, (bank[myConnId] ?? 0) - elapsed);
+      if (mine <= 0) {
+        highStakesTimedOut = true;
+        socket.send(JSON.stringify({ type: 'time_up', isRealPass: !hasActedThisTurn }));
+      }
+    }
   }
 
   function stopTimer() {
@@ -2159,7 +2200,8 @@
         <div class="card" style="margin-bottom:0">
           <h2 style="text-align:center;font-size:1.4rem;color:var(--clr-primary-light);margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.05em">GAME OVER</h2>
           <p style="text-align:center;color:#94a3b8;margin-bottom:0.25rem">${winner?.name ?? "?"} wins!</p>
-          <p style="text-align:center;color:#475569;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1.25rem">${({conquest:'Conquest Mode',exclusive:'Keeps Mode',off:'Search Mode'})[mode] ?? 'Search Mode'}</p>
+          <p style="text-align:center;color:#475569;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:${state.timedOutPlayer ? '0.4rem' : '1.25rem'}">${({conquest:'Conquest Mode',exclusive:'Keeps Mode',off:'Search Mode'})[mode] ?? 'Search Mode'}</p>
+          ${state.timedOutPlayer ? `<p style="text-align:center;color:#eab308;font-size:0.75rem;margin-bottom:1.25rem">⏱ ${(frozenPlayers ?? state.players)[state.timedOutPlayer]?.name ?? 'A player'} ran out of time</p>` : ''}
           ${ranked.map(({ p, stat }, i) => `
             <div class="player-row" style="margin-bottom:0.5rem">
               <span style="color:#475569;width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
@@ -3131,7 +3173,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.44 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.45 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

@@ -86,6 +86,66 @@ async function resetAlarm(room) {
   try { await room.storage.setAlarm(Date.now() + INACTIVITY_MS); } catch {}
 }
 
+// ── High Stakes chess-clock timer ────────────────────────────────────
+// Each player has their own time bank that only ticks during their turn.
+// Config is fetched once at game start from the stats party's admin config.
+async function fetchHighStakesConfig(room) {
+  const defaults = { start: 300, max: 300, letterBonus: 20, claimBonus: 30, minTurn: 30, timeoutAction: "pass" };
+  try {
+    const res = await room.context.parties.stats.get("main").fetch("/?config=true");
+    const cfg = await res.json();
+    return {
+      start: cfg.highStakesStart ?? defaults.start,
+      max: cfg.highStakesMax ?? defaults.max,
+      letterBonus: cfg.highStakesLetterBonus ?? defaults.letterBonus,
+      claimBonus: cfg.highStakesClaimBonus ?? defaults.claimBonus,
+      minTurn: cfg.highStakesMinTurn ?? defaults.minTurn,
+      timeoutAction: cfg.highStakesTimeoutAction === "lose" ? "lose" : "pass",
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+// Carries a player's time bank over when their connId changes (reconnect/bot swap).
+function remapTimeBank(state, oldId, newId) {
+  if (state.timeBank && oldId in state.timeBank) {
+    state.timeBank[newId] = state.timeBank[oldId];
+    delete state.timeBank[oldId];
+  }
+}
+
+// Deducts elapsed turn time from the outgoing player and applies the minimum-turn
+// floor to the incoming player. No-op when High Stakes isn't active.
+function advanceHighStakesTurn(state, outgoingId, incomingId) {
+  const hs = state.settings?.highStakes;
+  if (!hs || !state.timeBank) return;
+  const elapsed = Math.floor((Date.now() - (state.turnStartedAt ?? Date.now())) / 1000);
+  state.timeBank[outgoingId] = Math.max(0, (state.timeBank[outgoingId] ?? hs.start) - elapsed);
+  state.timeBank[incomingId] = Math.max(state.timeBank[incomingId] ?? hs.start, hs.minTurn);
+  state.turnStartedAt = Date.now();
+}
+
+// Shared pass logic used by both a voluntary "pass" and a High Stakes timeout-to-pass.
+// Returns true if the game should end (all players passed consecutively).
+function performPass(state, isRealPass) {
+  delete state.players[state.cur].lastPlacement;
+  state.consecutivePasses++;
+  if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
+  state.boardFullBadGuesses = 0;
+  if (isRealPass) {
+    state.players[state.cur].passesThisRound = (state.players[state.cur].passesThisRound ?? 0) + 1;
+    state.players[state.cur].totalPasses = (state.players[state.cur].totalPasses ?? 0) + 1;
+  }
+  const idx = state.turnOrder.indexOf(state.cur);
+  const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
+  state.players[state.cur].lettersLeft = 0;
+  state.players[nextId].lettersLeft = 1;
+  advanceHighStakesTurn(state, state.cur, nextId);
+  state.cur = nextId;
+  return state.consecutivePasses >= state.turnOrder.length * 2;
+}
+
 // In-memory spectator tracking (per room instance, resets on DO restart — fine)
 const spectatorConns = new Set();
 
@@ -133,6 +193,7 @@ async function processDisconnect(connId, room) {
         await notifyStats(room, state, "abandoned");
       } else {
         const next = state.turnOrder[0];
+        advanceHighStakesTurn(state, connId, next);
         state.cur = next;
         Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
         state.players[next].lettersLeft = 1;
@@ -353,6 +414,18 @@ export default {
         // Only the first player gets a letter; everyone else starts at 0
         Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
         state.players[state.cur].lettersLeft = 1;
+
+        delete state.settings.highStakes;
+        state.timeBank = {};
+        delete state.turnStartedAt;
+        delete state.timedOutPlayer;
+        if (state.settings.timeLimit === "high") {
+          const hs = await fetchHighStakesConfig(room);
+          state.settings.highStakes = hs;
+          for (const id of state.turnOrder) state.timeBank[id] = hs.start;
+          state.turnStartedAt = Date.now();
+        }
+
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         await resetAlarm(room);
@@ -372,6 +445,10 @@ export default {
         state.players[state.cur].lastPlacement = { r, c };
         state.consecutivePasses = 0;
         state.players[state.cur].passesThisRound = 0;
+        if (state.settings?.highStakes) {
+          const hs = state.settings.highStakes;
+          state.timeBank[state.cur] = Math.min(hs.max, (state.timeBank[state.cur] ?? hs.start) + hs.letterBonus);
+        }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "state", state }));
         await resetAlarm(room);
@@ -403,6 +480,10 @@ export default {
         if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = 0;
         state.players[state.cur].passesThisRound = 0;
         state.boardFullBadGuesses = 0;
+        if (state.settings?.highStakes) {
+          const hs = state.settings.highStakes;
+          state.timeBank[state.cur] = Math.min(hs.max, (state.timeBank[state.cur] ?? hs.start) + hs.claimBonus);
+        }
         state.lastActivity = Date.now();
         if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { lastActivity: state.lastActivity } });
         if (state.territory) {
@@ -435,21 +516,41 @@ export default {
         if (!state || state.phase !== "playing") return;
         const passCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(passCurBot && state.host === conn.id)) return;
-        delete state.players[state.cur].lastPlacement;
-        state.consecutivePasses++;
-        if (!state.players[state.cur]?.isBot) state.consecutiveHumanPasses = (state.consecutiveHumanPasses ?? 0) + 1;
-        state.boardFullBadGuesses = 0;
-        if (msg.isRealPass !== false) {
-          state.players[state.cur].passesThisRound = (state.players[state.cur].passesThisRound ?? 0) + 1;
-          state.players[state.cur].totalPasses = (state.players[state.cur].totalPasses ?? 0) + 1;
+        const ended = performPass(state, msg.isRealPass !== false);
+        if (ended) {
+          state.phase = "ended";
+          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          await notifyStats(room, state, "completed");
         }
-        const idx = state.turnOrder.indexOf(state.cur);
-        const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
-        state.players[state.cur].lettersLeft = 0;
-        state.players[nextId].lettersLeft = 1;
-        state.cur = nextId;
-        // End game when all players have passed consecutively
-        if (state.consecutivePasses >= state.turnOrder.length * 2) {
+        await room.storage.put("state", state);
+        room.broadcast(JSON.stringify({ type: "state", state }));
+        if (state.phase === "playing") await resetAlarm(room);
+        break;
+      }
+
+      // High Stakes: a player's time bank hit zero (self-reported by their client)
+      case "time_up": {
+        const state = await room.storage.get("state");
+        if (!state || state.phase !== "playing" || !state.settings?.highStakes) return;
+        const timeCurBot = state.players[state.cur]?.isBot;
+        if (state.cur !== conn.id && !(timeCurBot && state.host === conn.id)) return;
+        const hs = state.settings.highStakes;
+        const elapsed = Math.floor((Date.now() - (state.turnStartedAt ?? Date.now())) / 1000);
+        if ((state.timeBank[state.cur] ?? hs.start) - elapsed > 0) return; // not actually out of time
+
+        if (hs.timeoutAction === "lose") {
+          state.timeBank[state.cur] = 0;
+          state.phase = "ended";
+          state.timedOutPlayer = state.cur;
+          if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
+          await notifyStats(room, state, "completed");
+          await room.storage.put("state", state);
+          room.broadcast(JSON.stringify({ type: "state", state }));
+          break;
+        }
+
+        const ended = performPass(state, msg.isRealPass !== false);
+        if (ended) {
           state.phase = "ended";
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
           await notifyStats(room, state, "completed");
@@ -477,6 +578,7 @@ export default {
           const nextId = state.turnOrder[(idx + 1) % state.turnOrder.length];
           state.players[state.cur].lettersLeft = 0;
           state.players[nextId].lettersLeft = 1;
+          advanceHighStakesTurn(state, state.cur, nextId);
           state.cur = nextId;
           if (state.consecutivePasses >= state.turnOrder.length * 2) {
             state.phase = "ended";
@@ -499,6 +601,7 @@ export default {
         function remapActiveId(oldId) {
           state.players[conn.id] = state.players[oldId];
           delete state.players[oldId];
+          remapTimeBank(state, oldId, conn.id);
           if (state.host === oldId) state.host = conn.id;
           if (state.cur === oldId) state.cur = conn.id;
           const ti = state.turnOrder.indexOf(oldId);
@@ -548,6 +651,7 @@ export default {
         const saved = state.disconnectedPlayers[savedKey];
         state.players[conn.id] = saved.player;
         delete state.disconnectedPlayers[savedKey];
+        remapTimeBank(state, savedKey, conn.id);
         if (state.phase === "playing") {
           const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
           state.turnOrder.splice(insertAt, 0, conn.id);
@@ -613,6 +717,7 @@ export default {
             name: req.name, color, uuid: req.uuid ?? null, score: 0, wordsFound: 0, lettersLeft: 0, isBot: false, isReady: true,
           };
           state.turnOrder.push(requestConnId);
+          if (state.settings?.highStakes) state.timeBank[requestConnId] = state.settings.highStakes.start;
         } else {
           const bot = state.players[botId];
           if (!bot?.isBot) return;
@@ -629,6 +734,7 @@ export default {
           if (botIdx !== -1) state.turnOrder[botIdx] = requestConnId;
           if (state.cur === botId) state.cur = requestConnId;
           delete state.players[botId];
+          remapTimeBank(state, botId, requestConnId);
           if (state.territory) for (let r = 0; r < state.territory.length; r++)
             for (let c = 0; c < state.territory[r].length; c++)
               if (state.territory[r][c] === botId) state.territory[r][c] = requestConnId;
@@ -671,6 +777,7 @@ export default {
         const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
         state.turnOrder.splice(insertAt, 0, botId);
         delete state.disconnectedPlayers[oldConnId];
+        remapTimeBank(state, oldConnId, botId);
         if (state.territory) for (let r = 0; r < state.territory.length; r++)
           for (let c = 0; c < state.territory[r].length; c++)
             if (state.territory[r][c] === oldConnId) state.territory[r][c] = botId;
@@ -724,6 +831,7 @@ export default {
             state.phase = "ended";
           } else {
             const next = state.turnOrder[0];
+            advanceHighStakesTurn(state, conn.id, next);
             state.cur = next;
             Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
             state.players[next].lettersLeft = 1;

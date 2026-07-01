@@ -39,6 +39,13 @@ const DEFAULT_COIN_CONFIG = {
   spendViewUnclaimed:   1,
   spendPremiumColor:    10,
   spendCustomTile:      5,
+  // High Stakes timer (chess clock — ticks only during a player's own turn)
+  highStakesStart:        300, // seconds each player starts with
+  highStakesMax:          300, // cap on accumulated time
+  highStakesLetterBonus:   20, // seconds added on placing a letter
+  highStakesClaimBonus:    30, // seconds added on claiming a word
+  highStakesMinTurn:       30, // floor applied when a player's turn begins
+  highStakesTimeoutAction: "pass", // "pass" (auto-skip turn) or "lose" (forfeit game)
 };
 
 const EMPTY = () => ({
