@@ -438,6 +438,7 @@
   let endClaimedSortMode = 'recent';
   let timerInterval = null;
   let timerEndsAt = 0;
+  let advancedSettingsOpen = false;
   let gameCellSize = 0;
   let botTurnRunning = false;
   let botStateResolver = null;
@@ -739,6 +740,7 @@
     const boardSizes = [5, 8, 10];
     const gameMode = s.territoryMode === 'conquest' ? 'conquest' : s.territoryMode === 'exclusive' ? 'fort' : 'search';
     const minWords = [3, 4, 5];
+    const timerVal = s.timeLimit === undefined ? 120 : s.timeLimit;
     const modeDescs = {
       search:   'Find and claim words to score points. Longer words score more. The player with the most points when the board fills wins.',
       conquest: 'Claim words to capture their tiles. When the board is full, the player controlling the most tiles wins — not just points.',
@@ -767,6 +769,21 @@
             ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
           </div>
         </div>
+        <button id="advanced-settings-toggle" style="background:none;border:none;color:#64748b;font-size:0.75rem;cursor:pointer;padding:0.4rem 0;text-align:left;display:flex;align-items:center;gap:0.3rem">
+          <span id="advanced-settings-chevron" style="display:inline-block;transition:transform 0.15s;transform:rotate(${advancedSettingsOpen ? '90' : '0'}deg)">›</span> Advanced Settings
+        </button>
+        <div id="advanced-settings-body" style="display:${advancedSettingsOpen ? 'flex' : 'none'};flex-direction:column;gap:0.5rem">
+          <div class="setting-row">
+            <span class="setting-label">Timer</span>
+            <div class="btn-group">
+              <button class="toggle-btn${timerVal===60?' selected':''}" data-key="timeLimit" data-val="60"${!amHost?' disabled':''}>1 Min</button>
+              <button class="toggle-btn${timerVal===120?' selected':''}" data-key="timeLimit" data-val="120"${!amHost?' disabled':''}>2 Mins</button>
+              <button class="toggle-btn" disabled title="Coming soon">High Stakes</button>
+              <button class="toggle-btn${timerVal===null?' selected':''}" data-key="timeLimit" data-val="none"${!amHost?' disabled':''}>None</button>
+            </div>
+          </div>
+          ${timerVal === null ? `<p style="font-size:0.72rem;color:#eab308;margin:0">⚠️ With no timer, leaving or backgrounding the game window may stall your turn or cause you to be dropped from the game.</p>` : ''}
+        </div>
       </div>
     `;
 
@@ -775,12 +792,21 @@
         btn.addEventListener('click', () => {
           const key = btn.dataset.key;
           const raw = btn.dataset.val;
-          const val = (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
+          const val = key === 'timeLimit' ? (raw === 'none' ? null : parseInt(raw))
+            : (key === 'boardSize' || key === 'minWordLen') ? parseInt(raw) : raw;
           if (key === 'boardSize') hostSelectedBoardSize = true;
           socket.send(JSON.stringify({ type: 'settings', settings: { [key]: val } }));
         });
       });
     }
+
+    document.getElementById('advanced-settings-toggle')?.addEventListener('click', () => {
+      advancedSettingsOpen = !advancedSettingsOpen;
+      const body = document.getElementById('advanced-settings-body');
+      const chevron = document.getElementById('advanced-settings-chevron');
+      if (body) body.style.display = advancedSettingsOpen ? 'flex' : 'none';
+      if (chevron) chevron.style.transform = `rotate(${advancedSettingsOpen ? '90' : '0'}deg)`;
+    });
 
     // Players card — save focus state before re-render
     const playersCard = document.getElementById("players-card");
@@ -1790,7 +1816,12 @@
   // ── Timer ────────────────────────────────────────────────────
   function restartTimer() {
     stopTimer();
-    const secs = state.settings?.timeLimit ?? 120;
+    const secs = state.settings?.timeLimit === undefined ? 120 : state.settings.timeLimit;
+    const el = document.getElementById("timer-label");
+    if (secs === null) {
+      if (el) el.textContent = "";
+      return;
+    }
     timerEndsAt = Date.now() + secs * 1000;
     timerInterval = setInterval(() => {
       const rem = Math.max(0, Math.ceil((timerEndsAt - Date.now()) / 1000));
@@ -3100,7 +3131,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.43 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.44 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
