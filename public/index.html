@@ -1663,6 +1663,17 @@
     applyOtherHovers();
   }
 
+  let bonusFlashUntil = 0;
+  function flashTimeBonus(amount) {
+    if (!amount || state.settings?.timeLimit !== 'high') return;
+    const sub = document.getElementById('turn-sublabel');
+    if (!sub) return;
+    bonusFlashUntil = Date.now() + 1200;
+    sub.style.color = '#22c55e';
+    sub.textContent = `⏱ +${amount}s time bonus!`;
+    setTimeout(() => { if (Date.now() >= bonusFlashUntil) updateTurnBanner(); }, 1200);
+  }
+
   function updateTurnBanner() {
     const lbl = document.getElementById("turn-label");
     const sub = document.getElementById("turn-sublabel");
@@ -1671,7 +1682,7 @@
     const isMyTurn = !isSpectating && state.cur === myConnId;
     const cur = state.players[state.cur];
     lbl.textContent = isMyTurn ? "Your turn" : `${cur?.name ?? "…"}'s turn`;
-    if (sub) {
+    if (sub && Date.now() >= bonusFlashUntil) {
       if (isSpectating) {
         sub.style.color = "#475569";
         sub.textContent = "Spectating";
@@ -1892,6 +1903,7 @@
           const v = validateClaim(claimPath);
           if (v.valid) {
             socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+            flashTimeBonus(state.settings?.highStakes?.claimBonus);
             hasActedThisTurn = true;
             claimMode = false; claimStart = null; claimPath = null;
             updateControls(); updateGridCells(); updateClaimLines(); return;
@@ -1911,6 +1923,7 @@
     const me = state.players[myConnId];
     if (!me || me.lettersLeft <= 0) return;
     socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter }));
+    flashTimeBonus(state.settings?.highStakes?.letterBonus);
     hasActedThisTurn = true;
     pendingUndo = true;
     selLetter = null;
@@ -1932,6 +1945,7 @@
       return;
     }
     socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+    flashTimeBonus(state.settings?.highStakes?.claimBonus);
     hasActedThisTurn = true;
     claimMode = false; claimStart = null; claimPath = null;
   };
@@ -3173,7 +3187,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.45 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.46 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

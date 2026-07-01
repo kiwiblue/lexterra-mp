@@ -41,7 +41,7 @@ const DEFAULT_COIN_CONFIG = {
   spendCustomTile:      5,
   // High Stakes timer (chess clock — ticks only during a player's own turn)
   highStakesStart:        300, // seconds each player starts with
-  highStakesMax:          300, // cap on accumulated time
+  highStakesMax:          360, // cap on accumulated time — kept above Start so bonuses stay visible
   highStakesLetterBonus:   20, // seconds added on placing a letter
   highStakesClaimBonus:    30, // seconds added on claiming a word
   highStakesMinTurn:       30, // floor applied when a player's turn begins
