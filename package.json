@@ -2,6 +2,7 @@
   "name": "lexterra-mp",
   "version": "0.1.0",
   "private": true,
+  "author": "Chris Sandford",
   "scripts": {
     "dev": "partykit dev",
     "deploy": "partykit deploy"

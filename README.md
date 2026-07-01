@@ -40,3 +40,11 @@ npm run deploy    # deploys to PartyKit cloud (free hobby tier)
 - [ ] Game board (port from standalone)
 - [ ] Full turn & timer logic
 - [ ] End game screen
+
+## Author & Credits
+
+**Chris Sandford** is the sole author, primary developer, and copyright holder of this project.
+
+AI coding assistance (Anthropic's Claude) was used during development and is credited via
+`Co-Authored-By` trailers on relevant commits, but holds no authorship or ownership claim
+over this codebase. See [LICENSE](LICENSE) for full copyright terms.
