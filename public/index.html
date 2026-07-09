@@ -2000,6 +2000,27 @@
         <h3>Keyboard Shortcuts</h3>
         <p><strong>Enter</strong> = Pass &nbsp;·&nbsp; <strong>Spacebar</strong> = Claim word &nbsp;·&nbsp; Type any letter to select it</p>
       </div>` : ''}
+      <div class="help-section">
+        <h3>Key</h3>
+        <div style="display:flex;flex-direction:column;gap:0.6rem">
+          <div style="display:flex;align-items:flex-start;gap:0.6rem">
+            <span style="color:#94a3b8;flex-shrink:0;line-height:0;margin-top:0.15rem">${ghostIcon(false)}</span>
+            <p style="margin:0"><strong>Ghost Mode</strong> — hides your cursor from other players when it's their turn to look at the board.</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:0.6rem">
+            <span style="color:#94a3b8;flex-shrink:0;line-height:0;margin-top:0.15rem">${soundIcon(true)}</span>
+            <p style="margin:0">Turns game sound effects on or off.</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:0.6rem">
+            <span style="flex-shrink:0;font-size:1rem;line-height:1">👁️</span>
+            <p style="margin:0">Floating eyes drifting around the board show <strong>spectators</strong> watching your game — one eye per spectator.</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:0.6rem">
+            <span style="padding:0.15rem 0.45rem;background:#0f172a;border-radius:6px;font-size:0.72rem;border-left:3px solid var(--clr-primary-light);flex-shrink:0;margin-top:0.1rem">WORD</span>
+            <p style="margin:0">Tap a word in the <strong>Claimed</strong> list to highlight where it was played on the board.</p>
+          </div>
+        </div>
+      </div>
     `;
     modal.style.display = 'block';
   };
@@ -3195,7 +3216,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.48 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.49 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>
