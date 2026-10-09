@@ -1,8 +1,9 @@
 // Lexterra MP — Stats accumulator
-// POST { type:"game_end", ... }
+// POST { type:"game_end", ... } (server-only: sent by game rooms)
 // POST { type:"coins_update", uuid, name, delta, reason } → add/subtract coins (delta may be negative; floored at 0)
 // POST { type:"config_update", password, config } → save coin earn/spend weights (admin)
 // POST { type:"admin_data", password } → return all player coin records (admin)
+// POST { type:"merge_uuid", fromUuid, toUuid } → merge accounts (server-only: sent by the auth party)
 // GET ?mode=X → { players: [{uuid,name,best,bestComp}], all: [entry,...] }
 // GET ?snapId=X → full game snapshot for the end-screen replay
 // GET ?xp=true → XP leaderboard [{ uuid, name, xp, gamesPlayed }] sorted by xp desc
@@ -11,13 +12,22 @@
 // GET (no params) → aggregate report
 
 import { Server } from "partyserver";
-import { makeRoom } from "./compat.js";
+import { makeRoom, isInternal } from "./compat.js";
 
 const TOP_SNAPS = 5;
 
 // ── Admin password ─────────────────────────────────────────────────────────
-// Change this before deploying; keep it secret.
-const ADMIN_PASSWORD = "lexterra-admin";
+// Stored as the ADMIN_PASSWORD Worker secret (wrangler secret put ADMIN_PASSWORD), never
+// in source. If it isn't set, admin actions are refused. Compared in constant time.
+async function isAdmin(password, env) {
+  if (!env.ADMIN_PASSWORD || typeof password !== "string") return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(password)),
+    crypto.subtle.digest("SHA-256", enc.encode(env.ADMIN_PASSWORD)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
+}
 
 // ── Coin earn/spend config defaults ───────────────────────────────────────
 // All values are coin amounts. pointsInterval is a points-per-coin divisor.
@@ -178,14 +188,14 @@ const handlers = {
       }
 
       if (msg.type === "config_update") {
-        if (msg.password !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401, headers: CORS });
+        if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
         if (!msg.config || typeof msg.config !== "object") return new Response("Bad request", { status: 400, headers: CORS });
         await room.storage.put("coin_config", msg.config);
         return new Response("ok", { headers: CORS });
       }
 
       if (msg.type === "admin_data") {
-        if (msg.password !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+        if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
         const coins = (await room.storage.get("player_coins")) ?? [];
         const sorted = [...coins].sort((a, b) => (b.coins ?? 0) - (a.coins ?? 0));
         return new Response(JSON.stringify(sorted), {
@@ -194,7 +204,7 @@ const handlers = {
       }
 
       // ── UUID merge (called by auth party when a returning player links a second browser) ──
-      if (msg.type === "merge_uuid" && msg.fromUuid && msg.toUuid && msg.secret === "lx-p4rty-merge") {
+      if (msg.type === "merge_uuid" && msg.fromUuid && msg.toUuid && isInternal(req)) {
         const { fromUuid, toUuid } = msg;
         if (fromUuid === toUuid) return new Response("ok", { headers: CORS });
 
@@ -267,6 +277,7 @@ const handlers = {
       }
 
       if (msg.type !== "game_end") return new Response("ok");
+      if (!isInternal(req)) return new Response("Forbidden", { status: 403 });
 
       const s = (await room.storage.get("stats")) ?? EMPTY();
       s.totalGames++;

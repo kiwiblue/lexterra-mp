@@ -9,7 +9,6 @@ import { makeRoom } from "./compat.js";
 // ── Config ────────────────────────────────────────────────────────────────
 const SITE_URL   = "https://lexterragame.com";
 const FROM_EMAIL = { email: "noreply@lexterragame.com", name: "Lexterra" };
-const MERGE_SECRET = "lx-p4rty-merge";
 
 const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MS   =  5 * 60 * 1000; //  5 minutes between requests per email
@@ -144,7 +143,7 @@ const handlers = {
           await room.context.parties.stats.get("main").fetch("/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "merge_uuid", fromUuid: entry.mergeFrom, toUuid: entry.uuid, secret: MERGE_SECRET }),
+            body: JSON.stringify({ type: "merge_uuid", fromUuid: entry.mergeFrom, toUuid: entry.uuid }),
           });
         } catch {}
       }

@@ -2,7 +2,7 @@
 // A single shared room that acts as a registry for public games.
 
 import { Server } from "partyserver";
-import { makeRoom } from "./compat.js";
+import { makeRoom, isInternal } from "./compat.js";
 
 const LOBBY_TTL_MS  = 5 * 60 * 1000;   // 5 min for games awaiting players
 const PLAYING_TTL_MS = 25 * 60 * 1000; // 25 min for in-progress games (alarm ends them after 20 min)
@@ -86,8 +86,9 @@ export class Lobby extends Server {
     await applyUpdate(msg, this.room);
   }
 
-  // Called by game rooms (server → lobby)
+  // Called by game rooms only (server → lobby); browsers update the lobby over the websocket
   async onRequest(req) {
+    if (!isInternal(req)) return new Response("Forbidden", { status: 403 });
     if (req.method === "POST") await applyUpdate(await req.json(), this.room);
     return new Response("ok");
   }

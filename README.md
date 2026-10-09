@@ -49,8 +49,13 @@ npm run deploy    # wrangler deploy → Action Video Cloudflare account
 ```
 
 Login emails (magic links) are sent with Cloudflare Email Service via the `EMAIL` binding, from
-`noreply@lexterragame.com` — no API key needed. Secrets, if any are added, are managed with
-`npx wrangler secret put <NAME>`.
+`noreply@lexterragame.com` — no API key needed.
+
+Secrets are managed with `npx wrangler secret put <NAME>`:
+- `ADMIN_PASSWORD` — password for `admin.html`. If unset, admin actions are refused.
+
+Server-to-server calls (game results, account merges, lobby updates) carry an internal header
+that the Worker strips from every outside request, so they can't be sent from a browser.
 
 When adding, renaming or removing a Durable Object class, add a new entry to `migrations`
 in `wrangler.jsonc` — wrangler does not create them automatically.
