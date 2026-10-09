@@ -13,6 +13,31 @@ const BINDINGS = { main: "Main", lobby: "Lobby", stats: "Stats", auth: "Auth" };
 export const INTERNAL_HEADER = "x-lexterra-internal";
 export const isInternal = (req) => req.headers.get(INTERNAL_HEADER) === "1";
 
+// Player names are rendered into HTML by every client, so strip anything that could
+// break out of text or attribute context. Emoji and other unicode are fine.
+export function cleanName(raw, fallback = "PLAYER") {
+  if (typeof raw !== "string") return fallback;
+  const name = raw.replace(/[<>"'`\\\x00-\x1f\x7f]/g, "").trim().toUpperCase().slice(0, 15);
+  return name || fallback;
+}
+
+// A player's UUID is effectively their account credential (coins, name, email link),
+// so it must never reach other players. Returns a copy of game state safe to broadcast.
+export function publicState(state) {
+  if (!state) return state;
+  const strip = (p) => { if (!p) return p; const { uuid, ...rest } = p; return rest; };
+  return {
+    ...state,
+    players: Object.fromEntries(Object.entries(state.players ?? {}).map(([id, p]) => [id, strip(p)])),
+    disconnectedPlayers: state.disconnectedPlayers
+      ? Object.fromEntries(Object.entries(state.disconnectedPlayers).map(([id, d]) => [id, { ...d, player: strip(d.player) }]))
+      : state.disconnectedPlayers,
+    pendingJoinRequest: strip(state.pendingJoinRequest),
+  };
+}
+
+export const isUuid = (v) => typeof v === "string" && /^[A-Za-z0-9-]{8,64}$/.test(v);
+
 export function makeRoom(server) {
   return {
     get id() { return server.name; },

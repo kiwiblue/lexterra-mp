@@ -30,9 +30,36 @@ function pruneStale(games) {
   return pruned;
 }
 
-async function applyUpdate(msg, room) {
+// Browsers can't be trusted to describe a room, so for client-originated updates the lobby
+// asks the game room itself and stores that answer. Server-originated updates are trusted.
+async function fetchRoomInfo(roomId, room) {
+  if (typeof roomId !== "string" || !/^[A-Z0-9]{4,8}$/.test(roomId)) return null;
+  try {
+    const res = await room.context.parties.main.get(roomId).fetch("/?lobbyinfo=1");
+    return res.ok ? await res.json() : null;
+  } catch { return null; }
+}
+
+async function applyUpdate(msg, room, trusted) {
+  if (!msg || typeof msg !== "object") return;
   const raw = (await room.storage.get("games")) ?? {};
   const games = pruneStale(raw);
+  if (!trusted) {
+    if (!["register", "update", "unregister"].includes(msg.type)) return;
+    const info = await fetchRoomInfo(msg.roomId, room);
+    if (!info || !info.isPublic || info.phase === "ended") {
+      if (!(msg.roomId in games)) return;
+      delete games[msg.roomId];
+    } else {
+      games[msg.roomId] = {
+        roomId: msg.roomId, hostName: info.hostName, playerCount: info.playerCount, humanCount: info.humanCount,
+        botCount: info.botCount, settings: info.settings, phase: info.phase, lastActivity: Date.now(),
+      };
+    }
+    await room.storage.put("games", games);
+    room.broadcast(JSON.stringify({ type: "games", games }));
+    return;
+  }
   if (msg.type === "register") {
     games[msg.roomId] = {
       roomId: msg.roomId,
@@ -77,19 +104,25 @@ export class Lobby extends Server {
   }
 
   async onMessage(conn, message) {
-    const msg = JSON.parse(message);
+    let msg;
+    try { msg = JSON.parse(message); } catch { return; }
+    if (!msg || typeof msg !== "object") return;
     if (msg.type === "hello") {
       conn.setState({ home: msg.location === "home" });
       broadcastCounts(this.room);
       return;
     }
-    await applyUpdate(msg, this.room);
+    await applyUpdate(msg, this.room, false);
   }
 
-  // Called by game rooms only (server → lobby); browsers update the lobby over the websocket
+  // Called by game rooms only (server → lobby); browser messages are verified against the room
   async onRequest(req) {
     if (!isInternal(req)) return new Response("Forbidden", { status: 403 });
-    if (req.method === "POST") await applyUpdate(await req.json(), this.room);
+    if (req.method === "POST") {
+      let msg;
+      try { msg = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
+      await applyUpdate(msg, this.room, true);
+    }
     return new Response("ok");
   }
 }

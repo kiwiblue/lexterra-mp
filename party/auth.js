@@ -1,10 +1,10 @@
 // Lexterra MP — Email auth (magic link)
-// POST { action: "register", email, uuid } → send magic link; returns { ok, isNew }
+// POST { action: "register", email, uuid } → send magic link; returns { ok }
 // POST { action: "verify",   token }       → validate token;   returns { ok, uuid, email }
 // POST { action: "lookup",   uuid }        → find email;       returns { ok, email }
 
 import { Server } from "partyserver";
-import { makeRoom } from "./compat.js";
+import { makeRoom, isUuid } from "./compat.js";
 
 // ── Config ────────────────────────────────────────────────────────────────
 const SITE_URL   = "https://lexterragame.com";
@@ -12,6 +12,8 @@ const FROM_EMAIL = { email: "noreply@lexterragame.com", name: "Lexterra" };
 
 const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const RATE_LIMIT_MS   =  5 * 60 * 1000; //  5 minutes between requests per email
+const SEND_WINDOW_MS  = 60 * 60 * 1000; // global cap: at most SEND_MAX_PER_WINDOW emails per hour
+const SEND_MAX_PER_WINDOW = 60;
 
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
@@ -70,58 +72,52 @@ const handlers = {
     // ── Register ──────────────────────────────────────────────────────────
     if (action === "register") {
       const { email, uuid } = body;
-      if (!email || !uuid) return json({ error: "Missing email or uuid" }, 400);
+      if (typeof email !== "string" || !isUuid(uuid)) return json({ error: "Missing email or uuid" }, 400);
 
       const emailNorm = email.toLowerCase().trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm))
+      if (emailNorm.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm))
         return json({ error: "Invalid email address" }, 400);
 
+      const now = Date.now();
       const rateLimits = (await room.storage.get("rate_limits")) ?? {};
+      for (const [k, t] of Object.entries(rateLimits)) if (now - t >= RATE_LIMIT_MS) delete rateLimits[k];
       const lastReq = rateLimits[emailNorm];
-      if (lastReq && Date.now() - lastReq < RATE_LIMIT_MS) {
-        const wait = Math.ceil((RATE_LIMIT_MS - (Date.now() - lastReq)) / 1000);
+      if (lastReq && now - lastReq < RATE_LIMIT_MS) {
+        const wait = Math.ceil((RATE_LIMIT_MS - (now - lastReq)) / 1000);
         return json({ error: `Please wait ${wait}s before requesting another link` }, 429);
       }
+      // Global cap so the service can't be used to spam arbitrary addresses
+      const sendLog = ((await room.storage.get("send_log")) ?? []).filter(t => now - t < SEND_WINDOW_MS);
+      if (sendLog.length >= SEND_MAX_PER_WINDOW) return json({ error: "Too many login requests right now — please try again later" }, 429);
 
-      // Existing registration wins → returning user gets their canonical UUID
+      // An email only becomes linked to an account when its owner clicks the link, so
+      // nobody can claim someone else's address ahead of them.
       const emailMap = (await room.storage.get("email_map")) ?? {};
-      const existing  = emailMap[emailNorm];
-      const canonical = existing ?? uuid;
+      const existing = emailMap[emailNorm];
 
-      if (!existing) {
-        emailMap[emailNorm] = canonical;
-        await room.storage.put("email_map", emailMap);
-      }
-
-      const uuidMap = (await room.storage.get("uuid_map")) ?? {};
-      uuidMap[canonical] = emailNorm;
-      await room.storage.put("uuid_map", uuidMap);
-
-      // Prune expired tokens, then add new one
       const tokens = (await room.storage.get("tokens")) ?? {};
-      const now = Date.now();
-      for (const [k, v] of Object.entries(tokens)) {
-        if (v.expiry < now) delete tokens[k];
-      }
+      for (const [k, v] of Object.entries(tokens)) if (v.expiry < now) delete tokens[k];
       const token = generateToken();
-      // mergeFrom: if this is a returning user from a new browser, record their current UUID so we can merge on verify
-      const mergeFrom = (existing && uuid !== canonical) ? uuid : null;
-      tokens[token] = { email: emailNorm, uuid: canonical, mergeFrom, expiry: now + TOKEN_EXPIRY_MS };
+      tokens[token] = existing
+        ? { email: emailNorm, uuid: existing, mergeFrom: uuid !== existing ? uuid : null, expiry: now + TOKEN_EXPIRY_MS }
+        : { email: emailNorm, uuid, mergeFrom: null, claimNew: true, expiry: now + TOKEN_EXPIRY_MS };
       await room.storage.put("tokens", tokens);
 
       rateLimits[emailNorm] = now;
       await room.storage.put("rate_limits", rateLimits);
+      sendLog.push(now);
+      await room.storage.put("send_log", sendLog);
 
       const sent = await sendMagicLink(emailNorm, token, room.env.EMAIL);
       if (!sent) return json({ error: "Failed to send email — please try again shortly" }, 500);
 
-      return json({ ok: true, isNew: !existing });
+      return json({ ok: true });
     }
 
     // ── Verify ────────────────────────────────────────────────────────────
     if (action === "verify") {
       const { token } = body;
-      if (!token) return json({ error: "Missing token" }, 400);
+      if (typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) return json({ error: "Missing token" }, 400);
 
       const tokens = (await room.storage.get("tokens")) ?? {};
       const entry   = tokens[token];
@@ -136,6 +132,23 @@ const handlers = {
 
       delete tokens[token]; // single-use
       await room.storage.put("tokens", tokens);
+
+      // First verified click links the email to this account. If someone else verified the
+      // same email meanwhile, their account is canonical and this one merges into it.
+      if (entry.claimNew) {
+        const emailMap = (await room.storage.get("email_map")) ?? {};
+        const uuidMap  = (await room.storage.get("uuid_map")) ?? {};
+        const owner = emailMap[entry.email];
+        if (owner && owner !== entry.uuid) {
+          entry.mergeFrom = entry.uuid;
+          entry.uuid = owner;
+        } else if (!owner) {
+          emailMap[entry.email] = entry.uuid;
+          uuidMap[entry.uuid] = entry.email;
+          await room.storage.put("email_map", emailMap);
+          await room.storage.put("uuid_map", uuidMap);
+        }
+      }
 
       // Merge the old UUID's stats/coins/XP into the canonical UUID (best-effort)
       if (entry.mergeFrom && entry.mergeFrom !== entry.uuid) {
@@ -154,7 +167,7 @@ const handlers = {
     // ── Lookup ────────────────────────────────────────────────────────────
     if (action === "lookup") {
       const { uuid } = body;
-      if (!uuid) return json({ error: "Missing uuid" }, 400);
+      if (!isUuid(uuid)) return json({ error: "Missing uuid" }, 400);
       const uuidMap = (await room.storage.get("uuid_map")) ?? {};
       return json({ ok: true, email: uuidMap[uuid] ?? null });
     }

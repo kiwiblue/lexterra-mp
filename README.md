@@ -57,6 +57,25 @@ Secrets are managed with `npx wrangler secret put <NAME>`:
 Server-to-server calls (game results, account merges, lobby updates) carry an internal header
 that the Worker strips from every outside request, so they can't be sent from a browser.
 
+## Trust model
+
+The browser is never trusted for anything that affects scores, coins or other players:
+
+- Word claims are re-validated on the server (`validateClaim` in `party/index.js`): straight
+  line of filled cells, required length, real dictionary word (`party/words.js`, generated from
+  `public/words.js` — keep them in sync), not banned, exclusive-mode territory rules. The score
+  is always the word length; the client's score is ignored.
+- Letter placement checks the player actually has a letter, and that the cell and letter are valid.
+- Game settings are whitelisted (`cleanSettings`); High Stakes config can't be set by the host.
+- Coins can only be spent (`spend` on the stats party) at the admin-configured price; the undo
+  charge is made by the game room itself. Nothing a browser sends can add coins.
+- Player UUIDs are account credentials. They are stripped from all state sent to browsers
+  (`publicState`) and leaderboards expose a one-way hash (`pid`) instead.
+- Names are sanitised on entry (`cleanName`) so they're safe to render.
+- Public-lobby listings are fetched from the game room itself, never taken from the client.
+- An email is only linked to an account when its owner clicks the magic link; sends are rate-limited
+  per address and globally.
+
 When adding, renaming or removing a Durable Object class, add a new entry to `migrations`
 in `wrangler.jsonc` — wrangler does not create them automatically.
 

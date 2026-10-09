@@ -1,6 +1,6 @@
 // Lexterra MP — Stats accumulator
 // POST { type:"game_end", ... } (server-only: sent by game rooms)
-// POST { type:"coins_update", uuid, name, delta, reason } → add/subtract coins (delta may be negative; floored at 0)
+// POST { type:"spend", uuid, item } → charge a coin item (undoLetter | viewUnclaimed); 402 if short
 // POST { type:"config_update", password, config } → save coin earn/spend weights (admin)
 // POST { type:"admin_data", password } → return all player coin records (admin)
 // POST { type:"merge_uuid", fromUuid, toUuid } → merge accounts (server-only: sent by the auth party)
@@ -12,7 +12,7 @@
 // GET (no params) → aggregate report
 
 import { Server } from "partyserver";
-import { makeRoom, isInternal } from "./compat.js";
+import { makeRoom, isInternal, cleanName, isUuid } from "./compat.js";
 
 const TOP_SNAPS = 5;
 
@@ -117,6 +117,30 @@ function updateAll(all, entry) {
 const MODE_LABEL = { conquest: "Conquest", exclusive: "Keeps", off: "Search" };
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
+const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS } });
+
+// Public leaderboards identify players by a one-way hash of their UUID, so the UUID
+// (which unlocks coins, renames and the email link) is never published.
+const pidCache = new Map();
+async function pidOf(uuid) {
+  if (!uuid) return null;
+  let pid = pidCache.get(uuid);
+  if (!pid) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uuid));
+    pid = Array.from(new Uint8Array(buf).slice(0, 8), b => b.toString(16).padStart(2, "0")).join("");
+    pidCache.set(uuid, pid);
+  }
+  return pid;
+}
+async function withPid(e) {
+  if (!e || typeof e !== "object") return e;
+  const { uuid, ...rest } = e;
+  const out = { ...rest, pid: await pidOf(uuid) };
+  if (rest.best) out.best = await withPid(rest.best);
+  if (rest.bestComp) out.bestComp = await withPid(rest.bestComp);
+  return out;
+}
+const withPids = (arr) => Promise.all((arr ?? []).map(withPid));
 
 const handlers = {
   async onConnect() {},
@@ -125,8 +149,14 @@ const handlers = {
     if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 
     if (req.method === "POST") {
-      const msg = await req.json();
-      if (msg.type === "name_update" && msg.uuid && msg.name) {
+      let msg;
+      try { msg = await req.json(); } catch { return new Response("Bad request", { status: 400, headers: CORS }); }
+      if (!msg || typeof msg !== "object") return new Response("Bad request", { status: 400, headers: CORS });
+
+      if (msg.type === "name_update" && isUuid(msg.uuid)) {
+        const name = cleanName(msg.name, "");
+        if (!name) return new Response("ok", { headers: CORS });
+        msg.name = name;
         for (const mode of ["conquest", "exclusive", "off"]) {
           const playersKey = `lb_${mode}_players`;
           const allKey = `lb_${mode}_all`;
@@ -150,23 +180,26 @@ const handlers = {
         let coins = (await room.storage.get("player_coins")) ?? [];
         const ci = coins.findIndex(p => p.uuid === msg.uuid);
         if (ci >= 0) { coins[ci].name = msg.name; await room.storage.put("player_coins", coins); }
-        return new Response("ok");
+        return new Response("ok", { headers: CORS });
       }
 
-      if (msg.type === "coins_update" && msg.uuid && typeof msg.delta === "number") {
-        let coins = (await room.storage.get("player_coins")) ?? [];
+      // Coins can only ever be spent from the client; the cost comes from the admin config,
+      // never from the request.
+      if (msg.type === "spend" && isUuid(msg.uuid)) {
+        const items = { undoLetter: "spendUndoLetter", viewUnclaimed: "spendViewUnclaimed" };
+        const key = items[msg.item];
+        if (!key) return jsonRes({ error: "unknown_item" }, 400);
+        const cfg = { ...DEFAULT_COIN_CONFIG, ...((await room.storage.get("coin_config")) ?? {}) };
+        const cost = Math.max(0, Number(cfg[key]) || 0);
+        const coins = (await room.storage.get("player_coins")) ?? [];
         const ci = coins.findIndex(p => p.uuid === msg.uuid);
-        if (ci >= 0) {
-          coins[ci].coins = Math.max(0, coins[ci].coins + msg.delta);
-          if (msg.name) coins[ci].name = msg.name;
-        } else {
-          coins.push({ uuid: msg.uuid, name: msg.name ?? "Unknown", coins: Math.max(0, msg.delta) });
-        }
-        await room.storage.put("player_coins", coins);
-        return new Response("ok");
+        const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
+        if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
+        if (cost > 0) { coins[ci].coins = balance - cost; await room.storage.put("player_coins", coins); }
+        return jsonRes({ coins: balance - cost, cost });
       }
 
-      if (msg.type === "colour_unlock" && msg.uuid) {
+      if (msg.type === "colour_unlock" && isUuid(msg.uuid)) {
         const stored2 = (await room.storage.get("coin_config")) ?? {};
         const cfg2 = { ...DEFAULT_COIN_CONFIG, ...stored2 };
         const cost = cfg2.spendPremiumColor;
@@ -190,7 +223,16 @@ const handlers = {
       if (msg.type === "config_update") {
         if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
         if (!msg.config || typeof msg.config !== "object") return new Response("Bad request", { status: 400, headers: CORS });
-        await room.storage.put("coin_config", msg.config);
+        // Keep only known keys with sane values so a bad save can't break coin maths
+        const clean = {};
+        for (const [k, v] of Object.entries(msg.config)) {
+          if (!(k in DEFAULT_COIN_CONFIG)) continue;
+          if (k === "highStakesTimeoutAction") { if (v === "pass" || v === "lose") clean[k] = v; continue; }
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < 0 || (k === "pointsInterval" && n < 1)) continue;
+          clean[k] = n;
+        }
+        await room.storage.put("coin_config", clean);
         return new Response("ok", { headers: CORS });
       }
 
@@ -447,7 +489,7 @@ const handlers = {
 
       if (url.searchParams.get("xp") === "true") {
         const xp = (await room.storage.get("player_xp")) ?? [];
-        return new Response(JSON.stringify(xp), {
+        return new Response(JSON.stringify(await withPids(xp)), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
@@ -482,7 +524,7 @@ const handlers = {
             await room.storage.put(`lb_${mode}_all`, all);
           }
         }
-        return new Response(JSON.stringify({ players, all }), {
+        return new Response(JSON.stringify({ players: await withPids(players), all: await withPids(all) }), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }

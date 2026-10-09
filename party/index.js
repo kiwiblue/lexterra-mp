@@ -2,7 +2,8 @@
 // Each room is one game instance. The server is the source of truth for game state.
 
 import { Server } from "partyserver";
-import { makeRoom } from "./compat.js";
+import { makeRoom, cleanName, publicState, isInternal, isUuid } from "./compat.js";
+import { isDictionaryWord } from "./words.js";
 
 // ── Banned claimable words (profanity filter) ────────────────────────
 // Add words in lowercase. Keep in sync with public/index.html.
@@ -16,6 +17,54 @@ const BANNED_WORDS = new Set([
   "motherfucking","starfucker","starfuckers","starfucking","starfuckings",
 ]);
 function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
+
+// Everything sent to browsers goes through publicState so player UUIDs never leak.
+const stateMsg = (state) => JSON.stringify({ type: "state", state: publicState(state) });
+
+// ── Settings validation ──────────────────────────────────────────────
+// Only known settings with known values are accepted; anything else keeps its current value.
+const DEFAULT_SETTINGS = { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 };
+const BOARD_SIZES = [5, 8, 10], MIN_WORD_LENS = [3, 4, 5];
+const TERRITORY_MODES = ["off", "conquest", "exclusive"], TIME_LIMITS = [60, 120, "high", null];
+function cleanSettings(current, incoming) {
+  const s = { ...current };
+  const inc = (incoming && typeof incoming === "object") ? incoming : {};
+  if (BOARD_SIZES.includes(inc.boardSize)) s.boardSize = inc.boardSize;
+  if (MIN_WORD_LENS.includes(inc.minWordLen)) s.minWordLen = inc.minWordLen;
+  if (TERRITORY_MODES.includes(inc.territoryMode)) s.territoryMode = inc.territoryMode;
+  if ("timeLimit" in inc && TIME_LIMITS.includes(inc.timeLimit)) s.timeLimit = inc.timeLimit;
+  return s;
+}
+
+// ── Claim validation ─────────────────────────────────────────────────
+// The client checks claims for instant feedback, but only this check counts: the path
+// must be a straight line of filled cells spelling a real, unbanned word of the required
+// length, and the score is always the word length — nothing is taken from the message.
+function validateClaim(state, msg) {
+  const { word, path } = msg;
+  if (typeof word !== "string" || !/^[A-Z]{2,}$/.test(word)) return null;
+  if (!Array.isArray(path) || path.length !== word.length) return null;
+  const n = state.grid.length;
+  const minLen = Math.max(2, state.settings?.minWordLen ?? 3);
+  if (path.length < minLen || path.length > n) return null;
+  const cells = [];
+  for (const p of path) {
+    if (!p || !Number.isInteger(p.r) || !Number.isInteger(p.c) || p.r < 0 || p.c < 0 || p.r >= n || p.c >= n) return null;
+    cells.push({ r: p.r, c: p.c });
+  }
+  const dr = Math.sign(cells[1].r - cells[0].r), dc = Math.sign(cells[1].c - cells[0].c);
+  if (dr === 0 && dc === 0) return null;
+  for (let i = 1; i < cells.length; i++) {
+    if (cells[i].r - cells[i - 1].r !== dr || cells[i].c - cells[i - 1].c !== dc) return null;
+  }
+  const letters = cells.map(({ r, c }) => state.grid[r]?.[c]?.letter);
+  if (letters.some(l => !l) || letters.join("") !== word) return null;
+  if (isBannedWord(word) || !isDictionaryWord(word)) return null;
+  if (state.settings?.territoryMode === "exclusive" && state.territory) {
+    if (cells.some(({ r, c }) => { const o = state.territory[r]?.[c]; return o && o !== state.cur; })) return null;
+  }
+  return { word, path: cells, score: cells.length };
+}
 
 async function notifyLobby(room, msg) {
   try {
@@ -204,30 +253,37 @@ async function processDisconnect(connId, room) {
 
   await room.storage.put("state", state);
   room.broadcast(JSON.stringify({ type: "player_left", connId, name: player.name }));
-  room.broadcast(JSON.stringify({ type: "state", state }));
+  room.broadcast(stateMsg(state));
 }
 
 const handlers = {
   async onConnect(conn, room) {
     const state = await room.storage.get("state");
-    conn.send(JSON.stringify({ type: "state", state: state ?? null }));
+    conn.send(stateMsg(state ?? null));
     if (state?.isPublic && state?.phase === "ended") {
       await notifyLobby(room, { type: "unregister", roomId: room.id });
     }
   },
 
   async onMessage(message, conn, room) {
-    const msg = JSON.parse(message);
+    let msg;
+    try { msg = JSON.parse(message); } catch { return; }
+    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
 
     switch (msg.type) {
 
       // Host creates a new game
       case "create": {
+        const existing = await room.storage.get("state");
+        if (existing && existing.phase !== "ended") {
+          conn.send(JSON.stringify({ type: "error", message: "That room code is already in use." }));
+          return;
+        }
         const state = {
           phase: "lobby",       // lobby | playing | ended
           host: conn.id,
-          isPublic: msg.isPublic ?? false,
-          settings: msg.settings, // { boardSize, minWordLen, territoryMode, timeLimit }
+          isPublic: msg.isPublic === true,
+          settings: cleanSettings(DEFAULT_SETTINGS, msg.settings), // { boardSize, minWordLen, territoryMode, timeLimit }
           players: {},            // { [connId]: { name, color, score, wordsFound, isReady } }
           grid: null,             // filled when game starts
           territory: null,
@@ -237,9 +293,9 @@ const handlers = {
           consecutivePasses: 0,
         };
         const validForHost = msg.hasPremium ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
-        state.players[conn.id] = { name: msg.name, color: validForHost.includes(msg.color) ? msg.color : "Red", uuid: msg.uuid ?? null, score: 0, wordsFound: 0, isReady: false, isHost: true };
+        state.players[conn.id] = { name: cleanName(msg.name, "HOST"), color: validForHost.includes(msg.color) ? msg.color : "Red", uuid: isUuid(msg.uuid) ? msg.uuid : null, score: 0, wordsFound: 0, isReady: false, isHost: true };
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -255,7 +311,7 @@ const handlers = {
           room.spectatorConns.add(conn.id);
           broadcastSpectatorCount(room);
           conn.send(JSON.stringify({ type: "watching" }));
-          conn.send(JSON.stringify({ type: "state", state }));
+          conn.send(stateMsg(state));
           return;
         }
         if (state.phase !== "lobby") {
@@ -286,16 +342,16 @@ const handlers = {
           joinColor = BASE_COLORS.find(c => !takenColors.includes(c)) ?? "Grey";
         }
         state.players[conn.id] = {
-          name: msg.name,
+          name: cleanName(msg.name),
           color: joinColor,
-          uuid: msg.uuid ?? null,
+          uuid: isUuid(msg.uuid) ? msg.uuid : null,
           score: 0,
           wordsFound: 0,
           isReady: false,
           isHost: false,
         };
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -305,7 +361,7 @@ const handlers = {
         if (!state) return;
         if (state.players[conn.id]) state.players[conn.id].isReady = true;
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -313,7 +369,7 @@ const handlers = {
       case "rename": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "lobby" || !state.players[conn.id]) return;
-        const name = (msg.name || '').trim().toUpperCase().slice(0, 12);
+        const name = cleanName(msg.name, "");
         if (name) {
           state.players[conn.id].name = name;
           const uuid = state.players[conn.id].uuid;
@@ -326,7 +382,7 @@ const handlers = {
           }
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -339,7 +395,7 @@ const handlers = {
         if (takenByOther) return;
         state.players[conn.id].color = msg.color;
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -354,7 +410,7 @@ const handlers = {
         const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
         state.players[botId] ={ name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "easy" };
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -365,7 +421,7 @@ const handlers = {
         if (state.players[msg.botId]?.isBot) {
           delete state.players[msg.botId];
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
         }
         break;
       }
@@ -374,10 +430,10 @@ const handlers = {
       case "bot-difficulty": {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id || state.phase !== "lobby") return;
-        if (state.players[msg.botId]?.isBot) {
+        if (state.players[msg.botId]?.isBot && ["easy", "hard"].includes(msg.difficulty)) {
           state.players[msg.botId].botDifficulty = msg.difficulty;
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
         }
         break;
       }
@@ -386,9 +442,9 @@ const handlers = {
       case "settings": {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id || state.phase !== "lobby") return;
-        state.settings = { ...state.settings, ...msg.settings };
+        state.settings = cleanSettings(state.settings, msg.settings);
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -426,7 +482,7 @@ const handlers = {
         }
 
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         await resetAlarm(room);
         break;
       }
@@ -438,18 +494,24 @@ const handlers = {
         const placeCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(placeCurBot && state.host === conn.id)) return;
         const { r, c, letter } = msg;
+        const n = state.grid.length;
+        if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0 || r >= n || c >= n) return;
+        if (typeof letter !== "string" || !/^[A-Z]$/.test(letter)) return;
+        if ((state.players[state.cur].lettersLeft ?? 0) <= 0) return;
         if (state.grid[r][c] !== null) return;
         state.grid[r][c] = { letter, pi: state.cur };
         state.players[state.cur].lettersLeft--;
-        state.players[state.cur].lastPlacement = { r, c };
+        state.players[state.cur].lastPlacement = { r, c, bonus: 0 };
         state.consecutivePasses = 0;
         state.players[state.cur].passesThisRound = 0;
         if (state.settings?.highStakes) {
           const hs = state.settings.highStakes;
-          state.timeBank[state.cur] = Math.min(hs.max, (state.timeBank[state.cur] ?? hs.start) + hs.letterBonus);
+          const before = state.timeBank[state.cur] ?? hs.start;
+          state.timeBank[state.cur] = Math.min(hs.max, before + hs.letterBonus);
+          state.players[state.cur].lastPlacement.bonus = state.timeBank[state.cur] - before; // taken back on undo
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         await resetAlarm(room);
         break;
       }
@@ -460,8 +522,9 @@ const handlers = {
         if (!state || state.phase !== "playing") return;
         const claimCurBot = state.players[state.cur]?.isBot;
         if (state.cur !== conn.id && !(claimCurBot && state.host === conn.id)) return;
-        const { word, path, score } = msg;
-        if (isBannedWord(word)) return;
+        const checked = validateClaim(state, msg);
+        if (!checked) return;
+        const { word, path, score } = checked;
         if (state.claimed.some(c => {
           const w = word.toLowerCase(), cw = c.word.toLowerCase();
           return w === cw ||
@@ -489,23 +552,42 @@ const handlers = {
           path.forEach(({ r, c }) => { state.territory[r][c] = state.cur; });
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         await resetAlarm(room);
         break;
       }
 
+      // Undo last letter — costs coins, charged here so the client can't skip paying
       case "undo_place": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         if (state.cur !== conn.id) return;
-        const lp = state.players[state.cur].lastPlacement;
+        const me = state.players[state.cur];
+        const lp = me?.lastPlacement;
         if (!lp) return;
         if (state.grid[lp.r]?.[lp.c]?.pi !== state.cur) return;
+        const fail = (message, extra = {}) => conn.send(JSON.stringify({ type: "undo_result", ok: false, message, ...extra }));
+        if (!me.uuid) return fail("No account found for coins.");
+        let charge;
+        try {
+          const res = await room.context.parties.stats.get("main").fetch("/", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "spend", uuid: me.uuid, item: "undoLetter" }),
+          });
+          charge = await res.json();
+          if (!res.ok) return fail(`Not enough coins (need ${charge.cost}, have ${charge.balance ?? 0}).`, { coins: charge.balance ?? 0 });
+        } catch {
+          return fail("Couldn't reach the coin bank — try again.");
+        }
         state.grid[lp.r][lp.c] = null;
-        state.players[state.cur].lettersLeft++;
-        delete state.players[state.cur].lastPlacement;
+        me.lettersLeft++;
+        if (state.settings?.highStakes && lp.bonus) {
+          state.timeBank[state.cur] = Math.max(0, (state.timeBank[state.cur] ?? 0) - lp.bonus);
+        }
+        delete me.lastPlacement;
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        conn.send(JSON.stringify({ type: "undo_result", ok: true, coins: charge.coins }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -522,7 +604,7 @@ const handlers = {
           await notifyStats(room, state, "completed");
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         if (state.phase === "playing") await resetAlarm(room);
         break;
       }
@@ -544,7 +626,7 @@ const handlers = {
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
           await notifyStats(room, state, "completed");
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
           break;
         }
 
@@ -555,7 +637,7 @@ const handlers = {
           await notifyStats(room, state, "completed");
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         if (state.phase === "playing") await resetAlarm(room);
         break;
       }
@@ -586,7 +668,7 @@ const handlers = {
           }
         }
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         if (state.phase === "playing") await resetAlarm(room);
         break;
       }
@@ -624,7 +706,7 @@ const handlers = {
           pendingDisconnects.delete(pendingId);
           remapActiveId(pendingId);
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
           return;
         }
 
@@ -637,7 +719,7 @@ const handlers = {
           if (pendingDisconnects.has(activeId)) { clearTimeout(pendingDisconnects.get(activeId)); pendingDisconnects.delete(activeId); }
           remapActiveId(activeId);
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
           return;
         }
 
@@ -665,7 +747,7 @@ const handlers = {
           for (let c = 0; c < state.grid[r].length; c++)
             if (state.grid[r][c]?.pi === savedKey) state.grid[r][c].pi = conn.id;
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -682,9 +764,10 @@ const handlers = {
         if (!state || state.phase !== "playing") return;
         if (!room.spectatorConns.has(conn.id)) return;
         const expiresAt = Date.now() + 30000;
-        state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, uuid: msg.uuid ?? null, hasPremium: msg.hasPremium ?? false, expiresAt };
+        const reqName = cleanName(msg.name);
+        state.pendingJoinRequest = { connId: conn.id, name: reqName, color: msg.color, uuid: isUuid(msg.uuid) ? msg.uuid : null, hasPremium: msg.hasPremium === true, expiresAt };
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: msg.name, expiresAt }));
+        room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: reqName, expiresAt }));
         break;
       }
 
@@ -698,6 +781,7 @@ const handlers = {
         if (!req || req.connId !== requestConnId || Date.now() > req.expiresAt) return;
 
         if (mode === "add") {
+          if (Object.keys(state.players).length >= 4) return;
           const takenColors = Object.values(state.players).map(p => p.color);
           const hasPrem = req.hasPremium ?? false;
           const validGrant = hasPrem ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
@@ -751,7 +835,7 @@ const handlers = {
         for (const c of room.getConnections()) {
           if (c.id === requestConnId) { c.send(JSON.stringify({ type: "join_granted" })); break; }
         }
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -786,7 +870,7 @@ const handlers = {
           for (let c = 0; c < state.grid[r].length; c++)
             if (state.grid[r][c]?.pi === oldConnId) state.grid[r][c].pi = botId;
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
         break;
       }
 
@@ -808,7 +892,7 @@ const handlers = {
           if (!player || player.isBot) return;
           delete state.players[conn.id];
           await room.storage.put("state", state);
-          room.broadcast(JSON.stringify({ type: "state", state }));
+          room.broadcast(stateMsg(state));
         }
         break;
       }
@@ -844,13 +928,14 @@ const handlers = {
         }
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "player_left", connId: conn.id, name: player.name }), [conn.id]);
-        room.broadcast(JSON.stringify({ type: "state", state }), [conn.id]);
+        room.broadcast(stateMsg(state), [conn.id]);
         break;
       }
 
       // Player hover position — relay to everyone else without touching state
       case "hover": {
-        room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: msg.r, c: msg.c }), [conn.id]);
+        const coord = v => (v === null || Number.isInteger(v)) ? v : null;
+        room.broadcast(JSON.stringify({ type: "hover", connId: conn.id, r: coord(msg.r), c: coord(msg.c) }), [conn.id]);
         break;
       }
 
@@ -862,6 +947,7 @@ const handlers = {
         const fresh = {
           ...state,
           phase: "lobby",
+          settings: { ...state.settings },
           grid: null,
           territory: null,
           claimed: [],
@@ -870,7 +956,13 @@ const handlers = {
           consecutivePasses: 0,
           consecutiveHumanPasses: 0,
           boardFullBadGuesses: 0,
+          disconnectedPlayers: {}, // anyone who left must join afresh — their old score mustn't carry over
+          timeBank: {},
         };
+        delete fresh.settings.highStakes;
+        delete fresh.pendingJoinRequest;
+        delete fresh.turnStartedAt;
+        delete fresh.timedOutPlayer;
         Object.keys(fresh.players).forEach(id => {
           fresh.players[id].score = 0;
           fresh.players[id].wordsFound = 0;
@@ -878,6 +970,7 @@ const handlers = {
           fresh.players[id].isReady = false;
           fresh.players[id].passesThisRound = 0;
           fresh.players[id].totalPasses = 0;
+          delete fresh.players[id].lastPlacement;
         });
         await room.storage.put("state", fresh);
         // Spectators can't follow a reset back to settings — send them home
@@ -888,7 +981,7 @@ const handlers = {
           }
         }
         broadcastSpectatorCount(room);
-        room.broadcast(JSON.stringify({ type: "state", state: fresh }));
+        room.broadcast(stateMsg(fresh));
         if (fresh.isPublic) {
           const freshPlayers = Object.values(fresh.players);
           await notifyLobby(room, { type: "update", roomId: room.id, patch: {
@@ -919,7 +1012,7 @@ const handlers = {
         if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
         await notifyStats(room, state, "abandoned");
         await room.storage.put("state", state);
-        room.broadcast(JSON.stringify({ type: "state", state }));
+        room.broadcast(stateMsg(state));
       }
       broadcastSpectatorCount(room);
       return;
@@ -933,6 +1026,24 @@ const handlers = {
     pendingDisconnects.set(conn.id, tid);
   },
 
+  // Server-only: the lobby asks the room for its real listing details instead of trusting clients
+  async onRequest(req, room) {
+    if (!isInternal(req)) return new Response("Forbidden", { status: 403 });
+    const state = await room.storage.get("state");
+    if (!state) return Response.json(null);
+    const players = Object.values(state.players ?? {});
+    return Response.json({
+      roomId: room.id,
+      isPublic: !!state.isPublic,
+      phase: state.phase,
+      hostName: state.players?.[state.host]?.name ?? "HOST",
+      playerCount: players.length,
+      humanCount: players.filter(p => !p.isBot).length,
+      botCount: players.filter(p => p.isBot).length,
+      settings: state.settings ?? {},
+    });
+  },
+
   async onAlarm(room) {
     const state = await room.storage.get("state");
     if (!state || state.phase !== "playing") return;
@@ -940,7 +1051,7 @@ const handlers = {
     if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
     await notifyStats(room, state, "abandoned");
     await room.storage.put("state", state);
-    room.broadcast(JSON.stringify({ type: "state", state }));
+    room.broadcast(stateMsg(state));
   },
 };
 
@@ -951,5 +1062,6 @@ export class Main extends Server {
   onConnect(conn) { return handlers.onConnect(conn, this.room); }
   onMessage(conn, message) { return handlers.onMessage(message, conn, this.room); }
   onClose(conn) { return handlers.onClose(conn, this.room); }
+  onRequest(req) { return handlers.onRequest(req, this.room); }
   onAlarm() { return handlers.onAlarm(this.room); }
 }
