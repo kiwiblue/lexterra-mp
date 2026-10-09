@@ -1,16 +1,20 @@
 // Lexterra MP — Public games lobby
 // A single shared room that acts as a registry for public games.
 
+import { Server } from "partyserver";
+import { makeRoom } from "./compat.js";
+
 const LOBBY_TTL_MS  = 5 * 60 * 1000;   // 5 min for games awaiting players
 const PLAYING_TTL_MS = 25 * 60 * 1000; // 25 min for in-progress games (alarm ends them after 20 min)
 
-// In-memory set of connection IDs that are on the home/join page.
-// Resets on Durable Object restart (fine — connections are lost too).
-const homeConnections = new Set();
-
+// Who is on the home/join page is stored on each connection's state, so it
+// survives hibernation.
 function broadcastCounts(room) {
-  const total = [...room.getConnections()].length;
-  const inLobby = homeConnections.size;
+  let total = 0, inLobby = 0;
+  for (const conn of room.getConnections()) {
+    total++;
+    if (conn.state?.home) inLobby++;
+  }
   room.broadcast(JSON.stringify({ type: "online", total, inLobby }));
 }
 
@@ -50,8 +54,14 @@ async function applyUpdate(msg, room) {
   room.broadcast(JSON.stringify({ type: "games", games }));
 }
 
-export default {
-  async onConnect(conn, room) {
+// Every visitor stays connected to the lobby, so it hibernates between messages
+// to avoid being billed for idle time.
+export class Lobby extends Server {
+  static options = { hibernate: true };
+  room = makeRoom(this);
+
+  async onConnect(conn) {
+    const room = this.room;
     const raw = (await room.storage.get("games")) ?? {};
     const games = pruneStale(raw);
     if (Object.keys(games).length !== Object.keys(raw).length) {
@@ -60,23 +70,25 @@ export default {
     }
     conn.send(JSON.stringify({ type: "games", games }));
     broadcastCounts(room);
-  },
-  async onClose(conn, room) {
-    homeConnections.delete(conn.id);
-    broadcastCounts(room);
-  },
-  async onMessage(message, conn, room) {
+  }
+
+  onClose() {
+    broadcastCounts(this.room);
+  }
+
+  async onMessage(conn, message) {
     const msg = JSON.parse(message);
     if (msg.type === "hello") {
-      if (msg.location === "home") homeConnections.add(conn.id);
-      broadcastCounts(room);
+      conn.setState({ home: msg.location === "home" });
+      broadcastCounts(this.room);
       return;
     }
-    await applyUpdate(msg, room);
-  },
-  // Called by the main party via inter-party HTTP (server → lobby)
-  async onRequest(req, room) {
-    if (req.method === "POST") await applyUpdate(await req.json(), room);
+    await applyUpdate(msg, this.room);
+  }
+
+  // Called by game rooms (server → lobby)
+  async onRequest(req) {
+    if (req.method === "POST") await applyUpdate(await req.json(), this.room);
     return new Response("ok");
-  },
-};
+  }
+}

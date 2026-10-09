@@ -1,6 +1,9 @@
 // Lexterra MP — PartyKit server
 // Each room is one game instance. The server is the source of truth for game state.
 
+import { Server } from "partyserver";
+import { makeRoom } from "./compat.js";
+
 // ── Banned claimable words (profanity filter) ────────────────────────
 // Add words in lowercase. Keep in sync with public/index.html.
 const BASE_COLORS = ["Red","Blue","Yellow","Green","Grey"];
@@ -146,11 +149,8 @@ function performPass(state, isRealPass) {
   return state.consecutivePasses >= state.turnOrder.length * 2;
 }
 
-// In-memory spectator tracking (per room instance, resets on DO restart — fine)
-const spectatorConns = new Set();
-
 function broadcastSpectatorCount(room) {
-  room.broadcast(JSON.stringify({ type: "spectators", count: spectatorConns.size }));
+  room.broadcast(JSON.stringify({ type: "spectators", count: room.spectatorConns.size }));
 }
 
 // Grace period before processing a disconnect — gives mobile users time to
@@ -207,8 +207,7 @@ async function processDisconnect(connId, room) {
   room.broadcast(JSON.stringify({ type: "state", state }));
 }
 
-/** @type {import("partykit/server").PartyKitServer} */
-export default {
+const handlers = {
   async onConnect(conn, room) {
     const state = await room.storage.get("state");
     conn.send(JSON.stringify({ type: "state", state: state ?? null }));
@@ -253,7 +252,7 @@ export default {
         }
         if (state.phase === "playing") {
           // Game already started — redirect to spectator so they can request to join
-          spectatorConns.add(conn.id);
+          room.spectatorConns.add(conn.id);
           broadcastSpectatorCount(room);
           conn.send(JSON.stringify({ type: "watching" }));
           conn.send(JSON.stringify({ type: "state", state }));
@@ -672,7 +671,7 @@ export default {
 
       // Spectator announces themselves
       case "watch": {
-        spectatorConns.add(conn.id);
+        room.spectatorConns.add(conn.id);
         broadcastSpectatorCount(room);
         break;
       }
@@ -681,7 +680,7 @@ export default {
       case "join_request": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
-        if (!spectatorConns.has(conn.id)) return;
+        if (!room.spectatorConns.has(conn.id)) return;
         const expiresAt = Date.now() + 30000;
         state.pendingJoinRequest = { connId: conn.id, name: msg.name, color: msg.color, uuid: msg.uuid ?? null, hasPremium: msg.hasPremium ?? false, expiresAt };
         await room.storage.put("state", state);
@@ -746,7 +745,7 @@ export default {
         }
 
         delete state.pendingJoinRequest;
-        spectatorConns.delete(requestConnId);
+        room.spectatorConns.delete(requestConnId);
         broadcastSpectatorCount(room);
         await room.storage.put("state", state);
         for (const c of room.getConnections()) {
@@ -883,8 +882,8 @@ export default {
         await room.storage.put("state", fresh);
         // Spectators can't follow a reset back to settings — send them home
         for (const c of room.getConnections()) {
-          if (spectatorConns.has(c.id)) {
-            spectatorConns.delete(c.id);
+          if (room.spectatorConns.has(c.id)) {
+            room.spectatorConns.delete(c.id);
             c.send(JSON.stringify({ type: "host_left" }));
           }
         }
@@ -907,8 +906,8 @@ export default {
 
   async onClose(conn, room) {
     // Spectators: handle immediately, no grace period needed
-    if (spectatorConns.has(conn.id)) {
-      spectatorConns.delete(conn.id);
+    if (room.spectatorConns.has(conn.id)) {
+      room.spectatorConns.delete(conn.id);
       const state = await room.storage.get("state");
       if (state?.pendingJoinRequest?.connId === conn.id) {
         delete state.pendingJoinRequest;
@@ -944,3 +943,13 @@ export default {
     room.broadcast(JSON.stringify({ type: "state", state }));
   },
 };
+
+// Game room. In-memory state (spectators, disconnect timers) relies on the room
+// staying awake while players are connected, so hibernation stays off.
+export class Main extends Server {
+  room = Object.assign(makeRoom(this), { spectatorConns: new Set() });
+  onConnect(conn) { return handlers.onConnect(conn, this.room); }
+  onMessage(conn, message) { return handlers.onMessage(message, conn, this.room); }
+  onClose(conn) { return handlers.onClose(conn, this.room); }
+  onAlarm() { return handlers.onAlarm(this.room); }
+}

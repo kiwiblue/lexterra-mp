@@ -10,6 +10,9 @@
 // GET ?config=true → current coin earn/spend config (public)
 // GET (no params) → aggregate report
 
+import { Server } from "partyserver";
+import { makeRoom } from "./compat.js";
+
 const TOP_SNAPS = 5;
 
 // ── Admin password ─────────────────────────────────────────────────────────
@@ -105,7 +108,7 @@ const MODE_LABEL = { conquest: "Conquest", exclusive: "Keeps", off: "Search" };
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
 
-export default {
+const handlers = {
   async onConnect() {},
 
   async onRequest(req, room) {
@@ -503,3 +506,8 @@ export default {
     return new Response("Method Not Allowed", { status: 405 });
   },
 };
+
+export class Stats extends Server {
+  room = makeRoom(this);
+  onRequest(req) { return handlers.onRequest(req, this.room); }
+}

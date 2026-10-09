@@ -2,17 +2,31 @@
 
 Online multiplayer version of [Lexterra](https://github.com/kiwiblue/lexterra) — a real-time word-claiming board game.
 
-Built with [PartyKit](https://www.partykit.io) for real-time game rooms.
+Built with [PartyServer](https://github.com/cloudflare/partykit/tree/main/packages/partyserver) — real-time game rooms running as
+Cloudflare Durable Objects. (Migrated from the PartyKit hosted platform in October 2026, when it shut down.)
+
+## Hosting
+
+- **Game server** — Cloudflare Worker `lexterra-mp` at `https://api.lexterragame.com`
+- **Website** — Cloudflare Pages project `lexterra-mp` at `https://lexterragame.com`, auto-deployed from the `main` branch (`public/`)
+
+Both live in the Action Video Cloudflare account.
 
 ## Project Structure
 
 ```
 party/
-  index.js      — PartyKit server: room management, game state, turn logic
+  server.js     — Worker entry: routes /parties/<party>/<room> to Durable Objects
+  compat.js     — Adapts the original PartyKit-style handlers to PartyServer
+  index.js      — Game room (Main): room management, game state, turn logic
+  lobby.js      — Public games lobby + online counts (Lobby)
+  stats.js      — Leaderboards, XP, coins, admin config (Stats)
+  auth.js       — Email magic-link accounts (Auth)
 public/
   index.html    — Game client: lobby, board, UI
+  admin.html    — Coin economy & High Stakes admin
   words.js      — SOWPODS dictionary (copy from standalone)
-partykit.json   — PartyKit config
+wrangler.jsonc  — Worker + Durable Object config
 ```
 
 ## Development
@@ -21,16 +35,25 @@ Requires [Node.js](https://nodejs.org) 18+.
 
 ```bash
 npm install
-npm run dev       # starts local PartyKit server at localhost:1999
+npm run dev       # starts the game server locally at localhost:8787
 ```
 
-Open `http://localhost:1999` in multiple browser tabs to test multiplayer locally.
+The client always talks to `SERVER_HOST` in `public/index.html` (production); point it at
+`localhost:8787` temporarily to test against a local server. Local secrets go in `.dev.vars`
+(gitignored).
 
 ## Deploy
 
 ```bash
-npm run deploy    # deploys to PartyKit cloud (free hobby tier)
+npm run deploy    # wrangler deploy → Action Video Cloudflare account
 ```
+
+Login emails (magic links) are sent with Cloudflare Email Service via the `EMAIL` binding, from
+`noreply@lexterragame.com` — no API key needed. Secrets, if any are added, are managed with
+`npx wrangler secret put <NAME>`.
+
+When adding, renaming or removing a Durable Object class, add a new entry to `migrations`
+in `wrangler.jsonc` — wrangler does not create them automatically.
 
 ## Status
 

@@ -3,10 +3,12 @@
 // POST { action: "verify",   token }       → validate token;   returns { ok, uuid, email }
 // POST { action: "lookup",   uuid }        → find email;       returns { ok, email }
 
+import { Server } from "partyserver";
+import { makeRoom } from "./compat.js";
+
 // ── Config ────────────────────────────────────────────────────────────────
 const SITE_URL   = "https://lexterragame.com";
-const FROM_EMAIL = "Lexterra <noreply@lexterragame.com>";
-const STATS_URL  = "https://lexterra-mp.kiwiblue.partykit.dev/parties/stats/main";
+const FROM_EMAIL = { email: "noreply@lexterragame.com", name: "Lexterra" };
 const MERGE_SECRET = "lx-p4rty-merge";
 
 const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
@@ -29,17 +31,13 @@ function generateToken() {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function sendMagicLink(email, token, apiKey) {
+// Sent via Cloudflare Email Service (the EMAIL binding in wrangler.jsonc)
+async function sendMagicLink(email, token, mailer) {
   const link = `${SITE_URL}/?auth=${token}`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: FROM_EMAIL,
+  try {
+    await mailer.send({
       to: email,
+      from: FROM_EMAIL,
       subject: "Your Lexterra login link",
       html: `
         <div style="font-family:sans-serif;max-width:440px;margin:0 auto;color:#1e293b;padding:24px">
@@ -50,12 +48,16 @@ async function sendMagicLink(email, token, apiKey) {
           <p style="color:#94a3b8;font-size:0.8em;margin:20px 0 0">If you didn't request this, you can safely ignore it.</p>
         </div>
       `,
-    }),
-  });
-  return res.ok;
+      text: `Log in to Lexterra\n\nOpen this link to restore your coins, stats, and game history:\n${link}\n\nThis link expires in 15 minutes and can only be used once. If you didn't request this, you can safely ignore it.`,
+    });
+    return true;
+  } catch (err) {
+    console.error(`Magic link send failed: ${err.code ?? ""} ${err.message}`);
+    return false;
+  }
 }
 
-export default {
+const handlers = {
   async onRequest(req, room) {
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -111,8 +113,8 @@ export default {
       rateLimits[emailNorm] = now;
       await room.storage.put("rate_limits", rateLimits);
 
-      const sent = await sendMagicLink(emailNorm, token, room.env.RESEND_API_KEY);
-      if (!sent) return json({ error: "Failed to send email — check Resend configuration" }, 500);
+      const sent = await sendMagicLink(emailNorm, token, room.env.EMAIL);
+      if (!sent) return json({ error: "Failed to send email — please try again shortly" }, 500);
 
       return json({ ok: true, isNew: !existing });
     }
@@ -139,7 +141,7 @@ export default {
       // Merge the old UUID's stats/coins/XP into the canonical UUID (best-effort)
       if (entry.mergeFrom && entry.mergeFrom !== entry.uuid) {
         try {
-          await fetch(STATS_URL, {
+          await room.context.parties.stats.get("main").fetch("/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: "merge_uuid", fromUuid: entry.mergeFrom, toUuid: entry.uuid, secret: MERGE_SECRET }),
@@ -161,3 +163,8 @@ export default {
     return json({ error: "Unknown action" }, 400);
   },
 };
+
+export class Auth extends Server {
+  room = makeRoom(this);
+  onRequest(req) { return handlers.onRequest(req, this.room); }
+}

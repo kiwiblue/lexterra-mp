@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lexterra-mp",
+  "main": "party/server.js",
+  "compatibility_date": "2026-10-01",
+  // Action Video Cloudflare account (hosts lexterragame.com)
+  "account_id": "4e1004b24c041dd401356985c84e1db8",
+
+  "routes": [{ "pattern": "api.lexterragame.com", "custom_domain": true }],
+  "workers_dev": true,
+
+  // One Durable Object class per party. Binding names map to URL party names:
+  // Main → /parties/main, Lobby → /parties/lobby, Stats → /parties/stats, Auth → /parties/auth
+  "durable_objects": {
+    "bindings": [
+      { "name": "Main", "class_name": "Main" },
+      { "name": "Lobby", "class_name": "Lobby" },
+      { "name": "Stats", "class_name": "Stats" },
+      { "name": "Auth", "class_name": "Auth" }
+    ]
+  },
+  // Wrangler does not create migrations automatically — add a new entry whenever
+  // a Durable Object class is added, renamed, or removed.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Main", "Lobby", "Stats", "Auth"] }
+  ],
+
+  // Cloudflare Email Service — magic login links. Restricted to the one sender address.
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@lexterragame.com"] }],
+
+  "observability": { "enabled": true }
+}

@@ -1,3 +1,6 @@
 node_modules/
-.partykit/
 .env
+migration-backup/
+.dev.vars
+.wrangler/
+.partykit/
