@@ -255,10 +255,20 @@
       <span class="hc-streak" id="daily-card-streak"></span>
     </div>
     <p class="hc-sub" id="daily-card-sub">Same board for everyone, every day. One attempt — how many points can you score?</p>
+    <p class="hc-sub" id="daily-card-leader" style="display:none"></p>
     <button class="btn btn-primary" id="daily-card-btn" onclick="openDailyScreen()">Play today's puzzle</button>
     <div class="hc-row" id="daily-freeze-row" style="display:none">
       <span class="hc-sub" id="daily-freeze-text"></span>
       <button class="btn btn-secondary" id="daily-freeze-btn" onclick="buyStreakFreeze()" style="padding:0.35rem 0.7rem;font-size:0.75rem;flex-shrink:0"></button>
+    </div>
+  </div>
+
+  <div class="card home-card" id="endless-card" style="display:none">
+    <div class="hc-row"><h2>Endless Puzzles</h2><span class="hc-sub" id="endless-best" style="white-space:nowrap"></span></div>
+    <p class="hc-sub">Fresh boards, as many as you like. Classic lets you take your time — Blitz gives you <span id="endless-secs">10</span> seconds per letter.</p>
+    <div style="display:flex;gap:0.5rem">
+      <button class="btn btn-primary" style="flex:1;padding:0.6rem" onclick="openEndlessScreen('classic')">Classic</button>
+      <button class="btn btn-secondary" style="flex:1;padding:0.6rem" onclick="openEndlessScreen('blitz')">⚡ Blitz</button>
     </div>
   </div>
 
@@ -496,6 +506,7 @@
   let playerCoins = 0;
   let playerXp = 0;
   let colorUnlocks = {};  // { "orange": expiryTimestamp, ... }
+  let lastProfile = null; // latest profile from the Stats server (home cards reuse it)
   let coinConfig = { spendViewUnclaimed: 1, spendUndoLetter: 1, spendPremiumColor: 10 };
 
   // Game UI state
@@ -520,7 +531,7 @@
   let timerEndsAt = 0;
   let highStakesTimedOut = false;
   // Feature switches (from the admin config; all on by default)
-  const features = { tutorial: true, daily: true, streaks: true, weekly: true, pwa: true, push: true, async: true };
+  const features = { tutorial: true, daily: true, endless: true, streaks: true, weekly: true, pwa: true, push: true, async: true };
   let asyncTurnHours = 24;
   let streakInfo = null;
   let practicePending = false, practiceBotRequested = false;
@@ -2846,6 +2857,7 @@
         fetch(`${base}?config`),
       ]);
       const profile = await pr.json();
+      lastProfile = profile;
       const cd = profile, xd = profile;
       if (profile.streak) streakInfo = profile.streak;
       const cfgd = await cfgr.json();
@@ -2856,6 +2868,8 @@
       if (cfgd.spendUndoLetter !== undefined) coinConfig.spendUndoLetter = cfgd.spendUndoLetter;
       if (cfgd.spendViewUnclaimed !== undefined) coinConfig.spendViewUnclaimed = cfgd.spendViewUnclaimed;
       if (cfgd.spendStreakFreeze !== undefined) coinConfig.spendStreakFreeze = cfgd.spendStreakFreeze;
+      if (cfgd.spendTileTheme !== undefined) coinConfig.spendTileTheme = cfgd.spendTileTheme;
+      if (cfgd.endlessBlitzSecs !== undefined) coinConfig.endlessBlitzSecs = cfgd.endlessBlitzSecs;
       if (cfgd.asyncTurnHours !== undefined) asyncTurnHours = cfgd.asyncTurnHours;
       for (const f of Object.keys(features)) if (cfgd[`feature_${f}`] !== undefined) features[f] = Number(cfgd[`feature_${f}`]) !== 0;
       // Sync canonical name from server for logged-in users on new/fresh devices
@@ -3201,6 +3215,7 @@
     if (!features.weekly && lbTab === "weekly") lbSetTab("leaderboard");
     if (!onHome) return;
     await Promise.all([renderDailyCard(), renderMyGames()]);
+    renderEndlessCard();
     renderInstallCard();
     updateHeaderStats();
   }
@@ -3216,6 +3231,12 @@
       ]);
       if (!d.puzzle) { card.style.display = "none"; return; }
       d.mine = prof.dailyMine;
+      lastProfile = prof;
+      const leaderEl = document.getElementById("daily-card-leader");
+      if (d.leader) {
+        leaderEl.style.display = "";
+        leaderEl.innerHTML = `👑 Today's leader: <strong style="color:#e2e8f0">${escHtml(d.leader.name)}</strong> · ${d.leader.score} pts${d.mine ? " — see their board in your results" : ""}`;
+      } else leaderEl.style.display = "none";
       const st = features.streaks ? prof.streak : null;
       streakInfo = st;
       card.style.display = "";
@@ -3245,16 +3266,42 @@
     } catch { card.style.display = "none"; }
   }
 
-  window.openDailyScreen = async function() {
-    const { openDaily } = await import("./js/daily.js");
-    openDaily({
+  function puzzleContext() {
+    return {
       host: SERVER_HOST, getUUID: getPlayerUUID, getName: getPlayerName, track,
       isWord: (w) => isValidWord(w), isBanned: (w) => isBannedWord(w), toast: showToast,
       myPid: () => myPid, streak: () => streakInfo?.current ?? 0,
+      getCoins: () => playerCoins, getUnlocks: () => colorUnlocks,
+      themeCost: () => coinConfig.spendTileTheme ?? 150, blitzSecs: () => coinConfig.endlessBlitzSecs ?? 10,
+      onCoins: (bal, unlocks) => { playerCoins = bal; if (unlocks) colorUnlocks = { ...colorUnlocks, ...unlocks }; updateHeaderStats(); },
       onResult: (r) => { if (r.streak) streakInfo = { ...(streakInfo ?? {}), ...r.streak }; loadPlayerStats(); },
+      onEndless: () => {},
       onClose: () => renderGrowth(),
-    });
+    };
+  }
+  window.openDailyScreen = async function() {
+    const { openDaily } = await import("./js/daily.js");
+    openDaily(puzzleContext());
   };
+  window.openEndlessScreen = async function(mode) {
+    const { openEndless } = await import("./js/daily.js");
+    openEndless(puzzleContext(), mode);
+  };
+
+  async function renderEndlessCard() {
+    const card = document.getElementById("endless-card");
+    if (!card) return;
+    if (!features.endless) { card.style.display = "none"; return; }
+    try {
+      if (!lastProfile) lastProfile = await statsPost({ type: "profile", uuid: getPlayerUUID() }).then(r => r.json());
+      const e = lastProfile.endless;
+      if (!e) { card.style.display = "none"; return; }
+      card.style.display = "";
+      document.getElementById("endless-secs").textContent = coinConfig.endlessBlitzSecs ?? 10;
+      const bits = [e.classic ? `Best ${e.classic}` : "", e.blitz ? `⚡ ${e.blitz}` : ""].filter(Boolean);
+      document.getElementById("endless-best").textContent = bits.join(" · ");
+    } catch { card.style.display = "none"; }
+  }
 
   window.buyStreakFreeze = async function() {
     if (!(await spendCoins("streakFreeze"))) return;
@@ -3613,7 +3660,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.6.3 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.7.0 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

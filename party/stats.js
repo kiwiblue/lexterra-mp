@@ -78,12 +78,16 @@ const DEFAULT_COIN_CONFIG = {
   dailyComplete:          5, // coins for completing the daily puzzle
   streakBonus7:          20, // extra coins every 7-day streak
   spendStreakFreeze:    300, // coins for one streak freeze (max 2 held)
+  // Endless puzzles
+  endlessBlitzSecs:      10, // seconds per letter in Blitz
+  spendTileTheme:       150, // coins for a puzzle tile theme (kept forever)
   // Async games
   asyncTurnHours:        24, // hours a player has to take their turn before it auto-passes
   // Abuse limits — per visitor IP per UTC day
   ipDailySubmits:         3, // daily-puzzle results (one per account; caps throwaway accounts)
   ipNewVisitors:         20, // new players counted in analytics
   ipPushSubscribes:      10, // push-notification sign-ups
+  ipEndlessStarts:      300, // endless puzzles dealt
   // Feature switches (1 = on, 0 = off) — turn a feature off here to roll it back instantly
   feature_tutorial: 1,
   feature_daily:    1,
@@ -92,6 +96,7 @@ const DEFAULT_COIN_CONFIG = {
   feature_pwa:      1,
   feature_push:     1,
   feature_async:    1,
+  feature_endless:  1,
 };
 
 const EMPTY = () => ({

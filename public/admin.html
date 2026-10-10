@@ -129,18 +129,21 @@
   </div>
 
   <div class="card">
-    <h2>Daily Puzzle, Streaks &amp; Async</h2>
+    <h2>Puzzles, Streaks &amp; Async</h2>
     <div class="grid">
       <div class="field"><label>Coins for completing the daily</label><input type="number" id="dailyComplete" min="0"></div>
       <div class="field"><label>Bonus coins every 7-day streak</label><input type="number" id="streakBonus7" min="0"></div>
       <div class="field"><label>Streak freeze price (coins)</label><input type="number" id="spendStreakFreeze" min="0"></div>
       <div class="field"><label>Hours per turn (over-days games)</label><input type="number" id="asyncTurnHours" min="1"></div>
+      <div class="field"><label>Blitz seconds per letter (endless)</label><input type="number" id="endlessBlitzSecs" min="3"></div>
+      <div class="field"><label>Tile theme price (coins)</label><input type="number" id="spendTileTheme" min="0"></div>
     </div>
     <div class="section-label">Abuse limits (per visitor IP, per day)</div>
     <div class="grid">
       <div class="field"><label>Daily-puzzle results</label><input type="number" id="ipDailySubmits" min="1"></div>
       <div class="field"><label>New players counted</label><input type="number" id="ipNewVisitors" min="1"></div>
       <div class="field"><label>Push sign-ups</label><input type="number" id="ipPushSubscribes" min="1"></div>
+      <div class="field"><label>Endless puzzles dealt</label><input type="number" id="ipEndlessStarts" min="1"></div>
     </div>
   </div>
 
@@ -150,6 +153,7 @@
     <div class="grid" id="flags">
       <label class="flag"><input type="checkbox" id="feature_tutorial"><span>Tutorial &amp; practice<small>Welcome card, 60-second tutorial</small></span></label>
       <label class="flag"><input type="checkbox" id="feature_daily"><span>Daily puzzle<small>Card, puzzle screen, submissions</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_endless"><span>Endless puzzles<small>Classic &amp; Blitz, their leaderboards</small></span></label>
       <label class="flag"><input type="checkbox" id="feature_streaks"><span>Streaks<small>Streak counter, freezes, bonus coins</small></span></label>
       <label class="flag"><input type="checkbox" id="feature_weekly"><span>Weekly ladder<small>"This Week" leaderboard tab</small></span></label>
       <label class="flag"><input type="checkbox" id="feature_async"><span>Over-days games<small>My Games, "Over days" pace</small></span></label>
@@ -183,7 +187,7 @@ const HOST = IS_PROD ? "https://api.lexterragame.com" : "https://dev-api.lexterr
 document.querySelector("h1").insertAdjacentHTML("beforeend", IS_PROD
   ? '<span class="env-badge" style="background:#16a34a;color:#fff">PRODUCTION</span>'
   : '<span class="env-badge" style="background:#f97316;color:#111">DEV</span>');
-const FLAG_KEYS = ["feature_tutorial","feature_daily","feature_streaks","feature_weekly","feature_async","feature_push","feature_pwa"];
+const FLAG_KEYS = ["feature_tutorial","feature_daily","feature_endless","feature_streaks","feature_weekly","feature_async","feature_push","feature_pwa"];
 const STATS = `${HOST}/parties/stats/main`;
 
 const FIELD_KEYS = [
@@ -194,8 +198,8 @@ const FIELD_KEYS = [
   "pointsInterval","longWordBonus",
   "spendUndoLetter","spendViewUnclaimed","spendPremiumColor","spendCustomTile",
   "highStakesStart","highStakesMax","highStakesLetterBonus","highStakesClaimBonus","highStakesMinTurn",
-  "dailyComplete","streakBonus7","spendStreakFreeze","asyncTurnHours",
-  "ipDailySubmits","ipNewVisitors","ipPushSubscribes",
+  "dailyComplete","streakBonus7","spendStreakFreeze","asyncTurnHours","endlessBlitzSecs","spendTileTheme",
+  "ipDailySubmits","ipNewVisitors","ipPushSubscribes","ipEndlessStarts",
 ];
 
 function showMsg(id, text, type) {

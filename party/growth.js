@@ -4,7 +4,7 @@
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { isInternal, cleanName, isUuid, clientIp } from "./compat.js";
-import { dailyPuzzle, replayDaily, shareGrid, utcDate, isDateStr, addDays, daysBetween } from "./daily.js";
+import { dailyPuzzle, endlessPuzzle, replayDaily, shareGrid, utcDate, isDateStr, addDays, daysBetween } from "./daily.js";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
 const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS } });
@@ -13,7 +13,13 @@ const on = (cfg, f) => Number(cfg[`feature_${f}`] ?? 1) !== 0;
 export const ANALYTICS_EVENTS = new Set([
   "visit", "tutorial_start", "tutorial_done", "practice_start", "game_start", "game_end",
   "daily_start", "daily_done", "share", "install", "push_enabled", "async_create",
+  "daily_replay", "board_view", "endless_start", "endless_done", "theme_buy",
 ]);
+const ENDLESS_MODES = new Set(["classic", "blitz"]);
+const ENDLESS_LB_SIZE = 100;
+// Cosmetic tile themes for the puzzle boards (bought with coins, kept forever)
+export const TILE_THEMES = ["neon", "gold", "ocean", "candy"];
+const FOREVER = 8.64e15; // stored like a colour-unlock expiry so account merges keep it
 const MAX_STREAK_FREEZES = 2;
 const DAILY_LB_SIZE = 100;
 const MYGAMES_KEEP_ENDED_MS = 3 * 86400000;
@@ -138,6 +144,11 @@ export async function mergeGrowth(room, fromUuid, toUuid) {
     week[toUuid] = t; delete week[fromUuid];
     await room.storage.put(`week:${id}`, week);
   }
+  const [ea, eb] = await Promise.all([room.storage.get(`endless_pb:${fromUuid}`), room.storage.get(`endless_pb:${toUuid}`)]);
+  if (ea) {
+    await room.storage.put(`endless_pb:${toUuid}`, { classic: Math.max(ea.classic ?? 0, eb?.classic ?? 0), blitz: Math.max(ea.blitz ?? 0, eb?.blitz ?? 0), plays: (ea.plays ?? 0) + (eb?.plays ?? 0) });
+    await room.storage.delete(`endless_pb:${fromUuid}`);
+  }
   for (const k of ["push", "mygames"]) {
     const [a, b] = await Promise.all([room.storage.get(`${k}:${fromUuid}`), room.storage.get(`${k}:${toUuid}`)]);
     if (!a) continue;
@@ -250,7 +261,8 @@ export async function growthGet(url, room, cfg) {
     const date = utcDate();
     const puzzle = await dailyPuzzle(date, room.env.DAILY_SALT);
     const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
-    return jsonRes({ puzzle, players: lb.length, nextAt: Date.parse(addDays(date, 1) + "T00:00:00Z") });
+    const leader = lb[0] ? { name: lb[0].name, score: lb[0].score } : null;
+    return jsonRes({ puzzle, players: lb.length, leader, nextAt: Date.parse(addDays(date, 1) + "T00:00:00Z") });
   }
 
   if (q.has("dailylb")) {
@@ -270,6 +282,15 @@ export async function growthGet(url, room, cfg) {
     const week = (await room.storage.get(`week:${id}`)) ?? {};
     const rows = Object.entries(week).sort((a, b) => b[1].pts - a[1].pts).slice(0, 50);
     return jsonRes({ week: id, resetsAt, top: await Promise.all(rows.map(async ([u, e]) => ({ pid: await pidOf(u), name: e.name, pts: e.pts, games: e.games }))) });
+  }
+
+  if (q.has("endlesslb")) {
+    if (!on(cfg, "endless")) return jsonRes({ error: "disabled" }, 404);
+    const mode = ENDLESS_MODES.has(q.get("endlesslb")) ? q.get("endlesslb") : "classic";
+    const week = q.get("period") === "week";
+    const lb = (await room.storage.get(week ? `endless_wk:${mode}:${isoWeek().id}` : `endless_lb:${mode}`)) ?? [];
+    return jsonRes({ mode, period: week ? "week" : "all", resetsAt: week ? isoWeek().resetsAt : null,
+      top: await Promise.all(lb.slice(0, 50).map(async e => ({ pid: await pidOf(e.uuid), name: e.name, score: e.score, words: e.words }))) });
   }
 
   if (q.has("pushkey")) return jsonRes({ key: on(cfg, "push") ? room.env.VAPID_PUBLIC_KEY ?? null : null });
@@ -302,7 +323,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       if (r.placed === 0) return jsonRes({ error: "empty" }, 400);
       if (!(await ipAllowance(room, req, "daily", Number(cfg.ipDailySubmits) || 3))) return jsonRes({ error: "too_many_today" }, 429);
       const name = cleanName(msg.name);
-      await room.storage.put(resKey, { score: r.score, words: r.words, used: r.used, name, at: Date.now() });
+      await room.storage.put(resKey, { score: r.score, words: r.words, used: r.used, moves: r.moves, name, at: Date.now() });
 
       const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
       if (r.score > 0) {
@@ -328,7 +349,98 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       return jsonRes({ ok: true, score: r.score, words: r.words, share: shareGrid(r.used), rank, players: lb.length, streak, coinsEarned: coins });
     }
 
+    // Someone's finished daily board. Today's boards are only shown to players who have already
+    // submitted today's puzzle, so nobody can copy the best answer before playing.
+    case "daily_board": {
+      if (!on(cfg, "daily")) return jsonRes({ error: "disabled" }, 404);
+      const { uuid, date, pid } = msg;
+      if (!isUuid(uuid) || !isDateStr(date) || typeof pid !== "string" || !/^[0-9a-f]{16}$/.test(pid)) return jsonRes({ error: "bad_request" }, 400);
+      const today = utcDate();
+      if (date > today) return jsonRes({ error: "bad_request" }, 400);
+      if (date >= addDays(today, -1) && !(await room.storage.get(`daily_res:${date}:${uuid}`))) return jsonRes({ error: "play_first" }, 403);
+      const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
+      let owner = null;
+      for (const e of lb) if ((await pidOf(e.uuid)) === pid) { owner = e.uuid; break; }
+      if (!owner) return jsonRes({ error: "not_found" }, 404);
+      const res = await room.storage.get(`daily_res:${date}:${owner}`);
+      if (!res?.moves) return jsonRes({ error: "no_board" }, 404);
+      return jsonRes({ name: res.name, score: res.score, words: res.words, moves: res.moves, puzzle: await dailyPuzzle(date, room.env.DAILY_SALT) });
+    }
+
+    // ── Endless puzzles ──
+    // The server hands out a random seed and remembers it, so scores can be replayed and checked
+    // like the daily. One live puzzle per player; each seed can be submitted once.
+    case "endless_start": {
+      if (!on(cfg, "endless")) return jsonRes({ error: "disabled" }, 404);
+      if (!isUuid(msg.uuid) || !ENDLESS_MODES.has(msg.mode)) return jsonRes({ error: "bad_request" }, 400);
+      const cur = await room.storage.get(`endless_cur:${msg.uuid}`);
+      // Resume an unfinished classic puzzle instead of dealing a new one
+      if (cur && cur.mode === "classic" && msg.mode === "classic" && !msg.fresh) {
+        return jsonRes({ seed: cur.seed, mode: cur.mode, resumed: true, puzzle: await endlessPuzzle(cur.seed, room.env.DAILY_SALT) });
+      }
+      if (!(await ipAllowance(room, req, "endless", Number(cfg.ipEndlessStarts) || 300))) return jsonRes({ error: "too_many_today" }, 429);
+      const seed = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, "0")).join("");
+      await room.storage.put(`endless_cur:${msg.uuid}`, { seed, mode: msg.mode, at: Date.now() });
+      return jsonRes({ seed, mode: msg.mode, blitzSecs: Number(cfg.endlessBlitzSecs) || 10, puzzle: await endlessPuzzle(seed, room.env.DAILY_SALT) });
+    }
+
+    case "endless_submit": {
+      if (!on(cfg, "endless")) return jsonRes({ error: "disabled" }, 404);
+      const { uuid, seed } = msg;
+      if (!isUuid(uuid) || typeof seed !== "string") return jsonRes({ error: "bad_request" }, 400);
+      const cur = await room.storage.get(`endless_cur:${uuid}`);
+      if (!cur || cur.seed !== seed) return jsonRes({ error: "stale" }, 409);
+      const puzzle = await endlessPuzzle(seed, room.env.DAILY_SALT);
+      const r = replayDaily(puzzle, msg.moves);
+      if (!r.ok) return jsonRes({ error: r.error, word: r.word }, 400);
+      await room.storage.delete(`endless_cur:${uuid}`);
+      const name = cleanName(msg.name);
+      // Blitz gives each letter a few seconds; the whole run must fit in that budget (plus the
+      // final claiming window and some slack for the network) to count for the leaderboard.
+      const secs = Number(cfg.endlessBlitzSecs) || 10;
+      const inTime = cur.mode !== "blitz" || Date.now() - cur.at <= (puzzle.letters.length * secs + 30 + 20) * 1000;
+      const ranked = inTime && r.complete && r.score > 0;
+      const pbKey = `endless_pb:${uuid}`;
+      const pb = (await room.storage.get(pbKey)) ?? { classic: 0, blitz: 0, plays: 0 };
+      const isPB = ranked && r.score > (pb[cur.mode] ?? 0);
+      pb.plays = (pb.plays ?? 0) + 1;
+      if (isPB) pb[cur.mode] = r.score;
+      await room.storage.put(pbKey, pb);
+      let rankAll = null, rankWeek = null;
+      if (ranked) {
+        const entry = { uuid, name, score: r.score, words: r.words.length, at: Date.now() };
+        const upsert = async (key) => {
+          const lb = (await room.storage.get(key)) ?? [];
+          const i = lb.findIndex(e => e.uuid === uuid);
+          if (i >= 0 && lb[i].score >= r.score) return i + 1;
+          if (i >= 0) lb.splice(i, 1);
+          lb.push(entry);
+          lb.sort((a, b) => b.score - a.score || b.words - a.words || a.at - b.at);
+          const kept = lb.slice(0, ENDLESS_LB_SIZE);
+          await room.storage.put(key, kept);
+          return kept.findIndex(e => e.uuid === uuid) + 1 || null;
+        };
+        rankAll = await upsert(`endless_lb:${cur.mode}`);
+        rankWeek = await upsert(`endless_wk:${cur.mode}:${isoWeek().id}`);
+      }
+      return jsonRes({ ok: true, mode: cur.mode, score: r.score, words: r.words, share: shareGrid(r.used), ranked, inTime, complete: r.complete, best: pb[cur.mode], isPB, rankAll, rankWeek });
+    }
+
     case "spend": {
+      if (msg.item === "tileTheme") {
+        if (!isUuid(msg.uuid) || !TILE_THEMES.includes(msg.theme)) return jsonRes({ error: "bad_request" }, 400);
+        const cost = Math.max(0, Number(cfg.spendTileTheme) || 0);
+        const coins = (await room.storage.get("player_coins")) ?? [];
+        const ci = coins.findIndex(p => p.uuid === msg.uuid);
+        const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
+        const key = `theme_${msg.theme}`;
+        if (ci >= 0 && coins[ci].colorUnlocks?.[key]) return jsonRes({ coins: balance, cost: 0, owned: true });
+        if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
+        coins[ci].coins = balance - cost;
+        coins[ci].colorUnlocks = { ...(coins[ci].colorUnlocks ?? {}), [key]: FOREVER };
+        await room.storage.put("player_coins", coins);
+        return jsonRes({ coins: balance - cost, cost, owned: true });
+      }
       // Streak freezes are a coin item handled here; other items fall through to stats.js
       if (msg.item !== "streakFreeze") return null;
       if (!on(cfg, "streaks")) return jsonRes({ error: "disabled" }, 404);
@@ -375,9 +487,10 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
     case "profile": {
       if (!isUuid(msg.uuid)) return jsonRes({ error: "bad_uuid" }, 400);
       const today = utcDate();
-      const [coins, xp, st, mine] = await Promise.all([
+      const [coins, xp, st, mine, epb] = await Promise.all([
         room.storage.get("player_coins"), room.storage.get("player_xp"),
         room.storage.get(`streak:${msg.uuid}`), room.storage.get(`daily_res:${today}:${msg.uuid}`),
+        room.storage.get(`endless_pb:${msg.uuid}`),
       ]);
       const c = (coins ?? []).find(p => p.uuid === msg.uuid);
       const x = (xp ?? []).find(p => p.uuid === msg.uuid);
@@ -386,6 +499,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
         xp: x?.xp ?? 0, gamesPlayed: x?.gamesPlayed ?? 0,
         streak: on(cfg, "streaks") ? effectiveStreak(st, today) : null,
         dailyMine: mine ? { score: mine.score, words: mine.words, share: shareGrid(mine.used) } : null,
+        endless: on(cfg, "endless") ? { classic: epb?.classic ?? 0, blitz: epb?.blitz ?? 0, plays: epb?.plays ?? 0 } : null,
       });
     }
 

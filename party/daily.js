@@ -21,10 +21,10 @@ export const dayNumber = (date) => Math.floor((Date.parse(date + "T00:00:00Z") -
 export const addDays = (date, n) => utcDate(Date.parse(date + "T00:00:00Z") + n * 86400000);
 export const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
 
-// sfc32 PRNG seeded from an HMAC of the date
-async function rngFor(date, salt) {
+// sfc32 PRNG seeded from an HMAC of a label (the date for dailies, a random seed for endless)
+async function rngFor(label, salt) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(salt), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const h = new Uint32Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode("lexterra-daily:" + date)));
+  const h = new Uint32Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(label)));
   let [a, b, c, d] = h;
   return () => {
     a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
@@ -37,7 +37,17 @@ async function rngFor(date, salt) {
 // Returns { date, number, size, minLen, starters:[{r,c,letter}], letters:[...] }
 export async function dailyPuzzle(date, salt) {
   if (!salt) throw new Error("DAILY_SALT not set");
-  const rand = await rngFor(date, salt);
+  return { date, number: dayNumber(date), ...(await makeBoard("lexterra-daily:" + date, salt)) };
+}
+
+// Endless mode: same generator, seeded from a random id the server hands out
+export async function endlessPuzzle(seed, salt) {
+  if (!salt) throw new Error("DAILY_SALT not set");
+  return { seed, ...(await makeBoard("lexterra-endless:" + seed, salt)) };
+}
+
+async function makeBoard(label, salt) {
+  const rand = await rngFor(label, salt);
   const bag = BAG.split("");
   for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
   let tiles = bag.slice(0, DAILY_SIZE * DAILY_SIZE);
@@ -47,7 +57,7 @@ export async function dailyPuzzle(date, salt) {
   for (let r = 0; r < DAILY_SIZE; r++) for (let c = 0; c < DAILY_SIZE; c++) cells.push({ r, c });
   for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
   const starters = cells.slice(0, STARTERS).map((p, i) => ({ ...p, letter: tiles[i] }));
-  return { date, number: dayNumber(date), size: DAILY_SIZE, minLen: DAILY_MIN_LEN, starters, letters: tiles.slice(STARTERS) };
+  return { size: DAILY_SIZE, minLen: DAILY_MIN_LEN, starters, letters: tiles.slice(STARTERS) };
 }
 
 // Replays a submission. moves: [{ place: { r, c } } | { claim: { word, path } }].
@@ -60,7 +70,7 @@ export function replayDaily(puzzle, moves) {
   const grid = Array.from({ length: n }, () => Array(n).fill(null));
   for (const s of puzzle.starters) grid[s.r][s.c] = { letter: s.letter };
   let next = 0, score = 0;
-  const words = [];
+  const words = [], clean = [];
   const used = Array.from({ length: n }, () => Array(n).fill(false));
   for (const m of moves) {
     if (m && m.place) {
@@ -68,18 +78,21 @@ export function replayDaily(puzzle, moves) {
       if (next >= puzzle.letters.length) return { ok: false, error: "no_letters_left" };
       if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0 || r >= n || c >= n || grid[r][c]) return { ok: false, error: "bad_place" };
       grid[r][c] = { letter: puzzle.letters[next++] };
+      clean.push({ place: { r, c } });
     } else if (m && m.claim) {
       const { word, path } = m.claim;
       const cells = straightPath(grid, word, path, puzzle.minLen);
       if (!cells || isBannedWord(word) || !isDictionaryWord(word) || claimedVariant(word, words)) return { ok: false, error: "bad_claim", word };
       words.push(word);
+      clean.push({ claim: { word, path: path.map(({ r, c }) => ({ r, c })) } });
       score += word.length;
       for (const { r, c } of cells) used[r][c] = true;
     } else {
       return { ok: false, error: "bad_move" };
     }
   }
-  return { ok: true, score, words, used, placed: next, complete: next === puzzle.letters.length };
+  // `moves` is a sanitised copy (only the fields the replay used) — safe to store and show others
+  return { ok: true, score, words, used, moves: clean, placed: next, complete: next === puzzle.letters.length };
 }
 
 // Spoiler-free share text: 🟩 = cell used in a claimed word, ⬛ = not used.
