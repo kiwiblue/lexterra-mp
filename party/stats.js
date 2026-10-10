@@ -13,6 +13,7 @@
 
 import { Server } from "partyserver";
 import { makeRoom, isInternal, cleanName, isUuid } from "./compat.js";
+import { growthGet, growthPost, addWeekly, mergeGrowth } from "./growth.js";
 
 const TOP_SNAPS = 5;
 
@@ -59,6 +60,20 @@ const DEFAULT_COIN_CONFIG = {
   highStakesClaimBonus:    30, // seconds added on claiming a word
   highStakesMinTurn:       30, // floor applied when a player's turn begins
   highStakesTimeoutAction: "pass", // "pass" (auto-skip turn) or "lose" (forfeit game)
+  // Daily puzzle & streaks
+  dailyComplete:          5, // coins for completing the daily puzzle
+  streakBonus7:          20, // extra coins every 7-day streak
+  spendStreakFreeze:    300, // coins for one streak freeze (max 2 held)
+  // Async games
+  asyncTurnHours:        24, // hours a player has to take their turn before it auto-passes
+  // Feature switches (1 = on, 0 = off) — turn a feature off here to roll it back instantly
+  feature_tutorial: 1,
+  feature_daily:    1,
+  feature_streaks:  1,
+  feature_weekly:   1,
+  feature_pwa:      1,
+  feature_push:     1,
+  feature_async:    1,
 };
 
 const EMPTY = () => ({
@@ -152,6 +167,9 @@ const handlers = {
       let msg;
       try { msg = await req.json(); } catch { return new Response("Bad request", { status: 400, headers: CORS }); }
       if (!msg || typeof msg !== "object") return new Response("Bad request", { status: 400, headers: CORS });
+      const cfgAll = { ...DEFAULT_COIN_CONFIG, ...((await room.storage.get("coin_config")) ?? {}) };
+      const grown = await growthPost(msg, req, room, cfgAll, isAdmin);
+      if (grown) return grown;
 
       if (msg.type === "name_update" && isUuid(msg.uuid)) {
         const name = cleanName(msg.name, "");
@@ -230,6 +248,7 @@ const handlers = {
           if (k === "highStakesTimeoutAction") { if (v === "pass" || v === "lose") clean[k] = v; continue; }
           const n = Number(v);
           if (!Number.isFinite(n) || n < 0 || (k === "pointsInterval" && n < 1)) continue;
+          if (k.startsWith("feature_") && n !== 0 && n !== 1) continue;
           clean[k] = n;
         }
         await room.storage.put("coin_config", clean);
@@ -315,6 +334,7 @@ const handlers = {
           await room.storage.put("player_coins", coins);
         }
 
+        await mergeGrowth(room, fromUuid, toUuid);
         return new Response("ok", { headers: CORS });
       }
 
@@ -397,6 +417,8 @@ const handlers = {
         xp.sort((a, b) => b.xp - a.xp);
         await room.storage.put("player_xp", xp);
 
+        if (Number(cfgAll.feature_weekly ?? 1) !== 0) await addWeekly(room, msg.players);
+
         // ── Coin earning ────────────────────────────────────────────────
         const stored = (await room.storage.get("coin_config")) ?? {};
         const cfg = { ...DEFAULT_COIN_CONFIG, ...stored };
@@ -460,6 +482,8 @@ const handlers = {
 
     if (req.method === "GET") {
       const url = new URL(req.url);
+      const grown = await growthGet(url, room, { ...DEFAULT_COIN_CONFIG, ...((await room.storage.get("coin_config")) ?? {}) });
+      if (grown) return grown;
       const mode = url.searchParams.get("mode");
 
       const playerXpUuid = url.searchParams.get("playerXp");

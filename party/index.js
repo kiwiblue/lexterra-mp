@@ -3,29 +3,19 @@
 
 import { Server } from "partyserver";
 import { makeRoom, cleanName, publicState, isInternal, isUuid } from "./compat.js";
-import { isDictionaryWord } from "./words.js";
+import { isBannedWord, isDictionaryWord, claimedVariant, straightPath } from "./rules.js";
 
-// ── Banned claimable words (profanity filter) ────────────────────────
-// Add words in lowercase. Keep in sync with public/index.html.
 const BASE_COLORS = ["Red","Blue","Yellow","Green","Grey"];
 const PREMIUM_COLORS_SV = ["Orange","Pink","Purple","Teal"];
-
-const BANNED_WORDS = new Set([
-  "cunt","cunts","fuck","fucked","fucker","fuckers","fucking","fuckings",
-  "fuckoff","fuckoffs","fucks","fuckup","fuckups","fuckwit","fuckwits",
-  "headfuck","headfucks","mindfuck","mindfucks","motherfucker","motherfuckers",
-  "motherfucking","starfucker","starfuckers","starfucking","starfuckings",
-]);
-function isBannedWord(w) { return BANNED_WORDS.has(w.toLowerCase()); }
 
 // Everything sent to browsers goes through publicState so player UUIDs never leak.
 const stateMsg = (state) => JSON.stringify({ type: "state", state: publicState(state) });
 
 // ── Settings validation ──────────────────────────────────────────────
 // Only known settings with known values are accepted; anything else keeps its current value.
-const DEFAULT_SETTINGS = { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120 };
+const DEFAULT_SETTINGS = { boardSize: 5, minWordLen: 3, territoryMode: "conquest", timeLimit: 120, pace: "live" };
 const BOARD_SIZES = [5, 8, 10], MIN_WORD_LENS = [3, 4, 5];
-const TERRITORY_MODES = ["off", "conquest", "exclusive"], TIME_LIMITS = [60, 120, "high", null];
+const TERRITORY_MODES = ["off", "conquest", "exclusive"], TIME_LIMITS = [60, 120, "high", null], PACES = ["live", "async"];
 function cleanSettings(current, incoming) {
   const s = { ...current };
   const inc = (incoming && typeof incoming === "object") ? incoming : {};
@@ -33,6 +23,7 @@ function cleanSettings(current, incoming) {
   if (MIN_WORD_LENS.includes(inc.minWordLen)) s.minWordLen = inc.minWordLen;
   if (TERRITORY_MODES.includes(inc.territoryMode)) s.territoryMode = inc.territoryMode;
   if ("timeLimit" in inc && TIME_LIMITS.includes(inc.timeLimit)) s.timeLimit = inc.timeLimit;
+  if (PACES.includes(inc.pace)) s.pace = inc.pace;
   return s;
 }
 
@@ -41,24 +32,10 @@ function cleanSettings(current, incoming) {
 // must be a straight line of filled cells spelling a real, unbanned word of the required
 // length, and the score is always the word length — nothing is taken from the message.
 function validateClaim(state, msg) {
-  const { word, path } = msg;
-  if (typeof word !== "string" || !/^[A-Z]{2,}$/.test(word)) return null;
-  if (!Array.isArray(path) || path.length !== word.length) return null;
-  const n = state.grid.length;
   const minLen = Math.max(2, state.settings?.minWordLen ?? 3);
-  if (path.length < minLen || path.length > n) return null;
-  const cells = [];
-  for (const p of path) {
-    if (!p || !Number.isInteger(p.r) || !Number.isInteger(p.c) || p.r < 0 || p.c < 0 || p.r >= n || p.c >= n) return null;
-    cells.push({ r: p.r, c: p.c });
-  }
-  const dr = Math.sign(cells[1].r - cells[0].r), dc = Math.sign(cells[1].c - cells[0].c);
-  if (dr === 0 && dc === 0) return null;
-  for (let i = 1; i < cells.length; i++) {
-    if (cells[i].r - cells[i - 1].r !== dr || cells[i].c - cells[i - 1].c !== dc) return null;
-  }
-  const letters = cells.map(({ r, c }) => state.grid[r]?.[c]?.letter);
-  if (letters.some(l => !l) || letters.join("") !== word) return null;
+  const cells = straightPath(state.grid, msg.word, msg.path, minLen);
+  if (!cells) return null;
+  const word = msg.word;
   if (isBannedWord(word) || !isDictionaryWord(word)) return null;
   if (state.settings?.territoryMode === "exclusive" && state.territory) {
     if (cells.some(({ r, c }) => { const o = state.territory[r]?.[c]; return o && o !== state.cur; })) return null;
@@ -141,11 +118,17 @@ async function resetAlarm(room) {
 // ── High Stakes chess-clock timer ────────────────────────────────────
 // Each player has their own time bank that only ticks during their turn.
 // Config is fetched once at game start from the stats party's admin config.
+async function fetchConfig(room) {
+  try {
+    const res = await room.context.parties.stats.get("main").fetch("/?config=true");
+    return await res.json();
+  } catch { return {}; }
+}
+
 async function fetchHighStakesConfig(room) {
   const defaults = { start: 300, max: 300, letterBonus: 20, claimBonus: 30, minTurn: 30, timeoutAction: "pass" };
   try {
-    const res = await room.context.parties.stats.get("main").fetch("/?config=true");
-    const cfg = await res.json();
+    const cfg = await fetchConfig(room);
     return {
       start: cfg.highStakesStart ?? defaults.start,
       max: cfg.highStakesMax ?? defaults.max,
@@ -200,6 +183,99 @@ function performPass(state, isRealPass) {
 
 function broadcastSpectatorCount(room) {
   room.broadcast(JSON.stringify({ type: "spectators", count: room.spectatorConns.size }));
+}
+
+// ── Async ("play over days") games ───────────────────────────────────
+// Players stay in the game when they close the tab, each turn has a deadline enforced by the
+// room's alarm, and the Stats party keeps each player's "My games" list and sends turn pushes.
+const ASYNC_LOBBY_TTL_MS = 3 * 86400000;
+const isAsync = (state) => state?.settings?.pace === "async";
+
+async function statsPost(room, body) {
+  try {
+    await room.context.parties.stats.get("main").fetch("/", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+  } catch {}
+}
+
+const humanUuids = (st) => Object.entries(st?.players ?? {}).filter(([, p]) => !p.isBot && p.uuid);
+
+// Runs after every state change in an async room: turn deadlines, the My games index and pushes.
+async function asyncHooks(room, before) {
+  const after = await room.storage.get("state");
+  if (!isAsync(after)) return;
+  const key = (st) => st && JSON.stringify([st.phase, st.cur, humanUuids(st).map(([id, p]) => [id, p.uuid, p.score ?? 0, p.name])]);
+  if (key(before) === key(after)) return;
+
+  const turnChanged = after.phase === "playing" && (before?.phase !== "playing" || before?.cur !== after.cur);
+  if (turnChanged) {
+    after.turnDeadline = Date.now() + (after.settings.asyncTurnMs ?? 86400000);
+    await room.storage.put("state", after);
+    room.broadcast(stateMsg(after));
+  }
+  if (after.phase === "playing") await room.storage.setAlarm(after.turnDeadline);
+  else if (after.phase === "lobby") await room.storage.setAlarm(Date.now() + ASYNC_LOBBY_TTL_MS);
+
+  const names = Object.values(after.players ?? {}).map(p => p.name);
+  const entries = humanUuids(after).map(([id, p]) => ({ uuid: p.uuid, info: {
+    phase: after.phase,
+    yourTurn: after.phase === "playing" && after.cur === id,
+    players: names,
+    myScore: p.score ?? 0,
+    curName: after.phase === "playing" ? after.players[after.cur]?.name ?? null : null,
+    deadline: after.phase === "playing" ? after.turnDeadline ?? null : null,
+    hostName: after.players[after.host]?.name ?? null,
+  }}));
+  // Resigned players are kept in disconnectedPlayers — show them the result too
+  for (const [, d] of Object.entries(after.disconnectedPlayers ?? {})) {
+    if (d.player?.uuid && !entries.some(e => e.uuid === d.player.uuid)) {
+      entries.push({ uuid: d.player.uuid, info: { phase: after.phase === "lobby" ? "left" : after.phase, yourTurn: false, players: names, myScore: d.player.score ?? 0, curName: null, deadline: null, hostName: after.players[after.host]?.name ?? null } });
+    }
+  }
+  const stillListed = new Set(entries.map(e => e.uuid));
+  const remove = humanUuids(before).map(([, p]) => p.uuid).filter(u => !stillListed.has(u));
+  await statsPost(room, { type: "mygames_update", roomId: room.id, entries, remove });
+
+  // Notify whoever needs to act, if they don't have the game open
+  const online = new Set([...room.getConnections()].map(c => c.id));
+  if (turnChanged) {
+    const p = after.players[after.cur];
+    if (p?.uuid && !online.has(after.cur)) {
+      const prevName = before?.phase === "playing" ? (before.players?.[before.cur]?.name ?? null) : null;
+      await statsPost(room, { type: "push_turn", uuid: p.uuid, tag: `turn-${room.id}`, url: `/?game=${room.id}`,
+        title: "Your turn in Lexterra", body: prevName ? `${prevName} has played — your move.` : "The game has started — your move." });
+    }
+  }
+  if (after.phase === "ended" && before?.phase === "playing") {
+    for (const [id, p] of humanUuids(after)) {
+      if (online.has(id)) continue;
+      await statsPost(room, { type: "push_turn", uuid: p.uuid, tag: `turn-${room.id}`, url: `/?game=${room.id}`,
+        title: "Lexterra game over", body: `Final score: ${p.score ?? 0}. Tap to see the result.` });
+    }
+  }
+}
+
+// Turn deadline passed → auto-pass; abandoned lobbies expire.
+async function asyncAlarm(room, state) {
+  const before = JSON.parse(JSON.stringify(state));
+  if (state.phase === "lobby") {
+    state.phase = "ended";
+    await room.storage.put("state", state);
+    room.broadcast(stateMsg(state));
+    await asyncHooks(room, before);
+    return;
+  }
+  if (state.phase !== "playing") return;
+  if (Date.now() < (state.turnDeadline ?? 0) - 1000) { await room.storage.setAlarm(state.turnDeadline); return; }
+  const ended = performPass(state, true);
+  if (ended) {
+    state.phase = "ended";
+    await notifyStats(room, state, "completed");
+  }
+  await room.storage.put("state", state);
+  room.broadcast(stateMsg(state));
+  await asyncHooks(room, before);
 }
 
 // Grace period before processing a disconnect — gives mobile users time to
@@ -269,6 +345,13 @@ const handlers = {
     let msg;
     try { msg = JSON.parse(message); } catch { return; }
     if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+
+    // Opening a game you're already in (e.g. from a share link or another device) reconnects
+    // you to your seat instead of adding a second copy of you.
+    if (msg.type === "join" && isUuid(msg.uuid)) {
+      const st = await room.storage.get("state");
+      if (st && Object.values(st.players ?? {}).some(p => !p.isBot && p.uuid === msg.uuid)) msg = { type: "rejoin", uuid: msg.uuid };
+    }
 
     switch (msg.type) {
 
@@ -404,6 +487,7 @@ const handlers = {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id || state.phase !== "lobby") return;
         if (Object.keys(state.players).length >= 4) return;
+        if (state.settings?.pace === "async") return; // bots are driven by the host's browser, which isn't open in async games
         const bots = Object.values(state.players).filter(p => p.isBot);
         const botId = `bot_${conn.id}_${bots.length}`;
         const takenColors = Object.values(state.players).map(p => p.color);
@@ -442,7 +526,9 @@ const handlers = {
       case "settings": {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id || state.phase !== "lobby") return;
-        state.settings = cleanSettings(state.settings, msg.settings);
+        const next = cleanSettings(state.settings, msg.settings);
+        if (next.pace === "async" && Object.values(state.players).some(p => p.isBot)) next.pace = state.settings.pace ?? "live";
+        state.settings = next;
         await room.storage.put("state", state);
         room.broadcast(stateMsg(state));
         break;
@@ -451,8 +537,17 @@ const handlers = {
       // Host starts the game
       case "start": {
         const state = await room.storage.get("state");
-        if (!state || state.host !== conn.id) return;
+        if (!state || state.host !== conn.id || state.phase !== "lobby") return;
         if (Object.keys(state.players).length < 2) return;
+        let asyncCfg = null;
+        if (state.settings?.pace === "async") {
+          asyncCfg = await fetchConfig(room);
+          if (Number(asyncCfg.feature_async ?? 1) === 0) {
+            conn.send(JSON.stringify({ type: "error", message: "Play-over-days games are switched off right now." }));
+            return;
+          }
+          if (Object.values(state.players).some(p => p.isBot)) return;
+        }
         state.lastActivity = Date.now();
         if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "playing", lastActivity: state.lastActivity } });
         const { boardSize } = state.settings;
@@ -474,7 +569,10 @@ const handlers = {
         state.timeBank = {};
         delete state.turnStartedAt;
         delete state.timedOutPlayer;
-        if (state.settings.timeLimit === "high") {
+        delete state.turnDeadline;
+        if (asyncCfg) {
+          state.settings.asyncTurnMs = Math.max(1, Number(asyncCfg.asyncTurnHours) || 24) * 3600000;
+        } else if (state.settings.timeLimit === "high") {
           const hs = await fetchHighStakesConfig(room);
           state.settings.highStakes = hs;
           for (const id of state.turnOrder) state.timeBank[id] = hs.start;
@@ -525,14 +623,7 @@ const handlers = {
         const checked = validateClaim(state, msg);
         if (!checked) return;
         const { word, path, score } = checked;
-        if (state.claimed.some(c => {
-          const w = word.toLowerCase(), cw = c.word.toLowerCase();
-          return w === cw ||
-            w === cw + 's' || w === cw + 'es' ||
-            (w.endsWith('ies') && cw === w.slice(0,-3) + 'y') ||
-            cw === w + 's' || cw === w + 'es' ||
-            (cw.endsWith('ies') && w === cw.slice(0,-3) + 'y');
-        })) return;
+        if (claimedVariant(word, state.claimed.map(c => c.word))) return;
         state.claimed.push({ word, path, connId: state.cur, score });
         state.players[state.cur].score += score;
         state.players[state.cur].wordsFound++;
@@ -1018,6 +1109,9 @@ const handlers = {
       return;
     }
 
+    // Async games: players come and go — they stay in the game until they resign
+    if (isAsync(await room.storage.get("state"))) return;
+
     // Players: grace period — mobile users briefly switching apps won't be booted
     const tid = setTimeout(async () => {
       pendingDisconnects.delete(conn.id);
@@ -1046,6 +1140,7 @@ const handlers = {
 
   async onAlarm(room) {
     const state = await room.storage.get("state");
+    if (isAsync(state)) return asyncAlarm(room, state);
     if (!state || state.phase !== "playing") return;
     state.phase = "ended";
     if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
@@ -1060,7 +1155,13 @@ const handlers = {
 export class Main extends Server {
   room = Object.assign(makeRoom(this), { spectatorConns: new Set() });
   onConnect(conn) { return handlers.onConnect(conn, this.room); }
-  onMessage(conn, message) { return handlers.onMessage(message, conn, this.room); }
+  async onMessage(conn, message) {
+    // Cursor hovers and spectator pings don't change game state — skip the async bookkeeping
+    if (typeof message !== "string" || /"type"\s*:\s*"(hover|watch)"/.test(message)) return handlers.onMessage(message, conn, this.room);
+    const before = await this.ctx.storage.get("state");
+    await handlers.onMessage(message, conn, this.room);
+    if (isAsync(before) || isAsync(await this.ctx.storage.get("state"))) await asyncHooks(this.room, before);
+  }
   onClose(conn) { return handlers.onClose(conn, this.room); }
   onRequest(req) { return handlers.onRequest(req, this.room); }
   onAlarm() { return handlers.onAlarm(this.room); }

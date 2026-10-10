@@ -30,6 +30,11 @@
   .field input[type=number]:focus { border-color: #f5c842; }
   .field select { width: 100%; background: #252525; border: 1px solid #383838; border-radius: 6px; padding: 8px 10px; color: #e8e8e8; font-size: 0.9rem; outline: none; }
   .field select:focus { border-color: #f5c842; }
+  .flag { display:flex; align-items:center; gap:10px; padding:8px 10px; background:#252525; border:1px solid #383838; border-radius:6px; font-size:0.85rem; cursor:pointer; }
+  .flag input { width:18px; height:18px; accent-color:#f5c842; }
+  .flag small { display:block; color:#888; font-size:0.72rem; }
+  .an td, .an th { text-align:right; } .an td:first-child, .an th:first-child { text-align:left; }
+  .env-badge { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:800; vertical-align:middle; }
   .form-footer { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
   .form-footer .save-msg { flex: 1; font-size: 0.82rem; color: #aaa; }
   table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
@@ -121,11 +126,42 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="card">
+    <h2>Daily Puzzle, Streaks &amp; Async</h2>
+    <div class="grid">
+      <div class="field"><label>Coins for completing the daily</label><input type="number" id="dailyComplete" min="0"></div>
+      <div class="field"><label>Bonus coins every 7-day streak</label><input type="number" id="streakBonus7" min="0"></div>
+      <div class="field"><label>Streak freeze price (coins)</label><input type="number" id="spendStreakFreeze" min="0"></div>
+      <div class="field"><label>Hours per turn (over-days games)</label><input type="number" id="asyncTurnHours" min="1"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Feature Switches</h2>
+    <p class="subtitle" style="margin-bottom:12px">Untick to switch a feature off for everyone immediately — no redeploy needed.</p>
+    <div class="grid" id="flags">
+      <label class="flag"><input type="checkbox" id="feature_tutorial"><span>Tutorial &amp; practice<small>Welcome card, 60-second tutorial</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_daily"><span>Daily puzzle<small>Card, puzzle screen, submissions</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_streaks"><span>Streaks<small>Streak counter, freezes, bonus coins</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_weekly"><span>Weekly ladder<small>"This Week" leaderboard tab</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_async"><span>Over-days games<small>My Games, "Over days" pace</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_push"><span>Push notifications<small>Turn alerts for over-days games</small></span></label>
+      <label class="flag"><input type="checkbox" id="feature_pwa"><span>Install prompt<small>"Get the app" card</small></span></label>
+    </div>
+
     <div class="form-footer">
       <button class="btn" onclick="saveConfig()">Save changes</button>
       <button class="btn secondary" onclick="loadAll()">Reload</button>
       <span class="save-msg" id="save-msg"></span>
     </div>
+  </div>
+
+  <div class="card" id="analytics-section" style="display:none">
+    <h2>Players — last 14 days</h2>
+    <p class="subtitle" style="margin-bottom:12px">Visitors and new players per day (UTC). "Day 1" / "Day 7" = how many of that day's new players came back 1 and 7 days later.</p>
+    <div id="analytics-table"><div class="loading">Loading…</div></div>
   </div>
 
   <div class="card" id="players-section">
@@ -135,9 +171,13 @@
 </div>
 
 <script>
-const HOST = window.location.hostname === "localhost"
-  ? "http://localhost:8787"
-  : "https://api.lexterragame.com";
+// Live site → production server; dev previews and local copies → dev server
+const IS_PROD = ["lexterragame.com", "www.lexterragame.com", "lexterra-mp.pages.dev"].includes(window.location.hostname);
+const HOST = IS_PROD ? "https://api.lexterragame.com" : "https://dev-api.lexterragame.com";
+document.querySelector("h1").insertAdjacentHTML("beforeend", IS_PROD
+  ? '<span class="env-badge" style="background:#16a34a;color:#fff">PRODUCTION</span>'
+  : '<span class="env-badge" style="background:#f97316;color:#111">DEV</span>');
+const FLAG_KEYS = ["feature_tutorial","feature_daily","feature_streaks","feature_weekly","feature_async","feature_push","feature_pwa"];
 const STATS = `${HOST}/parties/stats/main`;
 
 const FIELD_KEYS = [
@@ -148,6 +188,7 @@ const FIELD_KEYS = [
   "pointsInterval","longWordBonus",
   "spendUndoLetter","spendViewUnclaimed","spendPremiumColor","spendCustomTile",
   "highStakesStart","highStakesMax","highStakesLetterBonus","highStakesClaimBonus","highStakesMinTurn",
+  "dailyComplete","streakBonus7","spendStreakFreeze","asyncTurnHours",
 ];
 
 function showMsg(id, text, type) {
@@ -196,6 +237,8 @@ async function loadAll() {
   }
   const timeoutEl = document.getElementById("highStakesTimeoutAction");
   if (timeoutEl && cfg.highStakesTimeoutAction) timeoutEl.value = cfg.highStakesTimeoutAction;
+  for (const k of FLAG_KEYS) { const el = document.getElementById(k); if (el) el.checked = Number(cfg[k] ?? 1) !== 0; }
+  loadAnalytics(pwd);
 
   // Populate players table
   renderPlayers(players);
@@ -203,6 +246,24 @@ async function loadAll() {
   document.getElementById("config-section").style.display = "block";
   document.getElementById("players-section").style.display = "block";
   document.getElementById("auth-msg").style.display = "none";
+}
+
+async function loadAnalytics(pwd) {
+  const wrap = document.getElementById("analytics-table");
+  document.getElementById("analytics-section").style.display = "block";
+  try {
+    const r = await fetch(STATS, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "admin_analytics", password: pwd }) });
+    if (!r.ok) throw new Error(r.statusText);
+    const { days } = await r.json();
+    const pct = (n, of) => (n === null || n === undefined) ? "—" : of ? `${n} (${Math.round(100 * n / of)}%)` : "0";
+    let html = '<table class="an"><thead><tr><th>Date</th><th>Visitors</th><th>New</th><th>Day 1</th><th>Day 7</th><th>Games</th><th>Daily</th><th>Tutorial</th><th>Shares</th></tr></thead><tbody>';
+    for (const d of [...days].reverse()) {
+      html += `<tr><td>${d.date}</td><td>${d.visitors ?? 0}</td><td>${d.newPlayers ?? 0}</td><td>${pct(d.d1, d.cohort)}</td><td>${pct(d.d7, d.cohort)}</td><td>${d.game_end ?? 0}</td><td>${d.daily_done ?? 0}</td><td>${d.tutorial_done ?? 0}/${d.tutorial_start ?? 0}</td><td>${d.share ?? 0}</td></tr>`;
+    }
+    wrap.innerHTML = html + '</tbody></table>';
+  } catch (e) {
+    wrap.innerHTML = `<div class="loading">Couldn't load analytics: ${esc(e.message)}</div>`;
+  }
 }
 
 function renderPlayers(players) {
@@ -236,6 +297,7 @@ async function saveConfig() {
   }
   const timeoutEl = document.getElementById("highStakesTimeoutAction");
   if (timeoutEl) config.highStakesTimeoutAction = timeoutEl.value;
+  for (const k of FLAG_KEYS) { const el = document.getElementById(k); if (el) config[k] = el.checked ? 1 : 0; }
   try {
     const r = await fetch(STATS, {
       method: "POST",

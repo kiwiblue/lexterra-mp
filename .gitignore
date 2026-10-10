@@ -4,3 +4,4 @@ migration-backup/
 .dev.vars
 .wrangler/
 .partykit/
+.dev-admin-password

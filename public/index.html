@@ -26,6 +26,16 @@
   <meta name="twitter:title" content="Lexterra — Real-Time Multiplayer Word Game">
   <meta name="twitter:description" content="Place letters, spell words, claim territory. Challenge friends to a real-time word battle — no sign-up needed.">
   <meta name="twitter:image" content="https://lexterragame.com/og-image.png">
+
+  <!-- Installable app (PWA) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lexterra">
   <style>
     :root {
       --clr-primary: #7c3aed;
@@ -182,6 +192,22 @@
     .spec-eye { position:absolute; pointer-events:none; opacity:0; }
     .spec-eye svg { display:block; transform-origin:50% 50%; }
     .spec-eye.blinking svg { animation: spec-blink 0.3s ease-in-out; }
+    /* Growth features */
+    .dev-badge { display:inline-block; margin-left:0.4rem; padding:0.05rem 0.35rem; border-radius:4px; background:#f97316; color:#111; font-size:0.6rem; font-weight:900; letter-spacing:0.08em; vertical-align:middle; }
+    .home-card { padding:1.25rem !important; gap:0.65rem !important; }
+    .home-card h2 { margin:0; }
+    .hc-row { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
+    .hc-sub { font-size:0.78rem; color:#94a3b8; line-height:1.5; }
+    .hc-badge { font-size:0.7rem; font-weight:900; letter-spacing:0.08em; color:#22c55e; text-transform:uppercase; }
+    .hc-streak { font-size:0.9rem; font-weight:900; color:#f97316; }
+    #daily-card { border-color: rgba(var(--clr-primary-rgb),0.6); background: linear-gradient(160deg, rgba(var(--clr-primary-rgb),0.18), #1e293b 60%); }
+    .mg-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.55rem 0.65rem; background:#0f172a; border-radius:8px; border:1px solid #1e293b; }
+    .mg-row.turn { border-color:#22c55e; }
+    .mg-title { font-size:0.85rem; font-weight:bold; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mg-meta { font-size:0.72rem; color:#64748b; }
+    .mg-row .btn { padding:0.35rem 0.8rem; font-size:0.8rem; flex-shrink:0; }
+    .wk-row { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0; border-bottom:1px solid #1e293b; font-size:0.85rem; }
+    .wk-row.me { color:var(--clr-primary-light); font-weight:bold; }
   </style>
 </head>
 <body>
@@ -192,6 +218,13 @@
     <p class="subtitle" id="subtitle">MULTIPLAYER</p>
   </div>
   <div id="header-stats">
+    <div class="hstat" id="hstat-level-wrap" style="display:none" title="Level — earn XP by scoring points">
+      <span class="hstat-label">Lv</span>
+      <span class="hstat-val" id="hstat-level">1</span>
+    </div>
+    <div class="hstat" id="hstat-streak-wrap" style="display:none" title="Daily puzzle streak">
+      <span class="hstat-val" id="hstat-streak" style="color:#f97316">🔥0</span>
+    </div>
     <div class="hstat">
       <span class="hstat-val" id="hstat-xp">0</span>
       <span class="hstat-label">XP</span>
@@ -205,6 +238,40 @@
 
 <!-- Join / Create screen -->
 <div id="join-screen">
+  <div class="card home-card" id="welcome-card" style="display:none">
+    <div class="hc-row"><h2>New to Lexterra?</h2><button onclick="dismissWelcome()" aria-label="Dismiss" style="background:none;border:none;color:#475569;font-size:1.1rem;cursor:pointer">✕</button></div>
+    <p class="hc-sub">Learn the game in 60 seconds, then try a practice round against a friendly bot.</p>
+    <div style="display:flex;gap:0.5rem">
+      <button class="btn btn-primary" style="flex:1;padding:0.6rem" onclick="openTutorialScreen()">Learn to play</button>
+      <button class="btn btn-secondary" style="flex:1;padding:0.6rem" onclick="startPractice()">Practice vs bot</button>
+    </div>
+  </div>
+
+  <div class="card home-card" id="daily-card" style="display:none">
+    <div class="hc-row">
+      <h2 id="daily-card-title">Daily Puzzle</h2>
+      <span class="hc-streak" id="daily-card-streak"></span>
+    </div>
+    <p class="hc-sub" id="daily-card-sub">Same board for everyone, every day. One attempt — how many points can you score?</p>
+    <button class="btn btn-primary" id="daily-card-btn" onclick="openDailyScreen()">Play today's puzzle</button>
+    <div class="hc-row" id="daily-freeze-row" style="display:none">
+      <span class="hc-sub" id="daily-freeze-text"></span>
+      <button class="btn btn-secondary" id="daily-freeze-btn" onclick="buyStreakFreeze()" style="padding:0.35rem 0.7rem;font-size:0.75rem;flex-shrink:0"></button>
+    </div>
+  </div>
+
+  <div class="card home-card" id="mygames-card" style="display:none">
+    <div class="hc-row"><h2>My Games</h2><button class="btn btn-secondary" onclick="createAsyncGame()" style="padding:0.35rem 0.7rem;font-size:0.75rem">+ New game over days</button></div>
+    <div id="mygames-list" style="display:flex;flex-direction:column;gap:0.4rem"><p class="placeholder">Loading…</p></div>
+    <button class="btn btn-secondary" id="push-enable-btn" onclick="enablePushFromUI()" style="display:none;padding:0.45rem;font-size:0.8rem">🔔 Notify me when it's my turn</button>
+  </div>
+
+  <div class="card home-card" id="install-card" style="display:none">
+    <div class="hc-row"><h2>Get the app</h2><button onclick="dismissInstall()" aria-label="Dismiss" style="background:none;border:none;color:#475569;font-size:1.1rem;cursor:pointer">✕</button></div>
+    <p class="hc-sub" id="install-text">Install Lexterra on your home screen for one-tap play and turn notifications.</p>
+    <button class="btn btn-primary" id="install-btn" onclick="installApp()">Install</button>
+  </div>
+
   <div class="card">
     <h2>Player Name</h2>
     <input id="player-name" type="text" maxlength="15" placeholder="Enter Player Name" style="text-transform:uppercase">
@@ -237,6 +304,7 @@
       <div class="seg-tab-bar" style="flex:1">
         <button class="seg-tab selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')">Leaderboard</button>
         <button class="seg-tab" id="lb-view-highscores" onclick="lbSetTab('highscores')">High Scores</button>
+        <button class="seg-tab" id="lb-view-weekly" onclick="lbSetTab('weekly')" style="display:none">This Week</button>
       </div>
       <div style="display:flex;gap:0.25rem;flex-shrink:0">
         <button class="toggle-btn secondary" id="lb-filter-all" onclick="lbSetCompetitive(false)" style="padding:0.22rem 0.55rem;font-size:0.7rem">All</button>
@@ -446,6 +514,11 @@
   let timerInterval = null;
   let timerEndsAt = 0;
   let highStakesTimedOut = false;
+  // Feature switches (from the admin config; all on by default)
+  const features = { tutorial: true, daily: true, streaks: true, weekly: true, pwa: true, push: true, async: true };
+  let asyncTurnHours = 24;
+  let streakInfo = null;
+  let practicePending = false, practiceBotRequested = false;
   let advancedSettingsOpen = false;
   let gameCellSize = 0;
   let botTurnRunning = false;
@@ -526,6 +599,7 @@
           return;
         }
         document.getElementById("join-status").textContent = msg.message;
+        if (document.getElementById("join-screen")?.style.display === "none") showToast(msg.message);
       }
       if (msg.type === "hover") {
         if (msg.r == null) delete otherHovers[msg.connId];
@@ -609,6 +683,16 @@
   }
 
   function handleState(newState) {
+    if (newState && !isSpectating) {
+      if (state?.phase === 'lobby' && newState.phase === 'playing') track('game_start');
+      if (state?.phase === 'playing' && newState.phase === 'ended') { track('game_end'); setTimeout(loadPlayerStats, 1500); }
+    }
+    // Practice game: add an easy bot and start as soon as the room exists
+    if (practicePending && newState?.phase === 'lobby' && newState.host === myConnId) {
+      const hasBot = Object.values(newState.players ?? {}).some(p => p.isBot);
+      if (!hasBot && !practiceBotRequested) { practiceBotRequested = true; socket.send(JSON.stringify({ type: "add-bot" })); }
+      else if (hasBot) { practicePending = false; socket.send(JSON.stringify({ type: "start" })); }
+    }
     // Detect last move before replacing state
     if (state && newState && state.phase === 'playing' && newState.phase === 'playing') {
       const prevClaimed = state.claimed?.length ?? 0;
@@ -781,7 +865,15 @@
             ${minWords.map(n => `<button class="toggle-btn${s.minWordLen===n?' selected':''}" data-key="minWordLen" data-val="${n}"${!amHost?' disabled':''}>${n} letters</button>`).join('')}
           </div>
         </div>
-        <button id="advanced-settings-toggle" style="background:none;border:none;color:#64748b;font-size:0.75rem;cursor:pointer;padding:0.4rem 0;text-align:left;display:flex;align-items:center;gap:0.3rem">
+        ${features.async ? `<div class="setting-row">
+          <span class="setting-label">Pace</span>
+          <div class="btn-group">
+            <button class="toggle-btn${s.pace!=='async'?' selected':''}" data-key="pace" data-val="live"${!amHost?' disabled':''}>Live</button>
+            <button class="toggle-btn${s.pace==='async'?' selected':''}" data-key="pace" data-val="async"${(!amHost || Object.values(state.players).some(p => p.isBot))?' disabled':''} title="${Object.values(state.players).some(p => p.isBot) ? 'Remove bots first — over-days games are people only' : 'Take turns whenever you like'}">Over days</button>
+          </div>
+        </div>
+        ${s.pace==='async' ? `<p style="font-size:0.75rem;color:#94a3b8;margin:0">Take your turn whenever suits — up to ${Math.round((asyncTurnHours))}h per turn. Close the app any time; you'll find this game under <b>My Games</b>${pushSupported() ? ' and get a notification when it\'s your move' : ''}.</p>` : ''}` : ''}
+        <button id="advanced-settings-toggle" ${s.pace==='async' ? 'hidden ' : ''}style="background:none;border:none;color:#64748b;font-size:0.75rem;cursor:pointer;padding:0.4rem 0;text-align:left;display:flex;align-items:center;gap:0.3rem">
           <span id="advanced-settings-chevron" style="display:inline-block;transition:transform 0.15s;transform:rotate(${advancedSettingsOpen ? '90' : '0'}deg)">›</span> Advanced Settings
         </button>
         <div id="advanced-settings-body" style="display:${advancedSettingsOpen ? 'flex' : 'none'};flex-direction:column;gap:0.5rem">
@@ -860,7 +952,7 @@
     }
     pHtml += '</div>';
     if (amHost && players.length < 4) {
-      pHtml += `<button class="btn btn-secondary" onclick="addBot()" style="margin-top:0.5rem;font-size:0.85rem;padding:0.5rem 1rem">+ Add Bot</button>`;
+      if (state.settings?.pace !== 'async') pHtml += `<button class="btn btn-secondary" onclick="addBot()" style="margin-top:0.5rem;font-size:0.85rem;padding:0.5rem 1rem">+ Add Bot</button>`;
       pHtml += `<button class="btn btn-secondary" onclick="shareGame()" style="margin-top:0.4rem;font-size:0.85rem;padding:0.5rem 1rem">+ Invite Friend</button>`;
     }
     playersCard.innerHTML = pHtml;
@@ -1039,8 +1131,11 @@
           </button>
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
+          ${state.settings?.pace === 'async' ? `
+          <button class="btn-danger btn-leave" onclick="leaveAsyncGame()" style="border-color:#334155;color:#94a3b8">HOME — KEEP MY SEAT</button>
+          <button class="btn-danger" onclick="returnToLobby()">RESIGN</button>` : `
           ${isHost ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
-          <button class="btn-danger btn-leave" onclick="returnToLobby()">RETURN TO LOBBY</button>
+          <button class="btn-danger btn-leave" onclick="returnToLobby()">RETURN TO LOBBY</button>`}
         </div>
       </div>`;
     const grid = document.getElementById("game-grid");
@@ -1852,6 +1947,20 @@
     stopTimer();
     const tl = state.settings?.timeLimit;
     const el = document.getElementById("timer-label");
+    if (state.settings?.pace === 'async') {
+      // Over-days games: show time left for the current turn; the server auto-passes at the deadline
+      const tick = () => {
+        const lbl = document.getElementById("timer-label");
+        if (!lbl || !state.turnDeadline) { if (lbl) lbl.textContent = ""; return; }
+        const ms = Math.max(0, state.turnDeadline - Date.now());
+        const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60;
+        lbl.textContent = h ? `${h}h ${m}m` : `${m}m`;
+        lbl.style.color = ms < 3600000 ? "#ef4444" : ms < 6 * 3600000 ? "#eab308" : "var(--clr-primary-light)";
+      };
+      tick();
+      timerInterval = setInterval(tick, 30000);
+      return;
+    }
     if (tl === 'high') {
       updateHighStakesClocks();
       timerInterval = setInterval(updateHighStakesClocks, 250);
@@ -2037,8 +2146,16 @@
     if (!confirm("Restart the game? All progress will be lost.")) return;
     if (socket) socket.send(JSON.stringify({ type: "reset" }));
   };
+  // Over-days games: go home without giving up your seat
+  window.leaveAsyncGame = function() {
+    localStorage.removeItem("lexterra_room");
+    localStorage.removeItem("lexterra_connId");
+    location.href = location.pathname;
+  };
+
   window.returnToLobby = function() {
-    if (state?.phase === "playing" && !isSpectating && !confirm("Leave the game and return to the lobby?")) return;
+    const resigning = state?.settings?.pace === "async" && state?.phase === "playing" && !isSpectating;
+    if (state?.phase === "playing" && !isSpectating && !confirm(resigning ? "Resign this game? You'll be removed and can't rejoin." : "Leave the game and return to the lobby?")) return;
     if (state?.phase === "playing" && !isSpectating && socket?.readyState === 1) {
       socket.send(JSON.stringify({ type: "leave_game" }));
     } else if (state?.phase === "lobby" && socket?.readyState === 1) {
@@ -2522,6 +2639,7 @@
   function renderLeaderboard() {
     const rows = document.getElementById('lb-rows');
     if (!rows) return;
+    if (lbTab === 'weekly') return renderWeekly();
     const { players, all } = lbData;
     const noEntry = lbCompetitive
       ? '<p class="placeholder" style="font-size:0.78rem">No competitive scores yet.</p>'
@@ -2555,11 +2673,16 @@
 
   window.lbSetTab = function(tab) {
     lbTab = tab;
-    ['leaderboard', 'highscores'].forEach(t =>
+    ['leaderboard', 'highscores', 'weekly'].forEach(t =>
       document.getElementById(`lb-view-${t}`)?.classList.toggle('selected', t === tab)
     );
+    // Weekly ladder has no mode/size/competitive filters
+    const weekly = tab === 'weekly';
+    for (const id of ['lb-filter-all', 'lb-filter-comp']) { const el = document.getElementById(id); if (el) el.style.display = weekly ? 'none' : ''; }
+    const modeRow = document.getElementById('lb-tab-conquest')?.parentElement; if (modeRow) modeRow.style.display = weekly ? 'none' : 'flex';
+    const sizeRow = document.getElementById('lb-size-filter-row'); if (sizeRow) sizeRow.style.display = weekly ? 'none' : 'flex';
     lbExpanded = false;
-    renderLeaderboard();
+    if (weekly) fetchWeekly(); else renderLeaderboard();
   };
 
   window.lbSetCompetitive = function(val) {
@@ -2578,7 +2701,7 @@
     const sizeFilterRow = document.getElementById('lb-size-filter-row');
     if (sizeFilterRow) sizeFilterRow.style.display = 'flex';
     lbSizeFilter = null;
-    document.querySelectorAll('#lb-sf-all,#lb-sf-5,#lb-sf-7,#lb-sf-10').forEach(el =>
+    document.querySelectorAll('#lb-sf-all,#lb-sf-5,#lb-sf-8,#lb-sf-10').forEach(el =>
       el.classList.toggle('selected', el.id === 'lb-sf-all')
     );
     lbExpanded = false;
@@ -2587,7 +2710,7 @@
 
   window.lbSetSizeFilter = function(size) {
     lbSizeFilter = size;
-    document.querySelectorAll('#lb-sf-all,#lb-sf-5,#lb-sf-7,#lb-sf-10').forEach(el => {
+    document.querySelectorAll('#lb-sf-all,#lb-sf-5,#lb-sf-8,#lb-sf-10').forEach(el => {
       const elSize = el.id === 'lb-sf-all' ? null : parseInt(el.id.replace('lb-sf-', ''));
       el.classList.toggle('selected', elSize === size);
     });
@@ -2700,7 +2823,11 @@
       coinsEl.textContent = String(playerCoins);
       coinsEl.closest('.hstat').style.display = playerCoins > 0 ? '' : 'none';
     }
-    el.style.display = (playerXp > 0 || playerCoins > 0) ? 'flex' : 'none';
+    const lvlWrap = document.getElementById('hstat-level-wrap');
+    if (lvlWrap) { lvlWrap.style.display = playerXp > 0 ? '' : 'none'; document.getElementById('hstat-level').textContent = levelFor(playerXp); }
+    const stWrap = document.getElementById('hstat-streak-wrap');
+    if (stWrap) { const cur = streakInfo?.current ?? 0; stWrap.style.display = features.streaks && cur > 0 ? '' : 'none'; document.getElementById('hstat-streak').textContent = `🔥${cur}`; }
+    el.style.display = (playerXp > 0 || playerCoins > 0 || (streakInfo?.current ?? 0) > 0) ? 'flex' : 'none';
   }
 
   async function loadPlayerStats() {
@@ -2721,6 +2848,9 @@
       if (cfgd.spendPremiumColor !== undefined) coinConfig.spendPremiumColor = cfgd.spendPremiumColor;
       if (cfgd.spendUndoLetter !== undefined) coinConfig.spendUndoLetter = cfgd.spendUndoLetter;
       if (cfgd.spendViewUnclaimed !== undefined) coinConfig.spendViewUnclaimed = cfgd.spendViewUnclaimed;
+      if (cfgd.spendStreakFreeze !== undefined) coinConfig.spendStreakFreeze = cfgd.spendStreakFreeze;
+      if (cfgd.asyncTurnHours !== undefined) asyncTurnHours = cfgd.asyncTurnHours;
+      for (const f of Object.keys(features)) if (cfgd[`feature_${f}`] !== undefined) features[f] = Number(cfgd[`feature_${f}`]) !== 0;
       // Sync canonical name from server for logged-in users on new/fresh devices
       if (localStorage.getItem("lexterra_email") && cd.name && cd.name !== "Unknown") {
         localStorage.setItem("lexterra_name", cd.name);
@@ -2729,6 +2859,7 @@
       }
     } catch {}
     updateHeaderStats();
+    renderGrowth();
   }
 
   // Charges a coin item on the server (cost comes from the admin config there).
@@ -3040,7 +3171,231 @@
     }
   }
 
-  const SERVER_HOST = "api.lexterragame.com";
+  // The live site talks to the production server; dev previews and local copies use the dev server
+  const PROD_HOSTS = ["lexterragame.com", "www.lexterragame.com", "lexterra-mp.pages.dev"];
+  const IS_PROD = PROD_HOSTS.includes(location.hostname);
+  const SERVER_HOST = IS_PROD ? "api.lexterragame.com" : "dev-api.lexterragame.com";
+  const STATS_URL = `https://${SERVER_HOST}/parties/stats/main`;
+  if (!IS_PROD) document.getElementById("subtitle")?.insertAdjacentHTML("beforeend", '<span class="dev-badge">DEV</span>');
+
+  // ── Growth features ──────────────────────────────────────────────────────
+  const statsPost = (body) => fetch(STATS_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  function track(event) { statsPost({ type: "track", event, uuid: getPlayerUUID() }).catch(() => {}); }
+  function levelFor(xp) { return Math.floor(Math.sqrt(Math.max(0, xp) / 25)) + 1; }
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  async function renderGrowth() {
+    const onHome = document.getElementById("join-screen")?.style.display !== "none";
+    // Welcome / tutorial card for brand-new players
+    const welcome = document.getElementById("welcome-card");
+    if (welcome) welcome.style.display = features.tutorial && playerXp === 0 && !localStorage.getItem("lexterra_tutorial_done") && !localStorage.getItem("lexterra_welcome_dismissed") ? "" : "none";
+    document.getElementById("lb-view-weekly").style.display = features.weekly ? "" : "none";
+    if (!features.weekly && lbTab === "weekly") lbSetTab("leaderboard");
+    if (!onHome) return;
+    await Promise.all([renderDailyCard(), renderMyGames()]);
+    renderInstallCard();
+    updateHeaderStats();
+  }
+
+  async function renderDailyCard() {
+    const card = document.getElementById("daily-card");
+    if (!card) return;
+    if (!features.daily) { card.style.display = "none"; return; }
+    try {
+      const uuid = encodeURIComponent(getPlayerUUID());
+      const [d, st] = await Promise.all([
+        fetch(`${STATS_URL}?daily=1&uuid=${uuid}`).then(r => r.json()),
+        features.streaks ? fetch(`${STATS_URL}?streak=${uuid}`).then(r => r.json()) : Promise.resolve(null),
+      ]);
+      if (!d.puzzle) { card.style.display = "none"; return; }
+      streakInfo = st;
+      card.style.display = "";
+      document.getElementById("daily-card-title").textContent = `Daily Puzzle #${d.puzzle.number}`;
+      const cur = st?.current ?? 0;
+      document.getElementById("daily-card-streak").textContent = cur > 0 ? `🔥 ${cur} day${cur === 1 ? "" : "s"}` : "";
+      const btn = document.getElementById("daily-card-btn");
+      const sub = document.getElementById("daily-card-sub");
+      if (d.mine) {
+        sub.innerHTML = `<span class="hc-badge">✓ Done today</span> · ${d.mine.score} pts, ${d.mine.words.length} word${d.mine.words.length === 1 ? "" : "s"}. ${d.players > 1 ? `${d.players} players so far.` : ""} New puzzle at midnight UTC.`;
+        btn.textContent = "See result & share";
+        btn.className = "btn btn-secondary";
+      } else {
+        const atRisk = cur > 0 && st?.lastDate && st.lastDate !== new Date().toISOString().slice(0, 10);
+        sub.textContent = atRisk ? `Keep your ${cur}-day streak alive — play today's puzzle!` : `Same board for everyone, every day. One attempt${d.players ? ` — ${d.players} played so far` : ""}.`;
+        btn.textContent = "Play today's puzzle";
+        btn.className = "btn btn-primary";
+      }
+      const fr = document.getElementById("daily-freeze-row");
+      if (features.streaks && st) {
+        fr.style.display = "flex";
+        document.getElementById("daily-freeze-text").textContent = `❄️ Streak freezes: ${st.freezes}/2 — covers a missed day`;
+        const fb = document.getElementById("daily-freeze-btn");
+        fb.textContent = st.freezes >= 2 ? "Full" : `Buy · ${coinConfig.spendStreakFreeze ?? 300} coins`;
+        fb.disabled = st.freezes >= 2;
+      } else fr.style.display = "none";
+    } catch { card.style.display = "none"; }
+  }
+
+  window.openDailyScreen = async function() {
+    const { openDaily } = await import("./js/daily.js");
+    openDaily({
+      host: SERVER_HOST, getUUID: getPlayerUUID, getName: getPlayerName, track,
+      isWord: (w) => isValidWord(w), isBanned: (w) => isBannedWord(w), toast: showToast,
+      myPid: () => myPid, streak: () => streakInfo?.current ?? 0,
+      onResult: (r) => { if (r.streak) streakInfo = { ...(streakInfo ?? {}), ...r.streak }; loadPlayerStats(); },
+      onClose: () => renderGrowth(),
+    });
+  };
+
+  window.buyStreakFreeze = async function() {
+    if (!(await spendCoins("streakFreeze"))) return;
+    showToast("❄️ Streak freeze added");
+    renderDailyCard();
+  };
+
+  // ── Weekly ladder ──
+  let weeklyData = null;
+  async function fetchWeekly() {
+    try { weeklyData = await (await fetch(`${STATS_URL}?weekly=1`)).json(); } catch { weeklyData = { top: [] }; }
+    renderLeaderboard();
+  }
+  function renderWeekly() {
+    const rows = document.getElementById('lb-rows');
+    if (!weeklyData) { rows.innerHTML = '<p class="placeholder">Loading…</p>'; return; }
+    const days = Math.max(0, Math.ceil((weeklyData.resetsAt - Date.now()) / 86400000));
+    const cap = lbExpanded ? 50 : 10;
+    const list = (weeklyData.top ?? []).slice(0, cap).map((e, i) => `<div class="wk-row${e.pid === myPid ? ' me' : ''}"><span style="width:1.6rem;color:#475569">${i + 1}.</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.name)}${e.pid === myPid ? ' ★' : ''}</span><span style="color:#64748b;font-size:0.72rem">${e.games} game${e.games === 1 ? '' : 's'}</span><span style="font-weight:900;min-width:3.5rem;text-align:right">${e.pts}</span></div>`).join('');
+    rows.innerHTML = `<p style="font-size:0.72rem;color:#64748b;margin:0 0 0.4rem">Points from every game and daily puzzle this week · resets in ${days} day${days === 1 ? '' : 's'}</p>`
+      + (list || '<p class="placeholder" style="font-size:0.78rem">No points yet this week — be the first!</p>')
+      + ((weeklyData.top?.length ?? 0) > 10 ? `<div style="text-align:center;margin-top:0.5rem"><button class="btn btn-secondary" style="font-size:0.75rem;padding:0.3rem 0.75rem;width:100%" onclick="lbToggleExpand()">${lbExpanded ? 'Show less' : 'Show more'}</button></div>` : '');
+  }
+
+  // ── Over-days games ──
+  async function renderMyGames() {
+    const card = document.getElementById("mygames-card");
+    if (!card) return;
+    if (!features.async) { card.style.display = "none"; return; }
+    try {
+      const { games = [] } = await (await statsPost({ type: "mygames", uuid: getPlayerUUID() })).json();
+      card.style.display = "";
+      const list = document.getElementById("mygames-list");
+      list.innerHTML = games.length ? games.map(g => {
+        const others = (g.players ?? []).filter(n => n !== getPlayerName());
+        const vs = others.length ? `vs ${others.map(escHtml).join(", ")}` : "Waiting for players";
+        let meta, label = "Open";
+        if (g.phase === "lobby") meta = "Not started yet";
+        else if (g.phase === "ended") { meta = `Game over · you scored ${g.myScore ?? 0}`; label = "View"; }
+        else if (g.phase === "left") { meta = "You left this game"; label = "View"; }
+        else if (g.yourTurn) { meta = `Your turn · ${fmtLeft(g.deadline)} left`; label = "Play"; }
+        else meta = `${escHtml(g.curName ?? "Opponent")}'s turn · ${fmtLeft(g.deadline)} left`;
+        return `<div class="mg-row${g.yourTurn ? ' turn' : ''}"><div style="min-width:0"><div class="mg-title">${vs}</div><div class="mg-meta">${meta} · ${escHtml(g.roomId)}</div></div><button class="btn ${g.yourTurn ? 'btn-primary' : 'btn-secondary'}" onclick="openAsyncGame('${escHtml(g.roomId)}')">${label}</button></div>`;
+      }).join("") : `<p class="hc-sub" style="margin:0">Play friends over hours or days — take your turn whenever suits. Start one, then invite a friend.</p>`;
+      const pb = document.getElementById("push-enable-btn");
+      pb.style.display = features.push && games.length && pushSupported() && Notification.permission !== "granted" ? "" : "none";
+    } catch { card.style.display = "none"; }
+  }
+  function fmtLeft(t) {
+    if (!t) return "—";
+    const ms = Math.max(0, t - Date.now());
+    const h = Math.floor(ms / 3600000);
+    return h >= 1 ? `${h}h` : `${Math.floor(ms / 60000)}m`;
+  }
+
+  window.openAsyncGame = function(code) {
+    if (!/^[A-Z0-9]{4,8}$/.test(code)) return;
+    connect(code);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "rejoin", uuid: getPlayerUUID() }));
+    }, { once: true });
+  };
+
+  window.createAsyncGame = function() {
+    const name = getPlayerName();
+    if (isBannedName(name)) { document.getElementById("join-status").textContent = "Please choose a different name."; return; }
+    makePublic = false;
+    const room = randomRoomCode();
+    connect(room);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "create", name, color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors(), isPublic: false, settings: { boardSize: 8, minWordLen: 3, territoryMode: "conquest", timeLimit: 120, pace: "async" } }));
+      isHost = true;
+      track("async_create");
+      if (features.push && pushSupported() && Notification.permission === "default") enablePush();
+    }, { once: true });
+  };
+
+  // ── Push notifications ──
+  function b64urlToBytes(b64) {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, c => c.charCodeAt(0));
+  }
+  async function enablePush() {
+    if (!pushSupported()) {
+      showToast(/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Lexterra to your Home Screen first (Share → Add to Home Screen)" : "Notifications aren't supported in this browser");
+      return false;
+    }
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") return false;
+      const reg = await navigator.serviceWorker.ready;
+      const { key } = await (await fetch(`${STATS_URL}?pushkey=1`)).json();
+      if (!key) return false;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(key) });
+      const res = await statsPost({ type: "push_subscribe", uuid: getPlayerUUID(), subscription: sub.toJSON() });
+      if (!res.ok) return false;
+      track("push_enabled");
+      return true;
+    } catch { return false; }
+  }
+  window.enablePushFromUI = async function() {
+    if (await enablePush()) { showToast("🔔 You'll be notified when it's your turn"); document.getElementById("push-enable-btn").style.display = "none"; }
+  };
+
+  // ── Install (PWA) ──
+  let installPromptEvent = null;
+  const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPromptEvent = e; renderInstallCard(); });
+  window.addEventListener("appinstalled", () => { track("install"); installPromptEvent = null; renderInstallCard(); });
+  function renderInstallCard() {
+    const card = document.getElementById("install-card");
+    if (!card) return;
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const show = features.pwa && !isStandalone() && !localStorage.getItem("lexterra_install_dismissed") && (installPromptEvent || ios);
+    card.style.display = show ? "" : "none";
+    if (show && ios && !installPromptEvent) {
+      document.getElementById("install-text").innerHTML = "Add Lexterra to your Home Screen: tap <b>Share</b> <span style=\"font-size:1.1em\">⎋</span> then <b>Add to Home Screen</b>. You'll get one-tap play and turn notifications.";
+      document.getElementById("install-btn").style.display = "none";
+    }
+  }
+  window.installApp = async function() {
+    if (!installPromptEvent) return;
+    installPromptEvent.prompt();
+    await installPromptEvent.userChoice.catch(() => null);
+    installPromptEvent = null;
+    renderInstallCard();
+  };
+  window.dismissInstall = function() { localStorage.setItem("lexterra_install_dismissed", "1"); renderInstallCard(); };
+
+  // ── Tutorial & practice ──
+  window.openTutorialScreen = async function() {
+    const { openTutorial } = await import("./js/tutorial.js");
+    openTutorial({ track, startPractice: () => window.startPractice(), onDone: () => renderGrowth() });
+  };
+  window.dismissWelcome = function() { localStorage.setItem("lexterra_welcome_dismissed", "1"); renderGrowth(); };
+  window.startPractice = function() {
+    makePublic = false;
+    practicePending = true;
+    practiceBotRequested = false;
+    track("practice_start");
+    const room = randomRoomCode();
+    connect(room);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "create", name: getPlayerName(), color: getPlayerColor(), uuid: getPlayerUUID(), hasPremium: hasPremiumColors(), isPublic: false, settings: { boardSize: 5, minWordLen: 3, territoryMode: "off", timeLimit: null, pace: "live" } }));
+      isHost = true;
+    }, { once: true });
+  };
   const AUTH_URL = `https://${SERVER_HOST}/parties/auth/main`;
 
   // ── Magic link verification ────────────────────────────────────────────
@@ -3143,6 +3498,9 @@
 
   document.getElementById('footer-year').textContent = new Date().getFullYear();
 
+  track("visit");
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
   loadPlayerStats();
   connectLobby();
   fetchLeaderboard();
@@ -3150,8 +3508,13 @@
 
   const _viewSnap = new URLSearchParams(location.search).get('view');
   const _roomParam = new URLSearchParams(location.search).get('room');
+  const _gameParam = (new URLSearchParams(location.search).get('game') ?? '').toUpperCase();
   if (_viewSnap) {
     loadAndRenderSnapshot(_viewSnap);
+  } else if (/^[A-Z0-9]{4,8}$/.test(_gameParam)) {
+    // Opened from a turn notification or My Games link → back to your seat
+    window.history.replaceState({}, '', location.pathname);
+    window.openAsyncGame(_gameParam);
   } else if (_roomParam) {
     // Auto-join from share link — clear any pending rejoin so it doesn't conflict
     window.history.replaceState({}, '', location.pathname);
@@ -3240,7 +3603,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.5.51 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.6.0 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

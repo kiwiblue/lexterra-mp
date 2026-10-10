@@ -28,5 +28,31 @@
   // Cloudflare Email Service — magic login links. Restricted to the one sender address.
   "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@lexterragame.com"] }],
 
-  "observability": { "enabled": true }
+  "vars": { "ENVIRONMENT": "production" },
+
+  "observability": { "enabled": true },
+
+  // ── Dev environment ── `npm run deploy:dev` → https://dev-api.lexterragame.com
+  // Separate Worker with its own Durable Objects, so dev data never touches production.
+  // The dev site is the Pages preview of the `dev` branch: https://dev.lexterra-mp.pages.dev
+  "env": {
+    "dev": {
+      "name": "lexterra-mp-dev",
+      "routes": [{ "pattern": "dev-api.lexterragame.com", "custom_domain": true }],
+      "workers_dev": true,
+      "vars": { "ENVIRONMENT": "dev" },
+      "durable_objects": {
+        "bindings": [
+          { "name": "Main", "class_name": "Main" },
+          { "name": "Lobby", "class_name": "Lobby" },
+          { "name": "Stats", "class_name": "Stats" },
+          { "name": "Auth", "class_name": "Auth" }
+        ]
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["Main", "Lobby", "Stats", "Auth"] }
+      ],
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@lexterragame.com"] }]
+    }
+  }
 }

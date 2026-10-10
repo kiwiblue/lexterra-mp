@@ -5,9 +5,11 @@
   "author": "Chris Sandford",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env dev"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0",
     "partyserver": "^0.5.10",
     "partysocket": "^1.3.0"
   },
