@@ -29,325 +29,742 @@
 
   <!-- Installable app (PWA) -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#F7F5F0">
   <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Lexterra">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <script>
+    // Apply the saved light/dark choice before first paint (no flash)
+    try { const t = localStorage.getItem("lexterra_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <style>
+    /* ══════════════════════════════════════════════════════════════════════
+       Lexterra design system
+       Light is the default; dark follows the system setting or the Me → Appearance choice.
+       Each game mode keeps one accent everywhere: Live red, Friends blue, Daily amber, Endless teal.
+       ══════════════════════════════════════════════════════════════════════ */
     :root {
-      --clr-primary: #7c3aed;
-      --clr-primary-light: #a78bfa;
-      --clr-primary-rgb: 124, 58, 237;
-      --clr-secondary: #0d9488;
+      color-scheme: light;
+      --bg: #F7F5F0; --surface: #FFFFFF; --surface-2: #F1EDE5; --surface-3: #E7E1D6;
+      --border: #E2DCD0; --border-strong: #CFC7B8;
+      --text: #1C1917; --text-2: #44403C; --muted: #5F5A52; --faint: #78716C;
+      --brand-fill: #6D28D9; --brand-ink: #6D28D9; --brand-rgb: 109, 40, 217; --on-brand: #FFFFFF;
+      --live: #C2313E; --live-fill: #C2313E; --live-on: #FFFFFF; --live-rgb: 194, 49, 62;
+      --friends: #1D4ED8; --friends-fill: #1D4ED8; --friends-on: #FFFFFF; --friends-rgb: 29, 78, 216;
+      --daily: #92400E; --daily-fill: #F5B700; --daily-on: #1C1917; --daily-rgb: 245, 183, 0;
+      --endless: #0F766E; --endless-fill: #0F766E; --endless-on: #FFFFFF; --endless-rgb: 15, 118, 110;
+      --success: #15803D; --success-rgb: 21, 128, 61; --danger: #B91C1C; --danger-rgb: 185, 28, 28;
+      --warn-ink: #B45309; --warn-bg: #FEF3C7;
+      --cell-bg: #FFFFFF; --cell-border: #D9D2C5;
+      --scrim: rgba(28, 25, 23, 0.45);
+      --e1: 0 1px 2px rgba(28,25,23,.05), 0 1px 3px rgba(28,25,23,.07);
+      --e2: 0 6px 16px rgba(28,25,23,.10);
+      --e3: 0 16px 40px rgba(28,25,23,.20);
+      --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px;
+      --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-display: "Outfit", "Inter", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --ease: cubic-bezier(.2, 0, 0, 1);
+      --header-h: 60px; --tabbar-h: 64px;
+      /* Legacy names used throughout the game code */
+      --clr-primary: var(--brand-fill); --clr-primary-light: var(--brand-ink); --clr-primary-rgb: var(--brand-rgb); --clr-secondary: var(--brand-fill);
     }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0E1116; --surface: #171B22; --surface-2: #212732; --surface-3: #2A313D;
+      --border: #2E3540; --border-strong: #3C4552;
+      --text: #F2F4F7; --text-2: #CDD3DC; --muted: #A3ACB9; --faint: #7D8796;
+      --brand-fill: #7C3AED; --brand-ink: #B9A2FF; --brand-rgb: 139, 92, 246; --on-brand: #FFFFFF;
+      --live: #FF7A85; --live-fill: #FF7A85; --live-on: #0E1116; --live-rgb: 255, 122, 133;
+      --friends: #6EA8FF; --friends-fill: #6EA8FF; --friends-on: #0E1116; --friends-rgb: 110, 168, 255;
+      --daily: #FFD15C; --daily-fill: #FFD15C; --daily-on: #0E1116; --daily-rgb: 255, 209, 92;
+      --endless: #3DD6C4; --endless-fill: #3DD6C4; --endless-on: #0E1116; --endless-rgb: 61, 214, 196;
+      --success: #4ADE80; --success-rgb: 74, 222, 128; --danger: #F87171; --danger-rgb: 248, 113, 113;
+      --warn-ink: #FCD34D; --warn-bg: #2A2110;
+      --cell-bg: #10151C; --cell-border: #2A3A52;
+      --scrim: rgba(5, 7, 10, 0.7);
+      --e1: none; --e2: 0 8px 24px rgba(0,0,0,.35); --e3: 0 16px 48px rgba(0,0,0,.55);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #0E1116; --surface: #171B22; --surface-2: #212732; --surface-3: #2A313D;
+        --border: #2E3540; --border-strong: #3C4552;
+        --text: #F2F4F7; --text-2: #CDD3DC; --muted: #A3ACB9; --faint: #7D8796;
+        --brand-fill: #7C3AED; --brand-ink: #B9A2FF; --brand-rgb: 139, 92, 246; --on-brand: #FFFFFF;
+        --live: #FF7A85; --live-fill: #FF7A85; --live-on: #0E1116; --live-rgb: 255, 122, 133;
+        --friends: #6EA8FF; --friends-fill: #6EA8FF; --friends-on: #0E1116; --friends-rgb: 110, 168, 255;
+        --daily: #FFD15C; --daily-fill: #FFD15C; --daily-on: #0E1116; --daily-rgb: 255, 209, 92;
+        --endless: #3DD6C4; --endless-fill: #3DD6C4; --endless-on: #0E1116; --endless-rgb: 61, 214, 196;
+        --success: #4ADE80; --success-rgb: 74, 222, 128; --danger: #F87171; --danger-rgb: 248, 113, 113;
+        --warn-ink: #FCD34D; --warn-bg: #2A2110;
+        --cell-bg: #10151C; --cell-border: #2A3A52;
+        --scrim: rgba(5, 7, 10, 0.7);
+        --e1: none; --e2: 0 8px 24px rgba(0,0,0,.35); --e3: 0 16px 48px rgba(0,0,0,.55);
+      }
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
-    h1 { font-size: 2.5rem; font-weight: 900; letter-spacing: 0.25em; color: var(--clr-primary-light); margin-bottom: 0.25rem; }
-    .subtitle { font-size: 0.85rem; color: #475569; letter-spacing: 0.15em; margin-bottom: 2.5rem; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 1rem; }
-    .card h2 { font-size: 1rem; color: #94a3b8; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.25rem; }
-    input { background: #0f172a; border: 2px solid #334155; color: white; padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 1rem; width: 100%; outline: none; }
-    input:focus { border-color: var(--clr-primary); }
-    .btn { padding: 0.7rem 1.5rem; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: opacity 0.15s; }
-    .btn:hover { opacity: 0.85; }
-    .btn-primary { background: var(--clr-primary); color: white; }
-    .btn-secondary { background: #1e293b; border: 2px solid #334155; color: #e2e8f0; }
-    .divider { border: none; border-top: 1px solid #334155; }
-    .status { font-size: 0.85rem; color: #64748b; text-align: center; }
-    #lobby-screen, #game-screen { display: none; width: 100%; max-width: 420px; flex-direction: column; gap: 1rem; }
-    #join-screen { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 1rem; }
-    .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
-    .player-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
-    .pdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; transition: transform 0.1s; }
-    .pdot-mine { cursor: pointer; }
-    .pdot-mine:hover { transform: scale(1.4); }
-    .color-popup { position: fixed; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 0.6rem; display: flex; flex-direction: column; gap: 5px; z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-    .color-popup-row { display: flex; gap: 6px; }
-    .color-popup-label { font-size: 0.58rem; color: #475569; text-transform: uppercase; letter-spacing: 0.07em; padding-top: 0.2rem; border-top: 1px solid #334155; }
-    .color-popup .cswatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform 0.1s, border-color 0.1s, opacity 0.1s; flex-shrink: 0; }
-    .color-popup .cswatch:hover:not(.taken):not(.premium-locked) { transform: scale(1.2); }
-    .color-popup .cswatch.selected { border-color: white; transform: scale(1.15); }
-    .color-popup .cswatch.taken { opacity: 0.2; cursor: not-allowed; }
-    .color-popup .cswatch.premium-locked { opacity: 0.35; position: relative; }
-    .color-popup .cswatch.premium-locked:hover { opacity: 0.6; }
-    .color-popup .cswatch.premium-unlocked { box-shadow: 0 0 0 1px #22c55e; }
-    /* Header layout */
-    #page-header { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; max-width: 420px; }
-    #header-brand { display: flex; flex-direction: column; cursor: pointer; }
-    #header-brand h1 { margin-bottom: 0.25rem; }
-    #header-stats { display: none; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; column-gap: 0.7rem; row-gap: 0.15rem; padding-top: 0.45rem; min-width: 56px; max-width: 150px; }
-    .hstat { display: flex; align-items: baseline; gap: 0.25rem; }
-    .hstat-val { font-size: 0.88rem; font-weight: 900; color: var(--clr-primary-light); }
-    .hstat-label { font-size: 0.6rem; color: #475569; text-transform: uppercase; letter-spacing: 0.07em; }
-    /* Undo button */
-    .btn-undo { background: transparent; border: 1px solid var(--clr-primary); color: var(--clr-primary-light); border-radius: 8px; padding: 0.35rem 0.75rem; font-size: 0.78rem; font-weight: bold; cursor: pointer; transition: background 0.15s; }
-    .btn-undo:hover { background: rgba(var(--clr-primary-rgb), 0.15); }
-    /* Reveal unclaimed words */
-    .btn-reveal { background: transparent; border: 1px solid #334155; color: #64748b; border-radius: 5px; padding: 0.15rem 0.5rem; font-size: 0.7rem; font-weight: bold; cursor: pointer; transition: all 0.15s; vertical-align: middle; margin-left: 0.4rem; }
-    .btn-reveal:hover { border-color: var(--clr-secondary); color: #2dd4bf; }
-    .room-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.3em; color: var(--clr-primary-light); text-align: center; padding: 1rem; background: #0f172a; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
-    .copy-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0.25rem; line-height: 1; flex-shrink: 0; transition: color 0.15s; }
-    .copy-btn:hover { color: var(--clr-primary-light); }
-    .placeholder { color: #475569; font-size: 0.9rem; text-align: center; padding: 1rem; }
-    .setting-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    .setting-label { font-size: 0.78rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; min-width: 68px; }
-    .btn-group { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-    .toggle-btn { padding: 0.35rem 0.7rem; border: 2px solid #334155; background: #0f172a; color: #64748b; border-radius: 8px; font-size: 0.82rem; font-weight: bold; cursor: pointer; transition: all 0.15s; letter-spacing: 0.04em; }
-    @media (hover: hover) { .toggle-btn:hover:not(:disabled) { border-color: var(--clr-primary); color: #e2e8f0; } }
-    .toggle-btn.selected { border-color: var(--clr-primary); background: rgba(var(--clr-primary-rgb),0.15); color: var(--clr-primary-light); }
-    .toggle-btn.secondary.selected { border-color: var(--clr-secondary); background: rgba(13,148,136,0.15); color: #2dd4bf; }
-    @media (hover:hover) { .toggle-btn.secondary:hover:not(:disabled) { border-color: var(--clr-secondary); color: #e2e8f0; } }
-    .toggle-btn:disabled { opacity: 0.35; cursor: default; }
-    .seg-tab-bar { display:flex; background:#0f172a; border-radius:10px; padding:3px; gap:2px; }
-    .seg-tab { flex:1; padding:0.45rem 0.6rem; background:transparent; border:none; color:#64748b; border-radius:7px; font-size:0.85rem; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
-    .seg-tab.selected { background:var(--clr-primary); color:#fff; box-shadow:0 1px 5px rgba(0,0,0,0.4); }
-    @media (hover:hover) { .seg-tab:not(.selected):hover { color:#e2e8f0; } }
-    .name-input { background: transparent; border: none; border-bottom: 2px solid #334155; color: white; padding: 0.2rem 0; font-size: 0.95rem; font-weight: bold; outline: none; flex: 1; min-width: 60px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .name-input:focus { border-bottom-color: var(--clr-primary); }
-    .name-input::placeholder { color: #475569; font-weight: normal; text-transform: none; letter-spacing: 0; }
-    .remove-btn { background: none; border: none; color: #475569; font-size: 1.1rem; cursor: pointer; padding: 0 0.25rem; line-height: 1; }
-    .remove-btn:hover { color: #ef4444; }
-    .diff-btn { padding: 0.2rem 0.45rem; font-size: 0.72rem; letter-spacing: 0; }
-    .public-game-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #0f172a; border-radius: 8px; }
-    /* Game board */
-    #game-screen { max-width: 520px; }
-    .scores-wrap { display: flex; flex-direction: row; gap: 0.3rem; }
-    .player-stat { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.4rem 0.6rem; background: #1e293b; border-radius: 8px; border: 2px solid transparent; font-size: 0.82rem; min-width: 0; }
-    .player-stat .pname { font-weight: bold; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .player-stat .pinfo { display: flex; align-items: center; gap: 0.35rem; }
-    .player-stat.ps-active { border-color: var(--pc); }
-    .turn-banner { background: #1e293b; border-radius: 10px; padding: 0.65rem 1rem; display: flex; align-items: center; justify-content: space-between; border: 2px solid transparent; }
-    @keyframes turn-pulse {
-      0%, 100% { border-color: rgba(239,68,68,0.5); box-shadow: none; background: rgba(239,68,68,0.06); }
-      50% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,0.35); background: rgba(239,68,68,0.13); }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 16px; line-height: 1.45;
+      min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+      padding: 0 16px calc(var(--tabbar-h) + 28px + env(safe-area-inset-bottom));
+      -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
     }
-    .turn-banner.my-turn { animation: turn-pulse 1.8s ease-in-out infinite; }
+    body[data-screen="lobby-screen"], body[data-screen="game-screen"] { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+    button, input, select, textarea { font-family: inherit; }
+    button { color: inherit; }
+    :focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+    h1 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: 0.18em; color: var(--brand-ink); line-height: 1.1; }
+    .subtitle { font-size: 0.6875rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-top: 2px; }
+
+    /* ── Top bar ───────────────────────────────────────────────────────── */
+    #page-header {
+      position: sticky; top: 0; z-index: 60; align-self: stretch; margin: 0 -16px 16px;
+      min-height: calc(var(--header-h) + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(16px, calc((100% - 640px) / 2)) 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+    }
+    body[data-screen="game-screen"] #page-header { padding-left: max(16px, calc((100% - 520px) / 2)); padding-right: max(16px, calc((100% - 520px) / 2)); }
+    #header-brand { display: flex; flex-direction: column; cursor: pointer; min-width: 0; }
+    #header-brand h1 { margin: 0; }
+    #header-stats { display: none; align-items: center; gap: 6px; flex-wrap: nowrap; }
+    .hstat { display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
+    .hstat-val { font-size: 0.8125rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    .hstat-label { font-size: 0.6875rem; color: var(--muted); font-weight: 600; }
+    #hstat-streak { color: var(--warn-ink) !important; }
+    .hstat:has(#hstat-xp) { display: none !important; } /* XP lives in Me; the bar stays calm */
+
+    /* ── Cards & text ──────────────────────────────────────────────────── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; width: 100%; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--e1); }
+    .card h2 { font-family: var(--font-display); font-size: 1.0625rem; font-weight: 600; color: var(--text); letter-spacing: -0.01em; line-height: 1.3; }
+    .overline { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .placeholder { color: var(--muted); font-size: 0.875rem; text-align: center; padding: 12px; }
+    .status { font-size: 0.875rem; color: var(--muted); text-align: center; }
+    .divider { border: none; border-top: 1px solid var(--border); }
+    input {
+      background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 0 14px; height: 48px;
+      border-radius: var(--r-md); font-size: 1rem; width: 100%; outline: none; transition: border-color .12s var(--ease), box-shadow .12s var(--ease);
+    }
+    input::placeholder { color: var(--faint); }
+    input:focus { border-color: var(--brand-ink); box-shadow: 0 0 0 3px rgba(var(--brand-rgb), .18); }
+
+    /* ── Buttons ───────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px;
+      padding: 12px 20px; border: 1px solid transparent; border-radius: var(--r-md); font-size: 1rem; font-weight: 600; line-height: 1.2;
+      cursor: pointer; transition: filter .12s var(--ease), transform .12s var(--ease), background .12s var(--ease), border-color .12s var(--ease);
+      text-decoration: none; user-select: none;
+    }
+    .btn:active:not(:disabled) { transform: scale(.98); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--brand-fill); color: var(--on-brand); }
+    @media (hover: hover) { .btn-primary:hover:not(:disabled) { filter: brightness(1.08); } }
+    .btn-secondary { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+    @media (hover: hover) { .btn-secondary:hover:not(:disabled) { background: var(--surface-3); } }
+    .btn-ghost { background: transparent; color: var(--brand-ink); }
+    @media (hover: hover) { .btn-ghost:hover { background: var(--surface-2); } }
+    .btn-block { width: 100%; }
+    .btn-sm { min-height: 36px; padding: 8px 14px; font-size: 0.875rem; border-radius: 10px; }
+    .btn-live { background: var(--live-fill); color: var(--live-on); }
+    .btn-friends { background: var(--friends-fill); color: var(--friends-on); }
+    .btn-daily { background: var(--daily-fill); color: var(--daily-on); }
+    .btn-endless { background: var(--endless-fill); color: var(--endless-on); }
+    .btn-danger { width: 100%; min-height: 40px; padding: 10px; background: transparent; border: 1px solid rgba(var(--danger-rgb), .35); border-radius: var(--r-md); color: var(--danger); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: background .12s var(--ease); }
+    .btn-danger:hover { background: rgba(var(--danger-rgb), .08); }
+    .btn-leave { border-color: var(--border); color: var(--text-2); margin-top: 4px; }
+    .btn-leave:hover { background: var(--surface-2); color: var(--text); }
+    .btn-undo { background: transparent; border: 1px solid var(--brand-ink); color: var(--brand-ink); border-radius: 10px; padding: 6px 12px; font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+    .btn-undo:hover { background: rgba(var(--brand-rgb), .1); }
+    .btn-reveal { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; vertical-align: middle; margin-left: 6px; }
+    .btn-reveal:hover { border-color: var(--brand-ink); color: var(--brand-ink); }
+    .copy-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 6px; line-height: 1; flex-shrink: 0; border-radius: 8px; transition: color .12s, background .12s; }
+    .copy-btn:hover { color: var(--brand-ink); background: var(--surface-3); }
+    .icon-btn { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 1.1rem; }
+    .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+
+    /* ── Toggles, segmented controls, chips ────────────────────────────── */
+    .setting-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .setting-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; min-width: 72px; }
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .toggle-btn { min-height: 36px; padding: 6px 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 10px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all .15s var(--ease); }
+    @media (hover: hover) { .toggle-btn:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); } }
+    .toggle-btn.selected, .toggle-btn.secondary.selected { border-color: var(--brand-ink); background: rgba(var(--brand-rgb), .12); color: var(--brand-ink); }
+    .toggle-btn:disabled { opacity: .4; cursor: default; }
+    .seg-tab-bar { display: flex; background: var(--surface-2); border-radius: var(--r-md); padding: 4px; gap: 4px; }
+    .seg-tab { flex: 1; min-height: 36px; padding: 6px 10px; background: transparent; border: none; color: var(--muted); border-radius: 9px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all .15s var(--ease); white-space: nowrap; }
+    .seg-tab.selected { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    @media (hover: hover) { .seg-tab:not(.selected):hover { color: var(--text); } }
+    .mode-toggle { display: flex; background: var(--surface-2); border-radius: var(--r-md); padding: 4px; gap: 4px; width: 100%; border: none; }
+    .mode-btn { flex: 1; min-width: 0; min-height: 40px; padding: 8px 6px; border: none; background: transparent; color: var(--muted); border-radius: 9px; font-size: 0.875rem; font-weight: 600; cursor: pointer; text-align: center; transition: all .15s var(--ease); }
+    .mode-btn.selected { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    .mode-btn:disabled { opacity: .45; cursor: default; }
+    @media (hover: hover) { .mode-btn:hover:not(.selected):not(:disabled) { color: var(--text); } }
+    .size-pill { min-height: 32px; padding: 4px 12px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); border-radius: 999px; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all .15s var(--ease); }
+    @media (hover: hover) { .size-pill:hover { border-color: var(--border-strong); color: var(--text); } }
+    .size-pill.selected { border-color: var(--brand-ink); background: rgba(var(--brand-rgb), .12); color: var(--brand-ink); }
+    .pill-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .pill-label { font-size: 0.6875rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; margin-right: 2px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+    .chip.turn { background: rgba(var(--brand-rgb), .12); color: var(--brand-ink); }
+    .chip.turn::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: dot-pulse 1.6s var(--ease) infinite; }
+    .chip.done { background: rgba(var(--success-rgb), .12); color: var(--success); }
+    @keyframes dot-pulse { 50% { opacity: .35; } }
+    .dev-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #f97316; color: #111; font-size: 0.625rem; font-weight: 800; letter-spacing: 0.08em; vertical-align: middle; }
+
+    /* ── Screens ───────────────────────────────────────────────────────── */
+    #join-screen { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
+    #lobby-screen, #game-screen { display: none; width: 100%; max-width: 480px; flex-direction: column; gap: 12px; }
+    #game-screen { max-width: 520px; }
+
+    /* ── Home hub ──────────────────────────────────────────────────────── */
+    .tab-panel { display: none; flex-direction: column; gap: 12px; animation: panel-in .28s var(--ease); }
+    .tab-panel.active { display: flex; }
+    @keyframes panel-in { from { opacity: 0; transform: translateY(6px); } }
+    .greet { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 4px 2px 2px; }
+    .greet h2 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+    .greet p { font-size: 0.875rem; color: var(--muted); margin-top: 2px; }
+    .greet .btn-ghost { flex-shrink: 0; min-height: 36px; padding: 6px 10px; font-size: 0.875rem; }
+    .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 10px 2px -2px; }
+    .section-title h3 { font-family: var(--font-display); font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
+    .section-title button { background: none; border: none; color: var(--brand-ink); font-weight: 600; font-size: 0.875rem; cursor: pointer; padding: 4px; }
+    .home-card { gap: 10px; }
+    .home-card h2 { margin: 0; }
+    .hc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .hc-sub { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
+    .hc-badge { font-size: 0.75rem; font-weight: 700; color: var(--success); }
+    .hc-streak { font-size: 0.875rem; font-weight: 700; color: var(--warn-ink); white-space: nowrap; }
+
+    /* Your-turn strip */
+    #yourturn-strip { display: none; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 4px; scrollbar-width: none; }
+    #yourturn-strip::-webkit-scrollbar { display: none; }
+    .yt-item { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 10px 14px 10px 10px; border-radius: 999px; background: var(--surface); border: 1px solid rgba(var(--friends-rgb), .45); box-shadow: var(--e1); cursor: pointer; font: inherit; color: var(--text); }
+    .yt-item:hover { background: var(--surface-2); }
+    .yt-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(var(--friends-rgb), .15); color: var(--friends); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8125rem; }
+    .yt-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+    .yt-text b { font-size: 0.875rem; }
+    .yt-text span { font-size: 0.75rem; color: var(--friends); font-weight: 600; }
+
+    /* Daily hero */
+    #daily-card { position: relative; overflow: hidden; border-radius: var(--r-xl); padding: 20px; gap: 12px; border-color: rgba(var(--daily-rgb), .55);
+      background: linear-gradient(150deg, rgba(var(--daily-rgb), .22), rgba(var(--daily-rgb), .05) 55%), var(--surface); }
+    #daily-card::after { content: ""; position: absolute; right: -28px; top: -28px; width: 128px; height: 128px; border-radius: 28px; transform: rotate(14deg);
+      background: rgba(var(--daily-rgb), .16); pointer-events: none; }
+    #daily-card > * { position: relative; z-index: 1; }
+    #daily-card .hero-over { color: var(--daily); }
+    #daily-card h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    #daily-card .btn-primary { background: var(--daily-fill); color: var(--daily-on); width: 100%; min-height: 48px; }
+    #daily-card .btn-secondary { width: 100%; min-height: 48px; background: var(--surface); }
+    #daily-card .hc-sub b, #daily-card .hc-sub strong { color: var(--text); }
+    #daily-freeze-row { padding-top: 10px; border-top: 1px dashed rgba(var(--daily-rgb), .5); }
+    #daily-freeze-btn { min-height: 36px; }
+
+    /* Game-mode grid */
+    .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .mode-card { --acc: var(--brand-ink); --acc-rgb: var(--brand-rgb);
+      position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 148px; padding: 16px; text-align: left;
+      background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--acc); border-radius: var(--r-lg); box-shadow: var(--e1);
+      cursor: pointer; font: inherit; color: var(--text); transition: transform .12s var(--ease), box-shadow .12s var(--ease), background .12s var(--ease); }
+    @media (hover: hover) { .mode-card:hover { box-shadow: var(--e2); transform: translateY(-1px); } }
+    .mode-card:active { transform: scale(.985); }
+    .mode-card.live { --acc: var(--live); --acc-rgb: var(--live-rgb); }
+    .mode-card.friends { --acc: var(--friends); --acc-rgb: var(--friends-rgb); }
+    .mode-card.endless { --acc: var(--endless); --acc-rgb: var(--endless-rgb); cursor: default; }
+    .mode-card.practice { --acc: var(--brand-ink); --acc-rgb: var(--brand-rgb); }
+    .mode-icon { width: 40px; height: 40px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; background: rgba(var(--acc-rgb), .14); color: var(--acc); margin-bottom: 4px; }
+    .mode-icon svg { width: 22px; height: 22px; }
+    .mode-name { font-family: var(--font-display); font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+    .mc-desc { font-size: 0.8125rem; color: var(--muted); line-height: 1.4; }
+    .mode-status { margin-top: auto; padding-top: 6px; }
+    .mode-card .chip.acc { background: rgba(var(--acc-rgb), .13); color: var(--acc); }
+    .mode-card .mode-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 8px; width: 100%; }
+    .mode-card .mode-actions .btn { flex: 1; min-height: 38px; padding: 8px 6px; font-size: 0.875rem; border-radius: 10px; }
+
+    /* Join-with-code row */
+    .card.code-row { flex-direction: row; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; }
+    .code-row label { font-size: 0.875rem; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+    #room-code-input { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.25em; font-weight: 600; text-align: center; height: 44px; flex: 1; min-width: 0; padding: 0 8px; }
+    .code-row .btn { flex-shrink: 0; min-height: 44px; }
+
+    /* Lists */
+    .list { display: flex; flex-direction: column; }
+    .mg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; background: var(--surface-2); border-radius: var(--r-md); border: 1px solid transparent; }
+    .mg-row.turn { border-color: rgba(var(--friends-rgb), .55); background: rgba(var(--friends-rgb), .07); }
+    .mg-title { font-size: 0.9375rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mg-meta { font-size: 0.8125rem; color: var(--muted); }
+    .mg-row .btn { padding: 8px 14px; min-height: 36px; font-size: 0.875rem; flex-shrink: 0; }
+    .mg-row.turn .btn-primary { background: var(--friends-fill); color: var(--friends-on); }
+    .public-game-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--surface-2); border-radius: var(--r-md); }
+    #open-games-list { display: flex; flex-direction: column; gap: 8px; }
+    .lb-row { display: flex; align-items: flex-start; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+    .lb-row:last-child { border-bottom: none; }
+    .wk-row { display: flex; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+    .wk-row.me { color: var(--brand-ink); font-weight: 700; }
+
+    /* Me tab */
+    .profile-card { flex-direction: row; align-items: center; gap: 14px; }
+    .avatar { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-weight: 700; font-size: 1.375rem; color: var(--on-brand); background: var(--brand-fill);
+      box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px rgba(var(--brand-rgb), .35); }
+    .profile-name { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; word-break: break-word; }
+    .xp-bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin-top: 8px; }
+    .xp-bar > div { height: 100%; border-radius: inherit; background: var(--brand-fill); transition: width .6s var(--ease); }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat { background: var(--surface-2); border-radius: var(--r-md); padding: 12px 10px; text-align: center; }
+    .stat b { display: block; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stat span { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+    .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 2px; border-bottom: 1px solid var(--border); background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+    .menu-row:last-child { border-bottom: 0; }
+    .menu-row .mr-label { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+    .menu-row .mr-icon { width: 32px; height: 32px; border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+    .menu-row .mr-icon svg { width: 18px; height: 18px; }
+    .menu-row .mr-end { color: var(--faint); }
+    .menu-row.static { cursor: default; }
+    #auth-bar { width: 100%; }
+
+    /* ── Bottom tab bar (top nav on desktop) ───────────────────────────── */
+    .tabbar { position: fixed; z-index: 70; left: 0; right: 0; bottom: 0; display: none; justify-content: center;
+      height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
+      background: var(--surface); border-top: 1px solid var(--border); }
+    body:not([data-screen]) .tabbar, body[data-screen="join-screen"] .tabbar { display: flex; }
+    .tabbar-inner { display: flex; width: 100%; max-width: 640px; }
+    .tab { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: none; cursor: pointer;
+      color: var(--muted); font-size: 0.75rem; font-weight: 600; transition: color .15s var(--ease); }
+    .tab svg { width: 24px; height: 24px; }
+    .tab.active { color: var(--brand-ink); }
+    .tab.active::before { content: ""; position: absolute; top: 0; width: 32px; height: 3px; border-radius: 0 0 3px 3px; background: var(--brand-ink); }
+    .tab-badge { position: absolute; top: 7px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 0.6875rem; font-weight: 700; display: none; align-items: center; justify-content: center; line-height: 1; }
+    .tab-badge.on { display: flex; }
+
+    /* ── Sheets (bottom sheets on phones, dialogs on desktop) ──────────── */
+    .sheet-wrap { position: fixed; inset: 0; z-index: 400; display: none; align-items: flex-end; justify-content: center; background: var(--scrim); }
+    .sheet-wrap.open { display: flex; animation: fade-in .2s var(--ease); }
+    .sheet { width: 100%; max-width: 560px; max-height: 92dvh; overflow-y: auto; background: var(--surface); border-radius: var(--r-xl) var(--r-xl) 0 0;
+      padding: 8px 20px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; box-shadow: var(--e3);
+      animation: sheet-up .28s var(--ease); }
+    .sheet-grip { width: 40px; height: 4px; border-radius: 999px; background: var(--border-strong); margin: 4px auto 2px; }
+    .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .sheet-head h2 { font-family: var(--font-display); font-size: 1.375rem; font-weight: 700; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
+    .sheet-head .mode-icon { margin: 0; width: 36px; height: 36px; }
+    .sheet p.lead { color: var(--muted); font-size: 0.9375rem; margin-top: -6px; }
+    @keyframes sheet-up { from { transform: translateY(40px); opacity: .4; } }
+    @keyframes fade-in { from { opacity: 0; } }
+
+    /* Snackbar (join-screen status / errors) */
+    #join-status:empty { display: none; }
+    #join-status { position: fixed; z-index: 450; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
+      max-width: calc(100% - 32px); padding: 12px 16px; border-radius: var(--r-md); background: var(--text); color: var(--bg); font-size: 0.875rem; font-weight: 500; box-shadow: var(--e3); text-align: center; }
+
+    /* ── Lobby ─────────────────────────────────────────────────────────── */
+    .player-list { display: flex; flex-direction: column; gap: 8px; }
+    .player-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; min-height: 48px; background: var(--surface-2); border-radius: var(--r-md); }
+    .pdot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; transition: transform .1s; box-shadow: 0 0 0 2px var(--surface); }
+    .pdot-mine { cursor: pointer; }
+    .pdot-mine:hover { transform: scale(1.3); }
+    .name-input { background: transparent; border: none; border-bottom: 2px solid var(--border); color: var(--text); padding: 2px 0; height: auto; border-radius: 0; font-size: 0.9375rem; font-weight: 700; outline: none; flex: 1; min-width: 60px; text-transform: uppercase; letter-spacing: 0.04em; box-shadow: none !important; }
+    .name-input:focus { border-bottom-color: var(--brand-ink); }
+    .name-input::placeholder { color: var(--faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .remove-btn { background: none; border: none; color: var(--faint); font-size: 1.1rem; cursor: pointer; padding: 4px 6px; line-height: 1; border-radius: 6px; }
+    .remove-btn:hover { color: var(--danger); background: rgba(var(--danger-rgb), .08); }
+    .diff-btn { min-height: 28px; padding: 3px 8px; font-size: 0.75rem; }
+    .room-code { font-family: var(--font-mono); font-size: 1.75rem; font-weight: 700; letter-spacing: 0.25em; color: var(--brand-ink); text-align: center; padding: 14px; background: var(--surface-2); border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .section-label { font-family: var(--font-display); font-size: 1.25rem; color: var(--text); letter-spacing: -0.01em; font-weight: 700; text-align: left; margin-top: 4px; }
+    #settings-section { display: flex; flex-direction: column; gap: 10px; }
+    .mode-bg-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.5; text-align: left; margin: 0; }
+    .color-popup { position: fixed; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px; display: flex; flex-direction: column; gap: 6px; z-index: 9999; box-shadow: var(--e3); }
+    .color-popup-row { display: flex; gap: 6px; }
+    .color-popup-label { font-size: 0.625rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; padding-top: 4px; border-top: 1px solid var(--border); font-weight: 700; }
+    .color-popup .cswatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform .1s, border-color .1s, opacity .1s; flex-shrink: 0; }
+    .color-popup .cswatch:hover:not(.taken):not(.premium-locked) { transform: scale(1.2); }
+    .color-popup .cswatch.selected { border-color: var(--text); transform: scale(1.15); }
+    .color-popup .cswatch.taken { opacity: .2; cursor: not-allowed; }
+    .color-popup .cswatch.premium-locked { opacity: .35; position: relative; }
+    .color-popup .cswatch.premium-locked:hover { opacity: .6; }
+    .color-popup .cswatch.premium-unlocked { box-shadow: 0 0 0 1px var(--success); }
+
+    /* ── Game ──────────────────────────────────────────────────────────── */
+    .scores-wrap { display: flex; flex-direction: row; gap: 6px; }
+    .player-stat { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; background: var(--surface); border-radius: var(--r-md); border: 2px solid var(--border); font-size: 0.8125rem; min-width: 0; box-shadow: var(--e1); }
+    .player-stat .pname { font-weight: 700; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .player-stat .pinfo { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+    .player-stat.ps-active { border-color: var(--pc); }
+    .turn-banner { background: var(--surface); border-radius: var(--r-lg); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border: 2px solid var(--border); box-shadow: var(--e1); }
+    .turn-banner #turn-label { font-family: var(--font-display); }
+    @keyframes turn-pulse {
+      0%, 100% { border-color: rgba(var(--brand-rgb), .45); box-shadow: 0 0 0 0 rgba(var(--brand-rgb), 0); }
+      50% { border-color: var(--brand-ink); box-shadow: 0 0 0 4px rgba(var(--brand-rgb), .16); }
+    }
+    .turn-banner.my-turn { animation: turn-pulse 1.8s ease-in-out infinite; background: rgba(var(--brand-rgb), .06); }
     .game-grid { display: grid; gap: 3px; }
     .gcell-letter {
       position: relative; z-index: 3; pointer-events: none;
-      text-shadow:
-        -2px -2px 0 #000,  2px -2px 0 #000,
-        -2px  2px 0 #000,  2px  2px 0 #000,
-        -3px  0   0 #000,  3px  0   0 #000,
-         0   -3px 0 #000,  0    3px 0 #000;
+      text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -3px 0 0 #000, 3px 0 0 #000, 0 -3px 0 #000, 0 3px 0 #000;
     }
-    .gcell { display: flex; align-items: center; justify-content: center; width: var(--cs); height: var(--cs); border-radius: 4px; border: 2px solid #1e3a5f; font-size: calc(var(--cs) * 0.88); font-weight: 900; user-select: none; cursor: pointer; transition: border-color 0.1s, background 0.1s; box-sizing: border-box; }
-    @media (hover: hover) { .gcell:hover { border-color: var(--hover-color, #475569); } }
-    .gcell.sel-start { border-color: var(--clr-primary) !important; background: rgba(var(--clr-primary-rgb),0.2) !important; }
-    .gcell.path-ok { border-color: #22c55e !important; background: rgba(34,197,94,0.12) !important; }
-    .gcell.path-bad { border-color: #ef4444 !important; background: rgba(239,68,68,0.12) !important; }
-    .gcell.path-hl { border-color: var(--hl-color, var(--clr-primary-light)) !important; background: var(--hl-bg, rgba(var(--clr-primary-rgb),0.15)) !important; }
-    .letter-panel { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
-    .lbtn { width: 34px; height: 34px; border: 2px solid #334155; background: #0f172a; color: #94a3b8; border-radius: 6px; font-size: 0.82rem; font-weight: 900; cursor: pointer; transition: all 0.1s; }
-    .lbtn:hover { border-color: var(--clr-primary); color: #e2e8f0; }
-    .lbtn.sel { border-color: var(--clr-primary); background: rgba(var(--clr-primary-rgb),0.2); color: var(--clr-primary-light); }
-    .action-bar { display: flex; gap: 0.5rem; }
-    .btn-danger { width:100%; padding:0.45rem; background:transparent; border:1px solid #4c1d1d; border-radius:6px; color:#a15050; font-size:0.75rem; font-weight:bold; cursor:pointer; letter-spacing:0.05em; transition:border-color 0.15s,color 0.15s,background 0.15s; }
-    .btn-danger:hover { border-color:#7f1d1d; color:#fca5a5; background:rgba(127,29,29,0.15); }
-    .btn-leave { border-color:#1e3a5f; color:#7b8ba3; margin-top:0.3rem; }
-    .btn-leave:hover { border-color:#3b82f6; color:#93c5fd; background:rgba(59,130,246,0.1); }
-    .info-tags { display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.35rem; }
-    .info-tags:last-child { margin-bottom:0; }
-    .info-tag { background:#0f172a; border:1px solid #334155; border-radius:4px; padding:0.18rem 0.5rem; font-size:0.72rem; font-weight:bold; color:#94a3b8; }
-    .info-desc { font-size:0.75rem; color:#64748b; margin-top:0.2rem; }
-    .section-label { font-size:1.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.14em; font-weight:800; text-align:center; }
-    .mode-toggle { display:flex; background:#0f172a; border-radius:14px; padding:4px; border:1px solid var(--clr-secondary); width:100%; }
-    .mode-btn { flex:1; min-width:0; padding:0.75rem 0.25rem; border:none; background:#1e293b; color:#64748b; border-radius:10px; font-size:0.82rem; font-weight:bold; cursor:pointer; text-align:center; transition:all 0.18s; letter-spacing:0.06em; text-transform:uppercase; }
-    .mode-btn.selected { background:var(--clr-primary); color:#fff; box-shadow:0 2px 8px rgba(var(--clr-primary-rgb),0.35); }
-    .mode-btn:disabled { opacity:0.45; cursor:default; }
-    @media (hover:hover) { .mode-btn:hover:not(.selected):not(:disabled) { background:rgba(var(--clr-primary-rgb),0.15); color:#e2e8f0; } }
-    #settings-section { display:flex; flex-direction:column; gap:0.5rem; }
-    #help-modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.94); z-index:1000; overflow-y:auto; padding:1rem; }
-    .help-card { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:1.5rem; max-width:420px; margin:2rem auto; display:flex; flex-direction:column; gap:1rem; }
-    .help-section h3 { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.12em; color:#64748b; margin-bottom:0.3rem; font-weight:800; }
-    .help-section p { font-size:0.85rem; color:#cbd5e1; line-height:1.6; margin:0; }
-    .help-mode-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:6px; background:rgba(var(--clr-primary-rgb),0.2); border:1px solid var(--clr-primary); color:var(--clr-primary-light); font-size:0.72rem; font-weight:bold; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.25rem; }
-    .mode-desc { font-size:0.78rem; color:#94a3b8; padding:0.6rem 0.75rem; background:#0f172a; border-radius:8px; border-left:3px solid #334155; line-height:1.5; }
-    .mode-bg-desc { font-size:0.78rem; color:#64748b; line-height:1.5; text-align:center; margin:0; }
-    .lb-row { display:flex; align-items:flex-start; gap:0.5rem; padding:0.4rem 0; border-bottom:1px solid #1e293b; font-size:0.82rem; }
-    .lb-row:last-child { border-bottom:none; }
-    .size-pill { padding:0.28rem 0.65rem; border:1px solid #334155; background:#0f172a; color:#64748b; border-radius:999px; font-size:0.78rem; font-weight:bold; cursor:pointer; transition:all 0.15s; }
-    @media (hover:hover) { .size-pill:hover { border-color:var(--clr-secondary); color:#e2e8f0; } }
-    .pill-group { display:flex; align-items:center; gap:0.4rem; }
-    .pill-label { font-size:0.7rem; color:#64748b; text-transform:uppercase; letter-spacing:0.08em; margin-right:0.1rem; }
-    .size-pill.selected { border-color:var(--clr-secondary); background:rgba(13,148,136,0.15); color:#2dd4bf; }
-    @media (max-width: 520px) {
-      body { padding: 0.75rem; justify-content: flex-start; }
-      h1 { font-size: 1.4rem; }
-      .subtitle { font-size: 0.72rem; margin-bottom: 0.75rem; }
-      .card { padding: 0.85rem; }
-      #game-screen { gap: 0.5rem; }
+    .gcell { display: flex; align-items: center; justify-content: center; width: var(--cs); height: var(--cs); border-radius: 6px; border: 2px solid var(--cell-border); background-color: var(--cell-bg); font-family: var(--font-display); font-size: calc(var(--cs) * 0.88); font-weight: 800; user-select: none; cursor: pointer; transition: border-color .1s, background .1s; box-sizing: border-box; }
+    @media (hover: hover) { .gcell:hover { border-color: var(--hover-color, var(--border-strong)); } }
+    .gcell.sel-start { border-color: var(--brand-ink) !important; background: rgba(var(--brand-rgb), .2) !important; }
+    .gcell.path-ok { border-color: var(--success) !important; background: rgba(var(--success-rgb), .14) !important; }
+    .gcell.path-bad { border-color: var(--danger) !important; background: rgba(var(--danger-rgb), .14) !important; }
+    .gcell.path-hl { border-color: var(--hl-color, var(--brand-ink)) !important; background: var(--hl-bg, rgba(var(--brand-rgb), .15)) !important; }
+    .letter-panel { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+    .lbtn { width: 38px; height: 42px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); border-radius: 8px; font-size: 0.9375rem; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 1px 0 var(--border-strong); }
+    .lbtn:hover { border-color: var(--brand-ink); }
+    .lbtn.sel { border-color: var(--brand-ink); background: rgba(var(--brand-rgb), .16); color: var(--brand-ink); }
+    .action-bar { display: flex; gap: 8px; }
+    .info-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+    .info-tags:last-child { margin-bottom: 0; }
+    .info-tag { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 600; color: var(--text-2); }
+    .info-desc { font-size: 0.8125rem; color: var(--muted); margin-top: 4px; }
+    #help-modal { display: none; position: fixed; inset: 0; background: var(--scrim); z-index: 1000; overflow-y: auto; padding: 16px; }
+    .help-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 24px; max-width: 480px; margin: 24px auto; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--e3); }
+    .help-section h3 { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+    .help-section p { font-size: 0.9375rem; color: var(--text-2); line-height: 1.6; margin: 0; }
+    .help-mode-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(var(--brand-rgb), .12); color: var(--brand-ink); font-size: 0.75rem; font-weight: 700; margin-bottom: 4px; }
+    .mode-desc { font-size: 0.875rem; color: var(--text-2); padding: 10px 12px; background: var(--surface-2); border-radius: var(--r-md); border-left: 3px solid var(--border-strong); line-height: 1.5; }
+    @keyframes spec-blink { 0%, 100% { transform: scaleY(1); } 35%, 65% { transform: scaleY(0.07); } }
+    @keyframes spec-wobble { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(0.7px, -1.2px); } 50% { transform: translate(-0.6px, 0.9px); } 75% { transform: translate(0.5px, 1.1px); } }
+    .spec-eye { position: absolute; pointer-events: none; opacity: 0; }
+    .spec-eye svg { display: block; transform-origin: 50% 50%; }
+    .spec-eye.blinking svg { animation: spec-blink .3s ease-in-out; }
+
+    /* ── Footer ────────────────────────────────────────────────────────── */
+    #site-footer { text-align: center; font-size: 0.75rem; color: var(--faint); user-select: none; padding: 8px 0 4px; line-height: 1.8; }
+    #site-footer a { color: inherit; }
+
+    /* ── Responsive ────────────────────────────────────────────────────── */
+    @media (max-width: 380px) {
+      .mode-card { min-height: 140px; padding: 14px; }
+      .mc-desc { font-size: 0.78rem; }
+      .hstat { padding: 0 8px; }
     }
-    @keyframes spec-blink {
-      0%, 100% { transform: scaleY(1); }
-      35%, 65%  { transform: scaleY(0.07); }
+    @media (min-width: 600px) {
+      body { padding-left: 24px; padding-right: 24px; }
+      #page-header { margin-left: -24px; margin-right: -24px; }
+      .card { padding: 20px; }
+      #daily-card { padding: 24px; }
     }
-    @keyframes spec-wobble {
-      0%, 100% { transform: translate(0, 0); }
-      20%      { transform: translate(0.7px, -1.2px); }
-      50%      { transform: translate(-0.6px, 0.9px); }
-      75%      { transform: translate(0.5px, 1.1px); }
+    @media (min-width: 900px) {
+      /* Tabs move into the top bar */
+      body { padding-bottom: 48px; }
+      .tabbar { top: env(safe-area-inset-top); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: auto; height: var(--header-h); padding: 0; background: transparent; border: 0; }
+      .tabbar-inner { gap: 4px; align-items: center; }
+      .tab { flex-direction: row; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; font-size: 0.9375rem; }
+      .tab svg { width: 20px; height: 20px; }
+      .tab.active { background: rgba(var(--brand-rgb), .1); }
+      .tab.active::before { display: none; }
+      .tab-badge { top: 2px; left: auto; right: 2px; }
+      #page-header { padding-left: max(24px, calc((100% - 960px) / 2)); padding-right: max(24px, calc((100% - 960px) / 2)); }
+      #join-screen { max-width: 960px; }
+      #tab-play.active { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+      #tab-play > * { grid-column: 1 / -1; }
+      #tab-play > #daily-card { grid-column: 1; grid-row: span 2; align-self: stretch; }
+      #tab-play > .mode-grid { grid-column: 2; }
+      .mode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #tab-games.active, #tab-ranks.active, #tab-me.active { max-width: 640px; width: 100%; margin: 0 auto; }
+      .sheet-wrap { align-items: center; }
+      .sheet { border-radius: var(--r-xl); max-width: 520px; padding-bottom: 24px; }
+      .sheet-grip { display: none; }
+      #join-status { bottom: 32px; }
     }
-    .spec-eye { position:absolute; pointer-events:none; opacity:0; }
-    .spec-eye svg { display:block; transform-origin:50% 50%; }
-    .spec-eye.blinking svg { animation: spec-blink 0.3s ease-in-out; }
-    /* Growth features */
-    .dev-badge { display:inline-block; margin-left:0.4rem; padding:0.05rem 0.35rem; border-radius:4px; background:#f97316; color:#111; font-size:0.6rem; font-weight:900; letter-spacing:0.08em; vertical-align:middle; }
-    .home-card { gap:0.65rem !important; }
-    .home-card h2 { margin:0; }
-    .hc-row { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
-    .hc-sub { font-size:0.78rem; color:#94a3b8; line-height:1.5; }
-    .hc-badge { font-size:0.7rem; font-weight:900; letter-spacing:0.08em; color:#22c55e; text-transform:uppercase; }
-    .hc-streak { font-size:0.9rem; font-weight:900; color:#f97316; }
-    #daily-card { border-color: rgba(var(--clr-primary-rgb),0.6); background: linear-gradient(160deg, rgba(var(--clr-primary-rgb),0.18), #1e293b 60%); }
-    .mg-row { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.55rem 0.65rem; background:#0f172a; border-radius:8px; border:1px solid #1e293b; }
-    .mg-row.turn { border-color:#22c55e; }
-    .mg-title { font-size:0.85rem; font-weight:bold; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .mg-meta { font-size:0.72rem; color:#64748b; }
-    .mg-row .btn { padding:0.35rem 0.8rem; font-size:0.8rem; flex-shrink:0; }
-    .wk-row { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0; border-bottom:1px solid #1e293b; font-size:0.85rem; }
-    .wk-row.me { color:var(--clr-primary-light); font-weight:bold; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
   </style>
 </head>
 <body>
 
 <div id="page-header">
-  <div id="header-brand" onclick="goHome()">
+  <div id="header-brand" onclick="goHome()" role="link" aria-label="Lexterra home">
     <h1>LEXTERRA</h1>
-    <p class="subtitle" id="subtitle">MULTIPLAYER</p>
+    <p class="subtitle" id="subtitle">Word games</p>
   </div>
   <div id="header-stats">
+    <div class="hstat" id="hstat-streak-wrap" style="display:none" title="Daily puzzle streak">
+      <span class="hstat-val" id="hstat-streak">🔥0</span>
+    </div>
+    <div class="hstat" title="Coins — spend them on themes, colours and streak freezes">
+      <span class="hstat-val" id="hstat-coins">0</span>
+      <span class="hstat-label">coins</span>
+    </div>
     <div class="hstat" id="hstat-level-wrap" style="display:none" title="Level — earn XP by scoring points">
       <span class="hstat-label">Lv</span>
       <span class="hstat-val" id="hstat-level">1</span>
-    </div>
-    <div class="hstat" id="hstat-streak-wrap" style="display:none" title="Daily puzzle streak">
-      <span class="hstat-val" id="hstat-streak" style="color:#f97316">🔥0</span>
     </div>
     <div class="hstat">
       <span class="hstat-val" id="hstat-xp">0</span>
       <span class="hstat-label">XP</span>
     </div>
-    <div class="hstat">
-      <span class="hstat-val" id="hstat-coins">0</span>
-      <span class="hstat-label">coins</span>
-    </div>
   </div>
 </div>
 
-<!-- Join / Create screen -->
+<!-- Home: a hub with four tabs (Play · Games · Ranks · Me) -->
 <div id="join-screen">
-  <div class="card home-card" id="welcome-card" style="display:none">
-    <div class="hc-row"><h2>New to Lexterra?</h2><button onclick="dismissWelcome()" aria-label="Dismiss" style="background:none;border:none;color:#475569;font-size:1.1rem;cursor:pointer">✕</button></div>
-    <p class="hc-sub">Learn the game in 60 seconds, then try a practice round against a friendly bot.</p>
-    <div style="display:flex;gap:0.5rem">
-      <button class="btn btn-primary" style="flex:1;padding:0.6rem" onclick="openTutorialScreen()">Learn to play</button>
-      <button class="btn btn-secondary" style="flex:1;padding:0.6rem" onclick="startPractice()">Practice vs bot</button>
-    </div>
-  </div>
 
-  <div class="card home-card" id="daily-card" style="display:none">
-    <div class="hc-row">
+  <!-- ═══ PLAY ═══ -->
+  <section class="tab-panel active" id="tab-play" aria-label="Play">
+    <div class="greet">
+      <div>
+        <h2 id="greet-title">Welcome to Lexterra</h2>
+        <p id="greet-sub">Pick a game — they all play on the same board.</p>
+      </div>
+      <button class="btn btn-ghost" onclick="openNameSheet()" id="greet-name-btn">Set name</button>
+    </div>
+
+    <div id="yourturn-strip" aria-label="Games waiting for you"></div>
+
+    <div class="card home-card" id="welcome-card" style="display:none">
+      <div class="hc-row"><h2>New to Lexterra?</h2><button class="icon-btn" onclick="dismissWelcome()" aria-label="Dismiss">✕</button></div>
+      <p class="hc-sub">Learn the game in 60 seconds, then try a practice round against a friendly bot.</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="openTutorialScreen()">Learn to play</button>
+        <button class="btn btn-secondary" style="flex:1" onclick="startPractice()">Practice game</button>
+      </div>
+    </div>
+
+    <div class="card home-card" id="daily-card" style="display:none">
+      <div class="hc-row">
+        <span class="overline hero-over" id="daily-over">Daily puzzle</span>
+        <span class="hc-streak" id="daily-card-streak"></span>
+      </div>
       <h2 id="daily-card-title">Daily Puzzle</h2>
-      <span class="hc-streak" id="daily-card-streak"></span>
+      <p class="hc-sub" id="daily-card-sub">Same board for everyone, every day. One attempt — how many points can you score?</p>
+      <p class="hc-sub" id="daily-card-leader" style="display:none"></p>
+      <button class="btn btn-primary" id="daily-card-btn" onclick="openDailyScreen()">Play today's puzzle</button>
+      <div class="hc-row" id="daily-freeze-row" style="display:none">
+        <span class="hc-sub" id="daily-freeze-text"></span>
+        <button class="btn btn-secondary btn-sm" id="daily-freeze-btn" onclick="buyStreakFreeze()" style="flex-shrink:0"></button>
+      </div>
     </div>
-    <p class="hc-sub" id="daily-card-sub">Same board for everyone, every day. One attempt — how many points can you score?</p>
-    <p class="hc-sub" id="daily-card-leader" style="display:none"></p>
-    <button class="btn btn-primary" id="daily-card-btn" onclick="openDailyScreen()">Play today's puzzle</button>
-    <div class="hc-row" id="daily-freeze-row" style="display:none">
-      <span class="hc-sub" id="daily-freeze-text"></span>
-      <button class="btn btn-secondary" id="daily-freeze-btn" onclick="buyStreakFreeze()" style="padding:0.35rem 0.7rem;font-size:0.75rem;flex-shrink:0"></button>
+
+    <div class="mode-grid">
+      <button class="mode-card live" onclick="openSheet('live')">
+        <span class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg></span>
+        <span class="mode-name">Live match</span>
+        <span class="mc-desc">Real-time game with friends or anyone online.</span>
+        <span class="mode-status"><span class="chip acc" id="live-status">Play now</span></span>
+      </button>
+      <button class="mode-card friends" onclick="openFriends()">
+        <span class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="mode-name">Over days</span>
+        <span class="mc-desc">Take your turn whenever suits — we'll nudge you.</span>
+        <span class="mode-status"><span class="chip acc" id="friends-status">Start a game</span></span>
+      </button>
+      <div class="mode-card endless" id="endless-card" style="display:none">
+        <span class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z"/></svg></span>
+        <span class="mode-name">Endless</span>
+        <span class="mc-desc"><span id="endless-best">Fresh boards, no limit.</span><span id="endless-secs" hidden>10</span></span>
+        <span class="mode-actions">
+          <button class="btn btn-endless" onclick="openEndlessScreen('classic')">Classic</button>
+          <button class="btn btn-secondary" onclick="openEndlessScreen('blitz')">⚡ Blitz</button>
+        </span>
+      </div>
+      <button class="mode-card practice" onclick="startPractice()">
+        <span class="mode-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg></span>
+        <span class="mode-name">Practice</span>
+        <span class="mc-desc">A relaxed game against a friendly bot.</span>
+        <span class="mode-status"><span class="chip acc">Solo</span></span>
+      </button>
     </div>
-  </div>
 
-  <div class="card home-card" id="endless-card" style="display:none">
-    <div class="hc-row"><h2>Endless Puzzles</h2><span class="hc-sub" id="endless-best" style="white-space:nowrap"></span></div>
-    <p class="hc-sub">Fresh boards, as many as you like. Classic lets you take your time — Blitz gives you <span id="endless-secs">10</span> seconds per letter.</p>
-    <div style="display:flex;gap:0.5rem">
-      <button class="btn btn-primary" style="flex:1;padding:0.6rem" onclick="openEndlessScreen('classic')">Classic</button>
-      <button class="btn btn-secondary" style="flex:1;padding:0.6rem" onclick="openEndlessScreen('blitz')">⚡ Blitz</button>
+    <div class="card code-row">
+      <label for="room-code-input">Have a code?</label>
+      <input id="room-code-input" type="text" maxlength="6" placeholder="ABC123" autocapitalize="characters" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')joinGame()">
+      <button class="btn btn-primary" onclick="joinGame()">Join</button>
     </div>
-  </div>
 
-  <div class="card home-card" id="mygames-card" style="display:none">
-    <div class="hc-row"><h2>My Games</h2><button class="btn btn-secondary" onclick="createAsyncGame()" style="padding:0.35rem 0.7rem;font-size:0.75rem">+ New game over days</button></div>
-    <div id="mygames-list" style="display:flex;flex-direction:column;gap:0.4rem"><p class="placeholder">Loading…</p></div>
-    <button class="btn btn-secondary" id="push-enable-btn" onclick="enablePushFromUI()" style="display:none;padding:0.45rem;font-size:0.8rem">🔔 Notify me when it's my turn</button>
-  </div>
-
-  <div class="card home-card" id="install-card" style="display:none">
-    <div class="hc-row"><h2>Get the app</h2><button onclick="dismissInstall()" aria-label="Dismiss" style="background:none;border:none;color:#475569;font-size:1.1rem;cursor:pointer">✕</button></div>
-    <p class="hc-sub" id="install-text">Install Lexterra on your home screen for one-tap play and turn notifications.</p>
-    <button class="btn btn-primary" id="install-btn" onclick="installApp()">Install</button>
-  </div>
-
-  <div class="card">
-    <h2>Player Name</h2>
-    <input id="player-name" type="text" maxlength="15" placeholder="Enter Player Name" style="text-transform:uppercase">
-  </div>
-
-  <div class="card">
-    <h2>Create a Game</h2>
-    <div style="display:flex;gap:0.35rem">
-      <button class="toggle-btn selected" id="vis-public" onclick="setVisibility(true)" style="flex:1;padding:0.55rem 0.25rem;font-size:0.88rem;letter-spacing:0.07em">Public</button>
-      <button class="toggle-btn" id="vis-private" onclick="setVisibility(false)" style="flex:1;padding:0.55rem 0.25rem;font-size:0.88rem;letter-spacing:0.07em">Private</button>
+    <div class="card home-card" id="install-card" style="display:none">
+      <div class="hc-row"><h2>Get the app</h2><button class="icon-btn" onclick="dismissInstall()" aria-label="Dismiss">✕</button></div>
+      <p class="hc-sub" id="install-text">Install Lexterra on your home screen for one-tap play and turn notifications.</p>
+      <button class="btn btn-primary" id="install-btn" onclick="installApp()">Install</button>
     </div>
-    <button class="btn btn-primary" onclick="createGame()">Create Room</button>
-  </div>
+  </section>
 
-  <div class="card">
-    <h2>Join a Game</h2>
-    <div style="display:flex;gap:0.5rem">
-      <input id="room-code-input" type="text" maxlength="6" placeholder="Room code" style="text-transform:uppercase;letter-spacing:0.2em;flex:1">
-      <button class="btn btn-secondary" onclick="joinGame()" style="flex-shrink:0">Join</button>
+  <!-- ═══ GAMES ═══ -->
+  <section class="tab-panel" id="tab-games" aria-label="Your games">
+    <div class="greet"><div><h2>Your games</h2><p>Over-days games with friends, and live rooms you can join.</p></div></div>
+    <div class="card home-card" id="mygames-card" style="display:none">
+      <div class="hc-row"><h2>Over days</h2><button class="btn btn-friends btn-sm" onclick="createAsyncGame()">+ New game</button></div>
+      <div id="mygames-list" style="display:flex;flex-direction:column;gap:8px"><p class="placeholder">Loading…</p></div>
+      <button class="btn btn-secondary" id="push-enable-btn" onclick="enablePushFromUI()" style="display:none">🔔 Notify me when it's my turn</button>
     </div>
-  </div>
+    <div class="card">
+      <div class="hc-row"><h2>Live rooms</h2><button class="btn btn-live btn-sm" onclick="openSheet('live')">+ New room</button></div>
+      <div id="games-tab-public"><p class="placeholder">Open games appear here.</p></div>
+    </div>
+  </section>
 
-  <div class="card" id="open-games-card">
-    <h2>Public Games</h2>
-    <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
-  </div>
-
-  <div class="card" id="high-scores-card">
-    <div style="margin-bottom:0.6rem">
+  <!-- ═══ RANKS ═══ -->
+  <section class="tab-panel" id="tab-ranks" aria-label="Leaderboards">
+    <div class="greet"><div><h2>Leaderboards</h2><p>See who's on top — this week and all time.</p></div></div>
+    <div class="card" id="high-scores-card">
       <div class="seg-tab-bar">
         <button class="seg-tab selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')">Leaderboard</button>
-        <button class="seg-tab" id="lb-view-highscores" onclick="lbSetTab('highscores')">High Scores</button>
-        <button class="seg-tab" id="lb-view-weekly" onclick="lbSetTab('weekly')" style="display:none">This Week</button>
+        <button class="seg-tab" id="lb-view-highscores" onclick="lbSetTab('highscores')">High scores</button>
+        <button class="seg-tab" id="lb-view-weekly" onclick="lbSetTab('weekly')" style="display:none">This week</button>
       </div>
-    </div>
-    <div style="display:flex;gap:0.35rem;margin-bottom:0.5rem">
-      <button class="toggle-btn selected" id="lb-tab-conquest" onclick="lbSetMode('conquest')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Conquest</button>
-      <button class="toggle-btn" id="lb-tab-exclusive" onclick="lbSetMode('exclusive')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Keeps</button>
-      <button class="toggle-btn" id="lb-tab-off" onclick="lbSetMode('off')" style="flex:1;padding:0.4rem 0.25rem;font-size:0.78rem">Search</button>
-    </div>
-    <div id="lb-size-filter-row" style="display:flex;flex-wrap:wrap;align-items:center;column-gap:1.1rem;row-gap:0.5rem;margin-bottom:0.5rem">
-      <div class="pill-group">
-        <span class="pill-label">Size</span>
-        <button class="size-pill selected" id="lb-sf-all" onclick="lbSetSizeFilter(null)">All</button>
-        <button class="size-pill" id="lb-sf-5" onclick="lbSetSizeFilter(5)">5×5</button>
-        <button class="size-pill" id="lb-sf-8" onclick="lbSetSizeFilter(8)">8×8</button>
-        <button class="size-pill" id="lb-sf-10" onclick="lbSetSizeFilter(10)">10×10</button>
+      <div style="display:flex;gap:6px">
+        <button class="toggle-btn selected" id="lb-tab-conquest" onclick="lbSetMode('conquest')" style="flex:1">Conquest</button>
+        <button class="toggle-btn" id="lb-tab-exclusive" onclick="lbSetMode('exclusive')" style="flex:1">Keeps</button>
+        <button class="toggle-btn" id="lb-tab-off" onclick="lbSetMode('off')" style="flex:1">Search</button>
       </div>
-      <div class="pill-group">
-        <span class="pill-label">Show</span>
-        <button class="size-pill" id="lb-filter-all" onclick="lbSetCompetitive(false)">All</button>
-        <button class="size-pill selected" id="lb-filter-comp" onclick="lbSetCompetitive(true)">Competitive</button>
+      <div id="lb-size-filter-row" style="display:flex;flex-wrap:wrap;align-items:center;column-gap:18px;row-gap:8px">
+        <div class="pill-group">
+          <span class="pill-label">Size</span>
+          <button class="size-pill selected" id="lb-sf-all" onclick="lbSetSizeFilter(null)">All</button>
+          <button class="size-pill" id="lb-sf-5" onclick="lbSetSizeFilter(5)">5×5</button>
+          <button class="size-pill" id="lb-sf-8" onclick="lbSetSizeFilter(8)">8×8</button>
+          <button class="size-pill" id="lb-sf-10" onclick="lbSetSizeFilter(10)">10×10</button>
+        </div>
+        <div class="pill-group">
+          <span class="pill-label">Show</span>
+          <button class="size-pill" id="lb-filter-all" onclick="lbSetCompetitive(false)">All</button>
+          <button class="size-pill selected" id="lb-filter-comp" onclick="lbSetCompetitive(true)">Competitive</button>
+        </div>
       </div>
+      <div id="lb-rows"><p class="placeholder">Loading…</p></div>
     </div>
-    <div id="lb-rows"><p class="placeholder">Loading…</p></div>
-  </div>
+  </section>
 
-  <p class="status" id="join-status"></p>
+  <!-- ═══ ME ═══ -->
+  <section class="tab-panel" id="tab-me" aria-label="Profile">
+    <div class="card profile-card">
+      <div class="avatar" id="me-avatar">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="profile-name" id="me-name">Player</div>
+        <div class="hc-sub" id="me-level">Level 1 · 0 XP</div>
+        <div class="xp-bar" aria-hidden="true"><div id="me-xp-bar" style="width:0%"></div></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="openNameSheet()">Edit</button>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><b id="me-coins">0</b><span>Coins</span></div>
+      <div class="stat"><b id="me-streak">0</b><span>Day streak</span></div>
+      <div class="stat"><b id="me-xp">0</b><span>XP</span></div>
+    </div>
+
+    <div id="auth-bar" style="display:none">
+      <div id="auth-card" class="card" style="position:relative">
+        <button id="auth-dismiss-btn" class="icon-btn" onclick="dismissAuthBar()" title="Dismiss" aria-label="Dismiss" style="position:absolute;top:8px;right:8px">✕</button>
+        <div id="auth-input-view">
+          <h2 style="margin-bottom:4px">Save your progress</h2>
+          <p class="hc-sub" style="margin:0 0 12px;padding-right:2rem">Enter your email to keep your coins, scores and games — and play on any device. No password needed.</p>
+          <div style="display:flex;gap:8px">
+            <input type="email" id="auth-email-input" placeholder="you@example.com" onkeydown="if(event.key==='Enter')authSubmitEmail()" style="flex:1;min-width:0">
+            <button id="auth-submit-btn" class="btn btn-primary" onclick="authSubmitEmail()" style="white-space:nowrap">Save progress</button>
+          </div>
+          <p id="auth-status" style="font-size:0.8125rem;color:var(--danger);margin:8px 0 0;min-height:1em"></p>
+        </div>
+        <div id="auth-sent-view" style="display:none;text-align:center">
+          <p style="font-size:1rem;font-weight:700;color:var(--warn-ink);margin:0 0 6px">Check your inbox…</p>
+          <p class="hc-sub" style="margin:0">Click the link we sent to save your coins, high scores and game history to your account.</p>
+        </div>
+        <div id="auth-loggedin-view" style="display:none;align-items:center;justify-content:space-between;gap:8px">
+          <p class="hc-sub" style="margin:0">Signed in as <strong id="auth-loggedin-email" style="color:var(--text);font-weight:600"></strong></p>
+          <button class="btn btn-secondary btn-sm" onclick="authSignOut()">Sign out</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="gap:0;padding-top:6px;padding-bottom:6px">
+      <div class="menu-row static">
+        <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>Appearance</span>
+        <div class="seg-tab-bar" role="radiogroup" aria-label="Appearance" style="padding:3px">
+          <button class="seg-tab" data-theme-choice="system" onclick="setThemeChoice('system')">Auto</button>
+          <button class="seg-tab" data-theme-choice="light" onclick="setThemeChoice('light')">Light</button>
+          <button class="seg-tab" data-theme-choice="dark" onclick="setThemeChoice('dark')">Dark</button>
+        </div>
+      </div>
+      <button class="menu-row" onclick="openTutorialScreen()">
+        <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg></span>How to play</span>
+        <span class="mr-end">›</span>
+      </button>
+      <button class="menu-row" onclick="startPractice()">
+        <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></span>Practice vs a bot</span>
+        <span class="mr-end">›</span>
+      </button>
+      <button class="menu-row" onclick="openInstallFromMe()" id="me-install-row" style="display:none">
+        <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>Install the app</span>
+        <span class="mr-end">›</span>
+      </button>
+    </div>
+
+    <div id="site-footer">
+      © <span id="footer-year"></span> <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="text-decoration:none">Chris Sandford</a> · v0.8.0<br>
+      <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener">Play offline version</a> · <span id="footer-online">0 players online</span>
+    </div>
+  </section>
+
+  <p class="status" id="join-status" role="status" aria-live="polite"></p>
+</div>
+
+<!-- Bottom tab bar (moves into the top bar on wide screens) -->
+<nav class="tabbar" aria-label="Main">
+  <div class="tabbar-inner">
+    <button class="tab active" data-tab="play" onclick="setTab('play')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Play</span>
+    </button>
+    <button class="tab" data-tab="games" onclick="setTab('games')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Games</span><span class="tab-badge" id="games-badge"></span>
+    </button>
+    <button class="tab" data-tab="ranks" onclick="setTab('ranks')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      <span>Ranks</span>
+    </button>
+    <button class="tab" data-tab="me" onclick="setTab('me')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>Me</span>
+    </button>
+  </div>
+</nav>
+
+<!-- Sheet: start or join a live match -->
+<div class="sheet-wrap" id="sheet-live" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-live-title">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <h2 id="sheet-live-title"><span class="mode-icon" style="--acc:var(--live);--acc-rgb:var(--live-rgb)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg></span>Live match</h2>
+      <button class="icon-btn" onclick="closeSheet()" aria-label="Close">✕</button>
+    </div>
+    <p class="lead">Start a room and invite friends, or jump into an open game.</p>
+    <div class="seg-tab-bar">
+      <button class="seg-tab selected" id="vis-public" onclick="setVisibility(true)">Public room</button>
+      <button class="seg-tab" id="vis-private" onclick="setVisibility(false)">Private room</button>
+    </div>
+    <p class="hc-sub" id="vis-hint" style="margin-top:-6px">Anyone can find and join your room.</p>
+    <button class="btn btn-live btn-block" style="min-height:48px" onclick="createGame()">Create room</button>
+    <div class="section-title" style="margin-top:4px"><h3>Open games</h3></div>
+    <div id="open-games-list"><p class="placeholder">Connecting…</p></div>
+  </div>
+</div>
+
+<!-- Sheet: player name -->
+<div class="sheet-wrap" id="sheet-name" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-name-title">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <h2 id="sheet-name-title">Your player name</h2>
+      <button class="icon-btn" onclick="closeSheet()" aria-label="Close">✕</button>
+    </div>
+    <p class="lead">This is how other players and the leaderboards will see you.</p>
+    <input id="player-name" type="text" maxlength="15" placeholder="e.g. WORDSMITH" autocomplete="nickname" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;font-weight:600;letter-spacing:0.04em" onkeydown="if(event.key==='Enter')saveNameSheet()">
+    <p class="hc-sub" id="name-sheet-error" style="color:var(--danger);display:none"></p>
+    <button class="btn btn-primary btn-block" style="min-height:48px" onclick="saveNameSheet()" id="name-sheet-btn">Save</button>
+  </div>
 </div>
 
 <!-- Lobby screen (waiting for players) -->
 <div id="lobby-screen">
   <div class="card">
-    <h2>Room Code — share with friends</h2>
+    <h2>Room code — share it with friends</h2>
     <div class="room-code">
       <span id="room-code-display"></span>
       <button class="copy-btn" id="copy-code-btn" onclick="copyRoomCode()" title="Copy to clipboard">
@@ -371,18 +788,18 @@
   <div class="card" id="players-card"></div>
 
   <p class="status" id="lobby-status"></p>
-  <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none">Start Game</button>
+  <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none;min-height:52px;font-size:1.0625rem">Start game</button>
   <div id="lobby-countdown" style="display:none;text-align:center;padding:0.15rem 0"></div>
-  <div id="waiting-msg" style="display:none;text-align:center;padding:0.75rem 1rem;background:#1e293b;border-radius:10px;border:1px solid #334155;font-size:0.85rem;color:#94a3b8">Waiting for the host to start the game…</div>
-  <button class="btn btn-secondary" onclick="returnToLobby()" style="font-size:0.82rem;padding:0.5rem 1rem;opacity:0.5">← Return to Lobby</button>
+  <div id="waiting-msg" style="display:none;text-align:center;padding:14px 16px;background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--border);font-size:0.9375rem;color:var(--text-2)">Waiting for the host to start the game…</div>
+  <button class="btn btn-ghost" onclick="returnToLobby()" style="color:var(--muted)">← Back to home</button>
 </div>
 
 <!-- Game screen -->
 <div id="game-screen"></div>
 
 <!-- Fixed claim overlay — visible on mobile while scrolling to select cells -->
-<div id="claim-overlay" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1e293b;border-top:2px solid #334155;padding:0.75rem 1rem;z-index:200;align-items:center;justify-content:space-between;gap:1rem">
-  <span id="claim-overlay-hint" style="font-weight:bold;font-size:0.9rem;color:#94a3b8"></span>
+<div id="claim-overlay" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);box-shadow:var(--e3);padding:0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));z-index:200;align-items:center;justify-content:space-between;gap:1rem">
+  <span id="claim-overlay-hint" style="font-weight:bold;font-size:0.9rem;color:var(--text-2)"></span>
   <button class="btn btn-secondary" onclick="toggleClaimMode()" style="flex-shrink:0;padding:0.4rem 0.9rem;font-size:0.85rem">Cancel</button>
 </div>
 
@@ -470,7 +887,7 @@
     const btn = document.getElementById('ghost-toggle');
     if (btn) {
       btn.innerHTML = ghostIcon(ghostMode);
-      btn.style.color = ghostMode ? '#94a3b8' : '#475569';
+      btn.style.color = ghostMode ? 'var(--text-2)' : 'var(--faint)';
       btn.title = ghostMode ? 'Ghost mode on — your cursor is hidden from others' : 'Ghost mode off — others can see your cursor';
     }
     if (ghostMode && socket) socket.send(JSON.stringify({ type: 'hover', r: null, c: null }));
@@ -486,7 +903,7 @@
     soundEnabled = !soundEnabled;
     localStorage.setItem('lexterra_sound', soundEnabled ? 'on' : 'off');
     const btn = document.getElementById('sound-toggle');
-    if (btn) { btn.innerHTML = soundIcon(soundEnabled); btn.style.color = soundEnabled ? '#94a3b8' : '#475569'; }
+    if (btn) { btn.innerHTML = soundIcon(soundEnabled); btn.style.color = soundEnabled ? 'var(--text-2)' : 'var(--faint)'; }
   };
 
   let socket = null;
@@ -589,6 +1006,7 @@
       const el = document.getElementById(id);
       el.style.display = id === screenId ? 'flex' : 'none';
     });
+    document.body.dataset.screen = screenId; // the home tab bar shows only on the join screen
   }
 
   function connect(room) {
@@ -691,7 +1109,7 @@
     if (!t) {
       t = document.createElement("div");
       t.id = "toast";
-      t.style.cssText = "position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #ef4444;color:#fca5a5;padding:0.6rem 1.2rem;border-radius:8px;font-size:0.85rem;font-weight:bold;z-index:1000;text-align:center;max-width:90vw;pointer-events:none";
+      t.style.cssText = "position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--danger);color:var(--danger);padding:0.7rem 1.2rem;border-radius:12px;box-shadow:var(--e3);font-size:0.875rem;font-weight:600;z-index:1000;text-align:center;max-width:90vw;pointer-events:none";
       document.body.appendChild(t);
     }
     t.textContent = msg;
@@ -890,8 +1308,8 @@
             <button class="toggle-btn${s.pace==='async'?' selected':''}" data-key="pace" data-val="async"${(!amHost || Object.values(state.players).some(p => p.isBot))?' disabled':''} title="${Object.values(state.players).some(p => p.isBot) ? 'Remove bots first — over-days games are people only' : 'Take turns whenever you like'}">Over days</button>
           </div>
         </div>
-        ${s.pace==='async' ? `<p style="font-size:0.75rem;color:#94a3b8;margin:0">Take your turn whenever suits — up to ${Math.round((asyncTurnHours))}h per turn. Close the app any time; you'll find this game under <b>My Games</b>${pushSupported() ? ' and get a notification when it\'s your move' : ''}.</p>` : ''}` : ''}
-        <button id="advanced-settings-toggle" ${s.pace==='async' ? 'hidden ' : ''}style="background:none;border:none;color:#64748b;font-size:0.75rem;cursor:pointer;padding:0.4rem 0;text-align:left;display:flex;align-items:center;gap:0.3rem">
+        ${s.pace==='async' ? `<p style="font-size:0.75rem;color:var(--text-2);margin:0">Take your turn whenever suits — up to ${Math.round((asyncTurnHours))}h per turn. Close the app any time; you'll find this game under <b>My Games</b>${pushSupported() ? ' and get a notification when it\'s your move' : ''}.</p>` : ''}` : ''}
+        <button id="advanced-settings-toggle" ${s.pace==='async' ? 'hidden ' : ''}style="background:none;border:none;color:var(--muted);font-size:0.75rem;cursor:pointer;padding:0.4rem 0;text-align:left;display:flex;align-items:center;gap:0.3rem">
           <span id="advanced-settings-chevron" style="display:inline-block;transition:transform 0.15s;transform:rotate(${advancedSettingsOpen ? '90' : '0'}deg)">›</span> Advanced Settings
         </button>
         <div id="advanced-settings-body" style="display:${advancedSettingsOpen ? 'flex' : 'none'};flex-direction:column;gap:0.5rem">
@@ -905,7 +1323,7 @@
             </div>
           </div>
           ${timerVal === null ? `<p style="font-size:0.72rem;color:#eab308;margin:0">⚠️ With no timer, leaving or backgrounding the game window may stall your turn or cause you to be dropped from the game.</p>` : ''}
-          ${timerVal === 'high' ? `<p style="font-size:0.72rem;color:#94a3b8;margin:0">Each player has their own time bank that only ticks on their turn. Earn bonus time by placing letters and claiming words.</p>` : ''}
+          ${timerVal === 'high' ? `<p style="font-size:0.72rem;color:var(--text-2);margin:0">Each player has their own time bank that only ticks on their turn. Earn bonus time by placing letters and claiming words.</p>` : ''}
         </div>
       </div>
     `;
@@ -953,7 +1371,7 @@
             <button class="toggle-btn diff-btn${p.botDifficulty==='easy'?' selected':''}" onclick="setBotDiff('${id}','easy')">Easy</button>
             <button class="toggle-btn diff-btn${p.botDifficulty==='hard'?' selected':''}" onclick="setBotDiff('${id}','hard')">Hard</button>
             <button class="remove-btn" onclick="removeBot('${id}')" title="Remove bot">×</button>
-          ` : `<span style="font-size:0.75rem;color:#64748b">${p.botDifficulty.toUpperCase()}</span>`}
+          ` : `<span style="font-size:0.75rem;color:var(--muted)">${p.botDifficulty.toUpperCase()}</span>`}
         </div>`;
       } else {
         const isMe = id === myConnId;
@@ -964,7 +1382,7 @@
           ${isMe
             ? `<input class="name-input" id="name-field" value="${p.name}" maxlength="15" placeholder="Enter your name" autocomplete="off">`
             : `<span style="font-weight:bold;flex:1">${p.name}</span>`}
-          ${p.isHost ? '<span style="font-size:0.75rem;color:#64748b">HOST</span>' : ''}
+          ${p.isHost ? '<span style="font-size:0.75rem;color:var(--muted)">HOST</span>' : ''}
         </div>`;
       }
     }
@@ -1044,11 +1462,11 @@
     if (!el) return;
     const remaining = Math.max(0, 300000 - (Date.now() - lobbyRegisteredAt));
     if (remaining === 0) {
-      el.innerHTML = `<span style="color:#ef4444;font-size:0.78rem">Public listing expired.</span><button onclick="reactivateLobby()" class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;margin-left:0.6rem">Reactivate</button>`;
+      el.innerHTML = `<span style="color:var(--danger);font-size:0.8125rem">Public listing expired.</span><button onclick="reactivateLobby()" class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;margin-left:0.6rem">Reactivate</button>`;
     } else {
       const m = Math.floor(remaining / 60000);
       const s = String(Math.floor((remaining % 60000) / 1000)).padStart(2, '0');
-      el.innerHTML = `<span style="color:#475569;font-size:0.78rem">Listed publicly — expires in <span style="font-variant-numeric:tabular-nums;color:#64748b">${m}:${s}</span></span>`;
+      el.innerHTML = `<span style="color:var(--faint);font-size:0.78rem">Listed publicly — expires in <span style="font-variant-numeric:tabular-nums;color:var(--muted)">${m}:${s}</span></span>`;
     }
   }
   window.reactivateLobby = function() {
@@ -1091,9 +1509,9 @@
             <div id="turn-sublabel" style="font-size:0.78rem;margin-top:0.18rem"></div>
           </div>
           <div style="display:flex;align-items:center;gap:0.5rem">
-            <button onclick="showHelp()" title="How to play" style="background:none;border:1px solid #334155;border-radius:50%;width:26px;height:26px;cursor:pointer;color:#64748b;font-size:0.78rem;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0">?</button>
-            <button id="ghost-toggle" onclick="toggleGhost()" title="Ghost mode on — your cursor is hidden from others" style="display:none;background:none;border:none;cursor:pointer;padding:0.2rem;line-height:0;color:#94a3b8;transition:color 0.15s">${ghostIcon(true)}</button>
-            <button id="sound-toggle" onclick="toggleSound()" title="Toggle sound" style="background:none;border:none;cursor:pointer;padding:0.2rem;line-height:0;color:${soundEnabled?'#94a3b8':'#475569'};transition:color 0.15s">${soundIcon(soundEnabled)}</button>
+            <button onclick="showHelp()" title="How to play" style="background:none;border:1px solid var(--border);border-radius:50%;width:26px;height:26px;cursor:pointer;color:var(--muted);font-size:0.78rem;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0">?</button>
+            <button id="ghost-toggle" onclick="toggleGhost()" title="Ghost mode on — your cursor is hidden from others" style="display:none;background:none;border:none;cursor:pointer;padding:0.2rem;line-height:0;color:var(--text-2);transition:color 0.15s">${ghostIcon(true)}</button>
+            <button id="sound-toggle" onclick="toggleSound()" title="Toggle sound" style="background:none;border:none;cursor:pointer;padding:0.2rem;line-height:0;color:${soundEnabled?'var(--text-2)':'var(--faint)'};transition:color 0.15s">${soundIcon(soundEnabled)}</button>
             <span id="timer-label" style="font-weight:900;font-variant-numeric:tabular-nums;color:var(--clr-primary-light)"></span>
           </div>
         </div>
@@ -1120,7 +1538,7 @@
           <h2>Player Stats</h2>
           <div id="player-stats-detail" style="margin-top:0.5rem"></div>
         </div>
-        <div id="jr-quiet" style="display:none;padding:0.5rem 0.75rem;background:#1e293b;border-radius:8px;border:1px solid #334155;max-width:100%"></div>
+        <div id="jr-quiet" style="display:none;padding:0.5rem 0.75rem;background:var(--surface);border-radius:8px;border:1px solid var(--border);max-width:100%"></div>
         <div class="card" style="padding:0.7rem 1rem;max-width:100%">
           <div class="info-tags">
             ${[
@@ -1136,12 +1554,12 @@
             ? '<div class="info-desc">Claimed tiles are yours to keep — no one can steal them. Most tiles wins.</div>'
             : '' }
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;background:#0f172a;border:1px solid #1e293b;border-radius:8px;max-width:100%">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;background:var(--surface-2);border:1px solid var(--surface);border-radius:8px;max-width:100%">
           <div>
-            <div style="color:#64748b;font-size:0.7rem;margin-bottom:0.15rem">Room Code</div>
+            <div style="color:var(--muted);font-size:0.7rem;margin-bottom:0.15rem">Room Code</div>
             <div style="font-weight:900;letter-spacing:0.18em;color:var(--clr-primary-light);font-size:0.95rem">${roomId}</div>
           </div>
-          <button id="copy-code-btn-game" onclick="copyRoomCode()" title="Copy to clipboard" style="background:none;border:1px solid #334155;border-radius:6px;cursor:pointer;color:#94a3b8;padding:0.3rem 0.5rem;display:flex;align-items:center">
+          <button id="copy-code-btn-game" onclick="copyRoomCode()" title="Copy to clipboard" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text-2);padding:0.3rem 0.5rem;display:flex;align-items:center">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -1286,26 +1704,26 @@
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
       const nameLabel = p.isBot
-        ? `${p.name}<span style="font-size:0.6rem;color:#64748b;font-weight:normal;margin-left:0.25rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+        ? `${p.name}<span style="font-size:0.6rem;color:var(--muted);font-weight:normal;margin-left:0.25rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
         : p.name;
       const passes = p.passesThisRound ?? 0;
       const passText = passes > 0
         ? `<span style="color:#f97316;font-size:0.7rem;margin-left:0.25rem">${passes} pass${passes !== 1 ? 'es' : ''}</span>`
         : '';
       const clockText = highStakesOn
-        ? `<span id="tb-${id}" style="font-size:0.7rem;color:#94a3b8;margin-left:0.25rem;font-variant-numeric:tabular-nums">${fmtClock(state.timeBank[id] ?? 0)}</span>`
+        ? `<span id="tb-${id}" style="font-size:0.7rem;color:var(--text-2);margin-left:0.25rem;font-variant-numeric:tabular-nums">${fmtClock(state.timeBank[id] ?? 0)}</span>`
         : '';
       const pinfo = isTerritoryMode
         ? `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${tileCounts[id] ?? 0}</span>
-            <span style="color:#475569;font-size:0.72rem">&nbsp;tiles</span>
+            <span style="color:var(--faint);font-size:0.72rem">&nbsp;tiles</span>
             ${passText}${clockText}
           </div>`
         : `<div class="pinfo">
             <div class="pdot" style="background:${color}"></div>
             <span style="font-weight:900;font-size:0.85rem">${p.score}</span>
-            <span style="color:#475569;font-size:0.72rem">&nbsp;pts</span>
+            <span style="color:var(--faint);font-size:0.72rem">&nbsp;pts</span>
             ${passText}${clockText}
           </div>`;
       return `<div class="player-stat${active ? ' ps-active' : ''}" style="--pc:${color}">
@@ -1319,7 +1737,7 @@
       const players = Object.entries(frozenPlayers ?? state.players);
       detail.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem">
         <thead>
-          <tr style="color:#64748b;font-size:0.7rem;text-align:left;border-bottom:1px solid #334155">
+          <tr style="color:var(--muted);font-size:0.7rem;text-align:left;border-bottom:1px solid var(--border)">
             <th style="padding:0.25rem 0.5rem 0.4rem 0;font-weight:500">Player</th>
             <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Pts</th>
             <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Words</th>
@@ -1331,9 +1749,9 @@
           ${players.map(([id, p]) => {
             const c = COLORS[p.color] ?? "#9ca3af";
             const label = p.isBot
-              ? `${p.name} <span style="font-size:0.6rem;color:#64748b">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+              ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
               : p.name;
-            return `<tr style="border-bottom:1px solid #1e293b">
+            return `<tr style="border-bottom:1px solid var(--surface)">
               <td style="padding:0.35rem 0.5rem 0.35rem 0">
                 <div style="display:flex;align-items:center;gap:0.4rem">
                   <div style="width:10px;height:10px;border-radius:50%;background:${c};flex-shrink:0"></div>
@@ -1471,9 +1889,9 @@
       const cost = coinConfig.spendPremiumColor;
       const canAfford = playerCoins >= cost;
       const info = document.createElement('div');
-      info.style.cssText = 'font-size:0.78rem;color:#94a3b8;text-align:center;padding:0.25rem 0.1rem 0.5rem';
+      info.style.cssText = 'font-size:0.78rem;color:var(--text-2);text-align:center;padding:0.25rem 0.1rem 0.5rem';
       const swatchRow = Object.entries(COLORS).filter(([n]) => PREMIUM_COLORS.has(n)).map(([,h]) => `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${h};vertical-align:middle;margin:0 2px"></span>`).join('');
-      info.innerHTML = `${swatchRow}<br><strong style="color:#e2e8f0">Unlock all 4 premium colours</strong><br><span style="font-size:0.68rem;color:#64748b">${cost} coins · 30 days · you have ${playerCoins}</span>`;
+      info.innerHTML = `${swatchRow}<br><strong style="color:var(--text)">Unlock all 4 premium colours</strong><br><span style="font-size:0.68rem;color:var(--muted)">${cost} coins · 30 days · you have ${playerCoins}</span>`;
       popup.appendChild(info);
       const btns = document.createElement('div');
       btns.style.cssText = 'display:flex;gap:6px;justify-content:center';
@@ -1590,10 +2008,10 @@
     const panel = document.getElementById('join-request-panel');
     if (!panel) return;
     const botsHtml = bots.map(([id, p]) =>
-      `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.5rem;background:#0f172a;border-radius:6px">
+      `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.5rem;background:var(--surface-2);border-radius:6px">
         <div style="font-size:0.82rem">
-          <span style="font-weight:bold;color:#e2e8f0">${p.name}</span>
-          <span style="color:#64748b;margin-left:0.4rem">${(p.botDifficulty??'easy').toUpperCase()} · ${p.score} pts</span>
+          <span style="font-weight:bold;color:var(--text)">${p.name}</span>
+          <span style="color:var(--muted);margin-left:0.4rem">${(p.botDifficulty??'easy').toUpperCase()} · ${p.score} pts</span>
         </div>
         <button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.25rem 0.65rem;font-size:0.78rem">Replace</button>
       </div>`
@@ -1601,7 +2019,7 @@
     document.getElementById('jr-name').textContent = `${name} wants to join`;
     document.getElementById('jr-body').innerHTML = `
       <button class="btn btn-primary" onclick="grantJoin(null,'add')" style="width:100%;margin-bottom:0.6rem">+ Add to Game</button>
-      ${bots.length ? `<p style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">— or replace a bot —</p>
+      ${bots.length ? `<p style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem">— or replace a bot —</p>
       <div style="display:flex;flex-direction:column;gap:0.3rem">${botsHtml}</div>` : ''}`;
     panel.style.display = 'block';
     let secsLeft = Math.ceil((expiresAt - Date.now()) / 1000);
@@ -1629,11 +2047,11 @@
       `<button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.2rem 0.5rem;font-size:0.75rem">${p.name} (${p.score}pts)</button>`
     ).join('');
     el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
-      <span style="font-size:0.82rem;color:#94a3b8"><span style="color:#e2e8f0;font-weight:bold">${name}</span> wants to join</span>
+      <span style="font-size:0.82rem;color:var(--text-2)"><span style="color:var(--text);font-weight:bold">${name}</span> wants to join</span>
       <div style="display:flex;gap:0.3rem;flex-wrap:wrap;align-items:center">
         <button class="btn btn-primary" onclick="grantJoin(null,'add')" style="padding:0.2rem 0.5rem;font-size:0.75rem">Add</button>
         ${botBtns}
-        <button onclick="dismissQuietJoinRequest()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0 0.2rem;line-height:1">✕</button>
+        <button onclick="dismissQuietJoinRequest()" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.1rem;padding:0 0.2rem;line-height:1">✕</button>
       </div>
     </div>`;
     el.style.display = 'block';
@@ -1748,7 +2166,7 @@
           continue;
         }
         const hoverer = Object.entries(otherHovers).find(([, pos]) => pos.r === r && pos.c === c);
-        cell.style.borderColor = hoverer ? (pColor(hoverer[0]) ?? '#475569') : '';
+        cell.style.borderColor = hoverer ? (pColor(hoverer[0]) ?? 'var(--faint)') : '';
       }
     }
   }
@@ -1763,7 +2181,7 @@
         const owner = state.territory?.[r]?.[c];
         const ownerColor = owner ? pColor(owner) : null;
         cell.style.background = ownerColor ? ownerColor + "55" : "";
-        cell.style.color = gCell ? (pColor(gCell.pi) ?? "#e2e8f0") : "#e2e8f0";
+        cell.style.color = gCell ? (pColor(gCell.pi) ?? "var(--text)") : "var(--text)";
         cell.innerHTML = gCell ? `<span class="gcell-letter">${gCell.letter}</span>` : '';
         cell.className = "gcell";
         if (claimPath) {
@@ -1776,7 +2194,7 @@
         if (highlightedWord && !cell.classList.contains('path-ok') && !cell.classList.contains('path-bad')) {
           const claim = state.claimed?.find(c => c.word === highlightedWord);
           if (claim?.path?.some(p => p.r === r && p.c === c)) {
-            const hlColor = pColor(claim.connId) ?? '#a78bfa';
+            const hlColor = pColor(claim.connId) ?? 'var(--brand-ink)';
             cell.style.setProperty('--hl-color', hlColor);
             cell.style.setProperty('--hl-bg', hlColor + '33');
             cell.classList.add('path-hl');
@@ -1793,7 +2211,7 @@
     const sub = document.getElementById('turn-sublabel');
     if (!sub) return;
     bonusFlashUntil = Date.now() + 1200;
-    sub.style.color = '#22c55e';
+    sub.style.color = 'var(--success)';
     sub.textContent = `⏱ +${amount}s time bonus!`;
     setTimeout(() => { if (Date.now() >= bonusFlashUntil) updateTurnBanner(); }, 1200);
   }
@@ -1808,16 +2226,16 @@
     lbl.textContent = isMyTurn ? "Your turn" : `${cur?.name ?? "…"}'s turn`;
     if (sub && Date.now() >= bonusFlashUntil) {
       if (isSpectating) {
-        sub.style.color = "#475569";
+        sub.style.color = "var(--faint)";
         sub.textContent = "Spectating";
       } else if (isMyTurn) {
         const letters = state.players[myConnId]?.lettersLeft ?? 0;
-        sub.style.color = letters > 0 ? "#fcd34d" : "#64748b";
+        sub.style.color = letters > 0 ? "var(--warn-ink)" : "var(--muted)";
         sub.textContent = letters > 0
           ? `★ You have ${letters} letter${letters > 1 ? "s" : ""} to place`
           : "Claim a word or pass";
       } else {
-        sub.style.color = "#475569";
+        sub.style.color = "var(--faint)";
         sub.textContent = lastMoveDesc;
       }
     }
@@ -1835,13 +2253,13 @@
     if (claimPath) {
       const pathWord = claimPath.map(p => state.grid?.[p.r]?.[p.c]?.letter ?? '').join('');
       const val = validateClaim(claimPath);
-      hint.style.color = val.valid ? '#22c55e' : '#ef4444';
+      hint.style.color = val.valid ? 'var(--success)' : 'var(--danger)';
       hint.textContent = val.valid ? `${pathWord}  +${val.score} pts — tap again to confirm` : `${pathWord} — ${val.reason}`;
     } else if (claimStart) {
-      hint.style.color = '#fcd34d';
+      hint.style.color = 'var(--warn-ink)';
       hint.textContent = 'Now tap the end cell';
     } else {
-      hint.style.color = '#94a3b8';
+      hint.style.color = 'var(--text-2)';
       hint.textContent = 'Tap the start cell';
     }
     overlay.style.display = 'flex';
@@ -1856,7 +2274,7 @@
         card.style.display = "";
         if (joinRequestPending) {
           const secsLeft = Math.max(0, Math.ceil((joinRequestExpiry - Date.now()) / 1000));
-          card.innerHTML = `<p style="text-align:center;color:#64748b;font-size:0.85rem;padding:0.25rem 0">Waiting for host… (${secsLeft}s)</p>`;
+          card.innerHTML = `<p style="text-align:center;color:var(--muted);font-size:0.85rem;padding:0.25rem 0">Waiting for host… (${secsLeft}s)</p>`;
         } else {
           card.innerHTML = `<button class="btn btn-secondary" onclick="sendJoinRequest()" style="width:100%">Request to Join</button>`;
         }
@@ -1882,7 +2300,7 @@
     }
     if (claimMode) {
       const hint = !claimStart ? "Tap start cell" : !claimPath ? "Tap end cell" : pathWord;
-      const valColor = val ? (val.valid ? "#22c55e" : "#ef4444") : "#94a3b8";
+      const valColor = val ? (val.valid ? "var(--success)" : "var(--danger)") : "var(--text-2)";
       html += `<p style="text-align:center;font-weight:bold;color:${valColor};margin-bottom:0.5rem">${hint}${val ? (val.valid ? ` +${val.score}pts` : ` — ${val.reason}`) : ""}</p>`;
     }
     html += `<div class="action-bar" style="margin-top:${lettersLeft > 0 || claimMode ? "0.75rem" : "0"}">
@@ -1899,7 +2317,7 @@
     const badGuesses = state.boardFullBadGuesses ?? 0;
     if (badGuesses > 0 && isBoardFull() && tMode && tMode !== 'off') {
       const remaining = 5 - badGuesses;
-      const color = remaining <= 1 ? '#ef4444' : remaining <= 2 ? '#f59e0b' : '#94a3b8';
+      const color = remaining <= 1 ? 'var(--danger)' : remaining <= 2 ? 'var(--warn-ink)' : 'var(--text-2)';
       html += `<p style="text-align:center;font-size:0.72rem;color:${color};margin-top:0.4rem;margin-bottom:0">${badGuesses}/5 wrong guesses — ${remaining} more before auto-pass</p>`;
     }
     card.innerHTML = html;
@@ -1951,7 +2369,7 @@
     list.innerHTML = sorted.map(c => {
       const color = pColor(c.connId) ?? "#9ca3af";
       const isHl = c.word === highlightedWord;
-      return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer;outline:${isHl ? `2px solid ${color}` : 'none'};outline-offset:1px">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+      return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:var(--surface-2);border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer;outline:${isHl ? `2px solid ${color}` : 'none'};outline-offset:1px">${c.word} <span style="color:var(--muted)">+${c.score}</span></span>`;
     }).join("");
   }
 
@@ -1974,7 +2392,7 @@
         const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60;
         lbl.textContent = h ? `${h}h` : `${m}m`;
         lbl.style.whiteSpace = "nowrap";
-        lbl.style.color = ms < 3600000 ? "#ef4444" : ms < 6 * 3600000 ? "#eab308" : "var(--clr-primary-light)";
+        lbl.style.color = ms < 3600000 ? "var(--danger)" : ms < 6 * 3600000 ? "var(--warn-ink)" : "var(--clr-primary-light)";
       };
       tick();
       timerInterval = setInterval(tick, 1000);
@@ -1996,7 +2414,7 @@
       const el = document.getElementById("timer-label");
       if (el) {
         el.textContent = `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, "0")}`;
-        el.style.color = rem <= 15 ? "#ef4444" : rem <= 40 ? "#eab308" : "var(--clr-primary-light)";
+        el.style.color = rem <= 15 ? "var(--danger)" : rem <= 40 ? "var(--warn-ink)" : "var(--clr-primary-light)";
       }
       if (rem === 0 && state.cur === myConnId) window.doPass();
     }, 500);
@@ -2012,9 +2430,9 @@
     Object.keys(bank).forEach(id => {
       const remaining = id === state.cur ? Math.max(0, bank[id] - elapsed) : bank[id];
       const badge = document.getElementById(`tb-${id}`);
-      const color = remaining <= 15 ? "#ef4444" : remaining <= 40 ? "#eab308" : "#94a3b8";
+      const color = remaining <= 15 ? "var(--danger)" : remaining <= 40 ? "var(--warn-ink)" : "var(--text-2)";
       if (badge) { badge.textContent = fmtClock(remaining); badge.style.color = color; }
-      if (id === state.cur && el) { el.textContent = fmtClock(remaining); el.style.color = remaining <= 15 ? "#ef4444" : remaining <= 40 ? "#eab308" : "var(--clr-primary-light)"; }
+      if (id === state.cur && el) { el.textContent = fmtClock(remaining); el.style.color = remaining <= 15 ? "var(--danger)" : remaining <= 40 ? "var(--warn-ink)" : "var(--clr-primary-light)"; }
     });
     if (state.cur === myConnId && !highStakesTimedOut) {
       const mine = Math.max(0, (bank[myConnId] ?? 0) - elapsed);
@@ -2135,11 +2553,11 @@
         <h3>Key</h3>
         <div style="display:flex;flex-direction:column;gap:0.6rem">
           <div style="display:flex;align-items:flex-start;gap:0.6rem">
-            <span style="color:#94a3b8;flex-shrink:0;line-height:0;margin-top:0.15rem">${ghostIcon(false)}</span>
+            <span style="color:var(--text-2);flex-shrink:0;line-height:0;margin-top:0.15rem">${ghostIcon(false)}</span>
             <p style="margin:0"><strong>Ghost Mode</strong> — hides your cursor from other players when it's their turn to look at the board.</p>
           </div>
           <div style="display:flex;align-items:flex-start;gap:0.6rem">
-            <span style="color:#94a3b8;flex-shrink:0;line-height:0;margin-top:0.15rem">${soundIcon(true)}</span>
+            <span style="color:var(--text-2);flex-shrink:0;line-height:0;margin-top:0.15rem">${soundIcon(true)}</span>
             <p style="margin:0">Turns game sound effects on or off.</p>
           </div>
           <div style="display:flex;align-items:flex-start;gap:0.6rem">
@@ -2147,7 +2565,7 @@
             <p style="margin:0">Floating eyes drifting around the board show <strong>spectators</strong> watching your game — one eye per spectator.</p>
           </div>
           <div style="display:flex;align-items:flex-start;gap:0.6rem">
-            <span style="padding:0.15rem 0.45rem;background:#0f172a;border-radius:6px;font-size:0.72rem;border-left:3px solid var(--clr-primary-light);flex-shrink:0;margin-top:0.1rem">WORD</span>
+            <span style="padding:0.15rem 0.45rem;background:var(--surface-2);border-radius:6px;font-size:0.72rem;border-left:3px solid var(--clr-primary-light);flex-shrink:0;margin-top:0.1rem">WORD</span>
             <p style="margin:0">Tap a word in the <strong>Claimed</strong> list to highlight where it was played on the board.</p>
           </div>
         </div>
@@ -2305,17 +2723,17 @@
     const hlClaim = hw ? (state.claimed ?? []).find(c => c.word === hw) : null;
     const hlUnc = !hlClaim && hw ? endUnclaimedWords.find(u => u.word === hw) : null;
     const hlPath = hlClaim?.path ?? hlUnc?.path ?? [];
-    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? '#a78bfa') : (hlUnc ? '#f59e0b' : null);
+    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? 'var(--brand-ink)') : (hlUnc ? '#f59e0b' : null);
     let cells = '';
     for (let r = 0; r < boardSize; r++) {
       for (let c = 0; c < boardSize; c++) {
         const gCell = state.grid?.[r]?.[c];
         const owner = state.territory?.[r]?.[c];
         const ownerColor = owner ? pColor(owner) : null;
-        const letterColor = gCell ? (pColor(gCell.pi) ?? '#e2e8f0') : '#475569';
+        const letterColor = gCell ? (pColor(gCell.pi) ?? 'var(--text)') : 'var(--faint)';
         const isHl = hlPath.some(p => p.r === r && p.c === c);
         const bg = isHl ? hlColor + '33' : (ownerColor ? ownerColor + '55' : '');
-        const border = isHl ? `2px solid ${hlColor}` : '2px solid #1e3a5f';
+        const border = isHl ? `2px solid ${hlColor}` : '2px solid var(--cell-border)';
         const letterShadow = "-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -3px 0 0 #000, 3px 0 0 #000, 0 -3px 0 #000, 0 3px 0 #000";
         cells += `<div style="display:flex;align-items:center;justify-content:center;width:${cellSize}px;height:${cellSize}px;border-radius:4px;border:${border};font-size:${Math.floor(cellSize*0.88)}px;font-weight:900;background:${bg};color:${letterColor};text-shadow:${letterShadow}">${gCell?.letter ?? ''}</div>`;
       }
@@ -2362,13 +2780,13 @@
 
     const claimedHtml = [...(state.claimed ?? [])].reverse().map(c => {
       const color = pColor(c.connId) ?? '#9ca3af';
-      return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
+      return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:var(--surface-2);border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer">${c.word} <span style="color:var(--muted)">+${c.score}</span></span>`;
     }).join('');
 
     const statsRows = players.map(([id, p]) => {
       const col = COLORS[p.color] ?? '#9ca3af';
-      const label = p.isBot ? `${p.name} <span style="font-size:0.6rem;color:#64748b">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : p.name;
-      return `<tr style="border-bottom:1px solid #1e293b">
+      const label = p.isBot ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : p.name;
+      return `<tr style="border-bottom:1px solid var(--surface)">
         <td style="padding:0.35rem 0.5rem 0.35rem 0"><div style="display:flex;align-items:center;gap:0.4rem"><div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div><span>${label}</span></div></td>
         <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.score}</td>
         <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.wordsFound ?? 0}</td>
@@ -2381,14 +2799,14 @@
       <div style="display:flex;flex-direction:column;gap:0.75rem;width:100%;max-width:420px;margin:0 auto">
         <div class="card" style="margin-bottom:0">
           <h2 style="text-align:center;font-size:1.4rem;color:var(--clr-primary-light);margin-bottom:0.25rem;text-transform:uppercase;letter-spacing:0.05em">GAME OVER</h2>
-          <p style="text-align:center;color:#94a3b8;margin-bottom:0.25rem">${winner?.name ?? "?"} wins!</p>
-          <p style="text-align:center;color:#475569;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:${state.timedOutPlayer ? '0.4rem' : '1.25rem'}">${({conquest:'Conquest Mode',exclusive:'Keeps Mode',off:'Search Mode'})[mode] ?? 'Search Mode'}</p>
+          <p style="text-align:center;color:var(--text-2);margin-bottom:0.25rem">${winner?.name ?? "?"} wins!</p>
+          <p style="text-align:center;color:var(--faint);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:${state.timedOutPlayer ? '0.4rem' : '1.25rem'}">${({conquest:'Conquest Mode',exclusive:'Keeps Mode',off:'Search Mode'})[mode] ?? 'Search Mode'}</p>
           ${state.timedOutPlayer ? `<p style="text-align:center;color:#eab308;font-size:0.75rem;margin-bottom:1.25rem">⏱ ${(frozenPlayers ?? state.players)[state.timedOutPlayer]?.name ?? 'A player'} ran out of time</p>` : ''}
           ${ranked.map(({ p, stat }, i) => `
             <div class="player-row" style="margin-bottom:0.5rem">
-              <span style="color:#475569;width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
+              <span style="color:var(--faint);width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
               <div class="pdot" style="background:${COLORS[p.color] ?? "#9ca3af"};flex-shrink:0"></div>
-              <span style="font-weight:bold;flex:1">${p.name}${p.isBot ? `<span style="font-size:0.72rem;color:#64748b;font-weight:normal;margin-left:0.3rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : ''}</span>
+              <span style="font-weight:bold;flex:1">${p.name}${p.isBot ? `<span style="font-size:0.72rem;color:var(--muted);font-weight:normal;margin-left:0.3rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : ''}</span>
               <span style="color:var(--clr-primary-light);font-weight:bold;white-space:nowrap">${stat}</span>
             </div>`).join("")}
         </div>
@@ -2404,11 +2822,11 @@
               <button class="toggle-btn" id="end-sort-alpha" onclick="setEndClaimedSort('alpha')" style="padding:0.2rem 0.5rem;font-size:0.72rem">A–Z</button>
             </div>
           </div>
-          <div id="end-claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem">${claimedHtml || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>'}</div>
+          <div id="end-claimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem">${claimedHtml || '<p style="font-size:0.8rem;color:var(--muted);margin:0">No words claimed.</p>'}</div>
           ${mode !== 'exclusive' ? `
-            <p id="end-unclaimed-count" style="font-size:0.75rem;color:#475569;margin-top:0.6rem;text-align:right">Calculating…</p>
-            <div id="end-unclaimed-section" style="display:none;margin-top:0.75rem;border-top:1px solid #1e293b;padding-top:0.75rem">
-              <h3 style="font-size:0.78rem;color:#64748b;margin:0 0 0.5rem 0;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Unclaimed Words</h3>
+            <p id="end-unclaimed-count" style="font-size:0.75rem;color:var(--faint);margin-top:0.6rem;text-align:right">Calculating…</p>
+            <div id="end-unclaimed-section" style="display:none;margin-top:0.75rem;border-top:1px solid var(--surface);padding-top:0.75rem">
+              <h3 style="font-size:0.78rem;color:var(--muted);margin:0 0 0.5rem 0;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Unclaimed Words</h3>
               <div id="end-unclaimed-list" style="display:flex;flex-wrap:wrap;gap:0.35rem"></div>
             </div>` : ''}
         </div>
@@ -2416,7 +2834,7 @@
           <h2 style="margin-bottom:0.75rem">Player Stats</h2>
           <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
             <thead>
-              <tr style="color:#64748b;font-size:0.7rem;text-align:left;border-bottom:1px solid #334155">
+              <tr style="color:var(--muted);font-size:0.7rem;text-align:left;border-bottom:1px solid var(--border)">
                 <th style="padding:0.25rem 0.5rem 0.4rem 0;font-weight:500">Player</th>
                 <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Pts</th>
                 <th style="padding:0.25rem 0 0.4rem 0.5rem;text-align:right;font-weight:500">Words</th>
@@ -2435,8 +2853,8 @@
               <button class="size-pill selected" id="end-lb-filter-comp" onclick="setEndLbCompetitive(true)">Competitive</button>
             </div>
           </div>
-          <p style="font-size:0.72rem;color:#64748b;margin-bottom:0.75rem">${mode === 'conquest' ? 'Conquest' : mode === 'exclusive' ? 'Keeps' : 'Search'} · ${state.settings?.boardSize ?? 5}×${state.settings?.boardSize ?? 5} · min-${state.settings?.minWordLen ?? 3}</p>
-          <div id="end-lb-rows"><p style="font-size:0.8rem;color:#64748b;margin:0">Loading…</p></div>
+          <p style="font-size:0.72rem;color:var(--muted);margin-bottom:0.75rem">${mode === 'conquest' ? 'Conquest' : mode === 'exclusive' ? 'Keeps' : 'Search'} · ${state.settings?.boardSize ?? 5}×${state.settings?.boardSize ?? 5} · min-${state.settings?.minWordLen ?? 3}</p>
+          <div id="end-lb-rows"><p style="font-size:0.8rem;color:var(--muted);margin:0">Loading…</p></div>
         </div>
         <div style="display:flex;gap:0.5rem">
           ${isSnapshotView ? `<button class="btn btn-secondary" onclick="location.href=location.pathname" style="flex:1">← Close Preview</button>` : `<button class="btn btn-secondary" onclick="localStorage.removeItem('lexterra_room');localStorage.removeItem('lexterra_connId');location.reload()" style="flex:1">Back to Lobby</button>`}
@@ -2467,7 +2885,7 @@
           const listEl = document.getElementById('end-unclaimed-list');
           if (listEl) {
             listEl.innerHTML = endUnclaimedWords.map(u =>
-              `<span data-unclaimed-word="${u.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid #475569;cursor:pointer">${u.word}</span>`
+              `<span data-unclaimed-word="${u.word}" style="padding:0.2rem 0.5rem;background:var(--surface-2);border-radius:6px;font-size:0.82rem;border-left:3px solid var(--faint);cursor:pointer">${u.word}</span>`
             ).join('');
           }
         }
@@ -2530,8 +2948,8 @@
       if (!listEl) return;
       listEl.innerHTML = sorted.map(c => {
         const color = pColor(c.connId) ?? '#9ca3af';
-        return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:#0f172a;border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer">${c.word} <span style="color:#64748b">+${c.score}</span></span>`;
-      }).join('') || '<p style="font-size:0.8rem;color:#64748b;margin:0">No words claimed.</p>';
+        return `<span data-claim-word="${c.word}" style="padding:0.2rem 0.5rem;background:var(--surface-2);border-radius:6px;font-size:0.82rem;border-left:3px solid ${color};cursor:pointer">${c.word} <span style="color:var(--muted)">+${c.score}</span></span>`;
+      }).join('') || '<p style="font-size:0.8rem;color:var(--muted);margin:0">No words claimed.</p>';
       endHighlightWord = null;
       document.getElementById('end-board-container').innerHTML = buildStaticBoard(null);
     };
@@ -2591,6 +3009,7 @@
       // Fewest bots last (most bots last within same human count)
       return (a.botCount ?? 0) - (b.botCount ?? 0);
     });
+    window.dispatchEvent(new CustomEvent("lx:publicgames", { detail: { count: entries.length } }));
     if (!entries.length) {
       list.innerHTML = '<p class="placeholder">No open games right now.</p>';
       return;
@@ -2603,13 +3022,13 @@
       if (!isPlaying && (g.humanCount ?? g.playerCount ?? 0) >= 4) return ''; // full, no bots to bump
       return `
         <div class="public-game-row">
-          <div>
-            <span style="font-weight:bold">${g.hostName}</span>
-            <span style="color:#64748b;font-size:0.78rem;margin-left:0.5rem">${meta}</span>
+          <div style="display:flex;flex-direction:column;min-width:0">
+            <span style="font-weight:600">${escHtml(g.hostName)}</span>
+            <span style="color:var(--muted);font-size:0.8125rem">${meta}</span>
           </div>
           ${isPlaying
-            ? `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#f97316;color:#f97316" onclick="watchGame('${g.roomId}')">Watch</button>`
-            : `<button class="btn btn-secondary" style="padding:0.3rem 0.75rem;font-size:0.82rem;border-color:#22c55e;color:#22c55e" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
+            ? `<button class="btn btn-secondary btn-sm" onclick="watchGame('${g.roomId}')">Watch</button>`
+            : `<button class="btn btn-live btn-sm" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
         </div>`;
     }).join('');
   }
@@ -2643,14 +3062,14 @@
     const isMe = entry.pid === myPid;
     const date = entry.date ? new Date(entry.date).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' }) : '';
     return `<div class="lb-row">
-      <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${rank}.</span>
+      <span style="width:1.5rem;color:var(--muted);font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${rank}.</span>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.snapId ? `<a href="?view=${entry.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted #475569" target="_blank">${entry.name}${isMe ? ' ★' : ''}</a>` : `${entry.name}${isMe ? ' ★' : ''}`}</div>
-        <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(entry)} · ${entry.boardSize ?? 5}×${entry.boardSize ?? 5} · min-${entry.minWordLen} · ${date}</div>
+        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.snapId ? `<a href="?view=${entry.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank">${entry.name}${isMe ? ' ★' : ''}</a>` : `${entry.name}${isMe ? ' ★' : ''}`}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:0.08rem">${fmtOpponents(entry)} · ${entry.boardSize ?? 5}×${entry.boardSize ?? 5} · min-${entry.minWordLen} · ${date}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
         <div style="color:var(--clr-primary-light);font-weight:bold">${entry.score}</div>
-        <div style="font-size:0.7rem;color:#64748b">${entry.wordsFound ?? 0} words</div>
+        <div style="font-size:0.7rem;color:var(--muted)">${entry.wordsFound ?? 0} words</div>
       </div>
     </div>`;
   }
@@ -2753,7 +3172,7 @@
       const data = await res.json();
       endLbAll = data.all ?? [];
       renderEndLeaderboard();
-    } catch { el.innerHTML = '<p style="font-size:0.8rem;color:#64748b;margin:0">Could not load scores.</p>'; }
+    } catch { el.innerHTML = '<p style="font-size:0.8rem;color:var(--muted);margin:0">Could not load scores.</p>'; }
   }
 
   function renderEndLeaderboard() {
@@ -2762,21 +3181,21 @@
     let data = endLbAll.filter(e => (e.boardSize ?? 5) === endLbBoardSize);
     if (endLbCompetitive) data = data.filter(isCompetitive);
     if (!data.length) {
-      el.innerHTML = `<p style="font-size:0.8rem;color:#64748b;margin:0">${endLbCompetitive ? 'No competitive scores yet — try switching to All.' : 'No scores yet — be the first!'}</p>`;
+      el.innerHTML = `<p style="font-size:0.8rem;color:var(--muted);margin:0">${endLbCompetitive ? 'No competitive scores yet — try switching to All.' : 'No scores yet — be the first!'}</p>`;
       return;
     }
     el.innerHTML = data.map((e, i) => {
       const isMe = e.pid === myPid;
       const date = new Date(e.date).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' });
       return `<div class="lb-row">
-        <span style="width:1.5rem;color:#64748b;font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
+        <span style="width:1.5rem;color:var(--muted);font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.snapId ? `<a href="?view=${e.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted #475569" target="_blank">${e.name}${isMe ? ' ★' : ''}</a>` : `${e.name}${isMe ? ' ★' : ''}`}</div>
-          <div style="font-size:0.7rem;color:#64748b;margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
+          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.snapId ? `<a href="?view=${e.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank">${e.name}${isMe ? ' ★' : ''}</a>` : `${e.name}${isMe ? ' ★' : ''}`}</div>
+          <div style="font-size:0.7rem;color:var(--muted);margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
           <div style="color:var(--clr-primary-light);font-weight:bold">${e.score}</div>
-          <div style="font-size:0.7rem;color:#64748b">${e.wordsFound ?? 0} words</div>
+          <div style="font-size:0.7rem;color:var(--muted)">${e.wordsFound ?? 0} words</div>
         </div>
       </div>`;
     }).join('');
@@ -2846,6 +3265,7 @@
     const stWrap = document.getElementById('hstat-streak-wrap');
     if (stWrap) { const cur = streakInfo?.current ?? 0; stWrap.style.display = features.streaks && cur > 0 ? '' : 'none'; document.getElementById('hstat-streak').textContent = `🔥${cur}`; }
     el.style.display = (playerXp > 0 || playerCoins > 0 || (streakInfo?.current ?? 0) > 0) ? 'flex' : 'none';
+    window.dispatchEvent(new CustomEvent("lx:stats", { detail: { xp: playerXp, coins: playerCoins, level: levelFor(playerXp), streak: streakInfo?.current ?? 0 } }));
   }
 
   async function loadPlayerStats() {
@@ -3170,7 +3590,7 @@
   async function loadAndRenderSnapshot(snapId) {
     isSnapshotView = true;
     show("game-screen");
-    document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem;color:#64748b">Loading game preview…</div>';
+    document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem;color:var(--muted)">Loading game preview…</div>';
     try {
       const res = await fetch(`https://${SERVER_HOST}/parties/stats/main?snapId=${snapId}`);
       if (!res.ok) throw new Error("not found");
@@ -3188,7 +3608,7 @@
       gameInited = true;
       renderEndScreen();
     } catch {
-      document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem"><p style="color:#64748b;margin-bottom:1rem">Game preview not available.</p><button class="btn btn-secondary" onclick="location.href=location.pathname">← Back</button></div>';
+      document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem"><p style="color:var(--muted);margin-bottom:1rem">Game preview not available.</p><button class="btn btn-secondary" onclick="location.href=location.pathname">← Back</button></div>';
     }
   }
 
@@ -3235,7 +3655,7 @@
       const leaderEl = document.getElementById("daily-card-leader");
       if (d.leader) {
         leaderEl.style.display = "";
-        leaderEl.innerHTML = `👑 Today's leader: <strong style="color:#e2e8f0">${escHtml(d.leader.name)}</strong> · ${d.leader.score} pts${d.mine ? " — see their board in your results" : ""}`;
+        leaderEl.innerHTML = `👑 Today's leader: <strong style="color:var(--text)">${escHtml(d.leader.name)}</strong> · ${d.leader.score} pts${d.mine ? " — see their board in your results" : ""}`;
       } else leaderEl.style.display = "none";
       const st = features.streaks ? prof.streak : null;
       streakInfo = st;
@@ -3320,8 +3740,8 @@
     if (!weeklyData) { rows.innerHTML = '<p class="placeholder">Loading…</p>'; return; }
     const days = Math.max(0, Math.ceil((weeklyData.resetsAt - Date.now()) / 86400000));
     const cap = lbExpanded ? 50 : 10;
-    const list = (weeklyData.top ?? []).slice(0, cap).map((e, i) => `<div class="wk-row${e.pid === myPid ? ' me' : ''}"><span style="width:1.6rem;color:#475569">${i + 1}.</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.name)}${e.pid === myPid ? ' ★' : ''}</span><span style="color:#64748b;font-size:0.72rem">${e.games} game${e.games === 1 ? '' : 's'}</span><span style="font-weight:900;min-width:3.5rem;text-align:right">${e.pts}</span></div>`).join('');
-    rows.innerHTML = `<p style="font-size:0.72rem;color:#64748b;margin:0 0 0.4rem">Points from every game and daily puzzle this week · resets in ${days} day${days === 1 ? '' : 's'}</p>`
+    const list = (weeklyData.top ?? []).slice(0, cap).map((e, i) => `<div class="wk-row${e.pid === myPid ? ' me' : ''}"><span style="width:1.6rem;color:var(--faint)">${i + 1}.</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.name)}${e.pid === myPid ? ' ★' : ''}</span><span style="color:var(--muted);font-size:0.72rem">${e.games} game${e.games === 1 ? '' : 's'}</span><span style="font-weight:900;min-width:3.5rem;text-align:right">${e.pts}</span></div>`).join('');
+    rows.innerHTML = `<p style="font-size:0.72rem;color:var(--muted);margin:0 0 0.4rem">Points from every game and daily puzzle this week · resets in ${days} day${days === 1 ? '' : 's'}</p>`
       + (list || '<p class="placeholder" style="font-size:0.78rem">No points yet this week — be the first!</p>')
       + ((weeklyData.top?.length ?? 0) > 10 ? `<div style="text-align:center;margin-top:0.5rem"><button class="btn btn-secondary" style="font-size:0.75rem;padding:0.3rem 0.75rem;width:100%" onclick="lbToggleExpand()">${lbExpanded ? 'Show less' : 'Show more'}</button></div>` : '');
   }
@@ -3333,6 +3753,7 @@
     if (!features.async) { card.style.display = "none"; return; }
     try {
       const { games = [] } = await (await statsPost({ type: "mygames", uuid: getPlayerUUID() })).json();
+      window.dispatchEvent(new CustomEvent("lx:mygames", { detail: games }));
       card.style.display = "";
       const list = document.getElementById("mygames-list");
       list.innerHTML = games.length ? games.map(g => {
@@ -3525,10 +3946,10 @@
     const status = document.getElementById("auth-status");
     const email  = input.value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      input.style.borderColor = "#ef4444";
+      input.style.borderColor = "var(--danger)";
       return;
     }
-    input.style.borderColor = "#334155";
+    input.style.borderColor = "var(--border)";
     btn.disabled = true;
     btn.textContent = "Sending…";
     status.textContent = "";
@@ -3540,7 +3961,7 @@
         document.getElementById("auth-input-view").style.display = "none";
         document.getElementById("auth-sent-view").style.display  = "";
         const card = document.getElementById("auth-card");
-        if (card) { card.style.background = "#1c1200"; card.style.borderColor = "#d97706"; }
+        if (card) { card.style.background = "var(--warn-bg)"; card.style.borderColor = "#d97706"; }
       } else {
         status.textContent = data.error || "Something went wrong.";
         btn.disabled = false;
@@ -3599,68 +4020,44 @@
   <div class="help-card">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
       <h2 style="font-size:1rem;margin:0">How to Play</h2>
-      <button onclick="hideHelp()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer;padding:0;line-height:1">✕</button>
+      <button onclick="hideHelp()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:0;line-height:1">✕</button>
     </div>
     <div id="help-content" style="display:flex;flex-direction:column;gap:1rem"></div>
   </div>
 </div>
 
 <div id="reconnect-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:0.75rem;padding:2rem;text-align:center">
-  <p style="font-size:1.1rem;font-weight:bold;color:#e2e8f0">Connection lost</p>
-  <p style="font-size:0.85rem;color:#64748b">Trying to reconnect…</p>
+  <p style="font-size:1.1rem;font-weight:bold;color:var(--text)">Connection lost</p>
+  <p style="font-size:0.85rem;color:var(--muted)">Trying to reconnect…</p>
   <button onclick="location.reload()" class="btn btn-primary" style="margin-top:0.5rem">Reconnect Now</button>
 </div>
 
-<div id="replace-bot-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid var(--clr-primary);border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
+<div id="replace-bot-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:var(--surface);border:1px solid var(--clr-primary);border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-    <p id="rb-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
+    <p id="rb-name" style="font-weight:bold;color:var(--text);font-size:0.9rem"></p>
     <div style="display:flex;align-items:center;gap:0.6rem">
-      <span id="rb-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums">20s</span>
-      <button onclick="dismissReplaceBotPanel()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
+      <span id="rb-countdown" style="font-size:0.75rem;color:var(--muted);font-variant-numeric:tabular-nums">20s</span>
+      <button onclick="dismissReplaceBotPanel()" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
     </div>
   </div>
-  <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.5rem">Replace with a bot? They'll keep the score.</p>
+  <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem">Replace with a bot? They'll keep the score.</p>
   <div style="display:flex;gap:0.5rem">
     <button class="btn btn-secondary" onclick="replaceWithBot('easy')" style="flex:1">Easy Bot</button>
     <button class="btn btn-secondary" onclick="replaceWithBot('hard')" style="flex:1">Hard Bot</button>
   </div>
 </div>
 
-<div id="join-request-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:#1e293b;border:1px solid var(--clr-primary);border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
+<div id="join-request-panel" style="display:none;position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);width:calc(100% - 2rem);max-width:400px;background:var(--surface);border:1px solid var(--clr-primary);border-radius:12px;padding:1rem;z-index:600;box-shadow:0 4px 24px rgba(0,0,0,0.5)">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-    <p id="jr-name" style="font-weight:bold;color:#e2e8f0;font-size:0.9rem"></p>
+    <p id="jr-name" style="font-weight:bold;color:var(--text);font-size:0.9rem"></p>
     <div style="display:flex;align-items:center;gap:0.6rem">
-      <span id="jr-countdown" style="font-size:0.75rem;color:#64748b;font-variant-numeric:tabular-nums"></span>
-      <button onclick="dismissJoinRequest()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
+      <span id="jr-countdown" style="font-size:0.75rem;color:var(--muted);font-variant-numeric:tabular-nums"></span>
+      <button onclick="dismissJoinRequest()" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:1.1rem;padding:0;line-height:1" title="Dismiss">✕</button>
     </div>
   </div>
   <div id="jr-body"></div>
 </div>
 
-<div id="auth-bar" style="display:none;width:100%;max-width:420px;margin:0 auto;padding:12px 0">
-  <div id="auth-card" style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;position:relative">
-    <button id="auth-dismiss-btn" onclick="dismissAuthBar()" title="Dismiss" style="position:absolute;top:8px;right:10px;background:none;border:none;color:#475569;font-size:1rem;cursor:pointer;line-height:1;padding:0">✕</button>
-    <div id="auth-input-view">
-      <p style="font-size:0.75rem;color:#94a3b8;margin:0 0 8px;padding-right:1.5rem">Enter your email to save or restore your coins, high scores, and game history.</p>
-      <div style="display:flex;gap:8px">
-        <input type="email" id="auth-email-input" placeholder="your@email.com" onkeydown="if(event.key==='Enter')authSubmitEmail()" style="flex:1;min-width:0;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:6px 10px;color:#e2e8f0;font-size:0.8rem;outline:none">
-        <button id="auth-submit-btn" onclick="authSubmitEmail()" style="background:var(--clr-primary);color:white;border:none;border-radius:6px;padding:6px 12px;font-size:0.8rem;cursor:pointer;white-space:nowrap;font-weight:600">Save Progress</button>
-      </div>
-      <p id="auth-status" style="font-size:0.72rem;color:#ef4444;margin:6px 0 0;min-height:1em"></p>
-    </div>
-    <div id="auth-sent-view" style="display:none;text-align:center">
-      <p style="font-size:0.95rem;font-weight:700;color:#fbbf24;margin:0 0 6px;letter-spacing:0.03em">Waiting…</p>
-      <p style="font-size:0.75rem;color:#fcd87a;margin:0">Check your inbox and click the link to save your coins, high scores, and game history to your account.</p>
-    </div>
-    <div id="auth-loggedin-view" style="display:none;align-items:center;justify-content:space-between;gap:8px">
-      <p style="font-size:0.75rem;color:#94a3b8;margin:0">Logged in as <strong id="auth-loggedin-email" style="color:#e2e8f0;font-weight:600"></strong></p>
-      <button onclick="authSignOut()" style="background:none;border:1px solid #334155;border-radius:6px;padding:4px 10px;color:#64748b;font-size:0.72rem;cursor:pointer;white-space:nowrap">Sign out</button>
-    </div>
-  </div>
-</div>
-
-<div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.7.2 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
-</div>
+<script type="module" src="js/ui.js"></script>
 </body>
 </html>

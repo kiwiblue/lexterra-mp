@@ -5,7 +5,7 @@
 const MIN_LEN = 3;
 const BLITZ_FINAL_SECS = 30; // claiming window after the last Blitz letter lands
 const THEMES = [
-  { id: "classic", name: "Classic", swatch: ["#0c1628", "#e2e8f0", "#22c55e"] },
+  { id: "classic", name: "Classic", swatch: ["#0c1628", "#e2e8f0", "var(--success)"] },
   { id: "neon",    name: "Neon",    swatch: ["#0b0820", "#67e8f9", "#d946ef"] },
   { id: "gold",    name: "Gold",    swatch: ["#1c1405", "#fde68a", "#ca8a04"] },
   { id: "ocean",   name: "Ocean",   swatch: ["#082f49", "#e0f2fe", "#06b6d4"] },
@@ -123,6 +123,7 @@ function applyTheme() {
   if (!el) return;
   for (const t of THEMES) el.classList.remove(`th-${t.id}`);
   el.classList.add(`th-${currentTheme()}`);
+  el.classList.toggle("k-endless", kind === "endless");
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
@@ -131,8 +132,9 @@ function injectStyles() {
   const st = document.createElement("style");
   st.id = "daily-styles";
   st.textContent = `
-    #daily-screen { position:fixed; inset:0; background:#0f172a; z-index:900; overflow-y:auto; display:none;
-      --d-bg:#0c1628; --d-border:#1e3a5f; --d-text:#e2e8f0; --d-starter:#fcd34d; --d-used-bg:rgba(34,197,94,0.18); --d-used-border:#166534; --d-glow:0 0 0 transparent; }
+    #daily-screen { position:fixed; inset:0; background:var(--bg); z-index:900; overflow-y:auto; display:none;
+      --acc:var(--daily); --acc-fill:var(--daily-fill); --acc-on:var(--daily-on); --acc-rgb:var(--daily-rgb);
+      --d-bg:var(--cell-bg); --d-border:var(--cell-border); --d-text:var(--text); --d-starter:var(--daily-fill); --d-used-bg:rgba(34,197,94,0.18); --d-used-border:#166534; --d-glow:0 0 0 transparent; }
     #daily-screen.th-neon  { --d-bg:#0b0820; --d-border:#3b2a7a; --d-text:#67e8f9; --d-starter:#f0abfc; --d-used-bg:rgba(217,70,239,0.22); --d-used-border:#d946ef; --d-glow:0 0 8px rgba(103,232,249,0.7); }
     #daily-screen.th-gold  { --d-bg:#1c1405; --d-border:#57400c; --d-text:#fde68a; --d-starter:#fb923c; --d-used-bg:rgba(234,179,8,0.22); --d-used-border:#ca8a04; }
     #daily-screen.th-ocean { --d-bg:#082f49; --d-border:#0e7490; --d-text:#e0f2fe; --d-starter:#a5f3fc; --d-used-bg:rgba(6,182,212,0.25); --d-used-border:#06b6d4; }
@@ -140,10 +142,13 @@ function injectStyles() {
     #daily-screen .d-wrap { max-width:420px; margin:0 auto; padding:1rem; display:flex; flex-direction:column; gap:0.9rem; }
     #daily-screen .card { padding:1rem; }
     #daily-screen .d-head { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; }
-    #daily-screen .d-title { font-size:1.15rem; font-weight:900; letter-spacing:0.08em; color:var(--clr-primary-light); }
-    #daily-screen .d-sub { font-size:0.72rem; color:#64748b; text-transform:uppercase; letter-spacing:0.1em; }
+    #daily-screen.k-endless { --acc:var(--endless); --acc-fill:var(--endless-fill); --acc-on:var(--endless-on); --acc-rgb:var(--endless-rgb); }
+    #daily-screen .d-title { font-family:var(--font-display); font-size:1.25rem; font-weight:700; letter-spacing:0.04em; color:var(--acc); }
+    #daily-screen .btn-primary { background:var(--acc-fill); color:var(--acc-on); }
+    #daily-screen .d-big { color:var(--acc) !important; font-family:var(--font-display); }
+    #daily-screen .d-sub { font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; }
     #daily-screen .d-icons { display:flex; align-items:center; gap:0.15rem; flex-shrink:0; }
-    #daily-screen .d-close { background:none; border:none; color:#64748b; font-size:1.4rem; cursor:pointer; padding:0.2rem 0.4rem; line-height:1; }
+    #daily-screen .d-close { background:none; border:none; color:var(--muted); font-size:1.4rem; cursor:pointer; padding:0.2rem 0.4rem; line-height:1; }
     #daily-screen .d-grid { display:grid; margin:0 auto; }
     #daily-screen .d-cell { aspect-ratio:1; border:2px solid var(--d-border); border-radius:6px; display:flex; align-items:center; justify-content:center;
       font-weight:900; font-size:var(--dfs); color:var(--d-text); background:var(--d-bg); cursor:pointer; user-select:none; transition:background 0.12s, border-color 0.12s;
@@ -156,29 +161,29 @@ function injectStyles() {
     @keyframes d-pop { from { transform:scale(0.6); opacity:0.3; } to { transform:scale(1); opacity:1; } }
     @media (hover:hover) { #daily-screen .d-cell.empty:hover { border-color:var(--clr-primary); } }
     #daily-screen .d-cell.sel { border-color:var(--clr-primary) !important; background:rgba(var(--clr-primary-rgb),0.25); }
-    #daily-screen .d-cell.path-ok { border-color:#22c55e !important; background:rgba(34,197,94,0.25); }
-    #daily-screen .d-cell.path-bad { border-color:#ef4444 !important; background:rgba(239,68,68,0.18); }
+    #daily-screen .d-cell.path-ok { border-color:var(--success) !important; background:rgba(34,197,94,0.25); }
+    #daily-screen .d-cell.path-bad { border-color:var(--danger) !important; background:rgba(239,68,68,0.18); }
     #daily-screen .d-queue { display:flex; align-items:center; gap:0.5rem; justify-content:center; }
-    #daily-screen .d-tile { width:48px; height:48px; border-radius:8px; background:var(--clr-primary); color:white; font-weight:900; font-size:1.6rem;
-      display:flex; align-items:center; justify-content:center; text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000; }
-    #daily-screen .d-tile.small { width:30px; height:30px; font-size:0.95rem; background:#1e293b; border:1px solid #334155; opacity:0.8; }
-    #daily-screen .d-timer { height:6px; border-radius:3px; background:#0f172a; overflow:hidden; }
-    #daily-screen .d-timer > div { height:100%; background:#22c55e; transition:width 0.1s linear, background 0.2s; }
-    #daily-screen .d-status { min-height:1.2em; text-align:center; font-size:0.82rem; color:#94a3b8; }
+    #daily-screen .d-tile { width:48px; height:48px; border-radius:10px; background:var(--acc-fill); color:var(--acc-on); font-family:var(--font-display); font-weight:800; font-size:1.6rem; box-shadow:0 2px 0 rgba(0,0,0,.18);
+      display:flex; align-items:center; justify-content:center; }
+    #daily-screen .d-tile.small { width:30px; height:30px; font-size:0.95rem; background:var(--surface); border:1px solid var(--border); opacity:0.8; }
+    #daily-screen .d-timer { height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; }
+    #daily-screen .d-timer > div { height:100%; background:var(--success); transition:width 0.1s linear, background 0.2s; }
+    #daily-screen .d-status { min-height:1.2em; text-align:center; font-size:0.82rem; color:var(--text-2); }
     #daily-screen .d-row { display:flex; gap:0.5rem; }
     #daily-screen .d-row .btn { flex:1; padding:0.6rem 0.5rem; font-size:0.9rem; }
     #daily-screen .d-words { display:flex; flex-wrap:wrap; gap:0.35rem; }
-    #daily-screen .d-word { padding:0.2rem 0.5rem; background:#0f172a; border-left:3px solid #22c55e; border-radius:6px; font-size:0.82rem; color:#e2e8f0; }
+    #daily-screen .d-word { padding:0.2rem 0.5rem; background:var(--surface-2); border-left:3px solid var(--success); border-radius:6px; font-size:0.82rem; color:var(--text); }
     #daily-screen .d-big { font-size:2.4rem; font-weight:900; color:var(--clr-primary-light); text-align:center; line-height:1; }
     #daily-screen .d-share { white-space:pre; font-size:1.25rem; line-height:1.15; text-align:center; letter-spacing:0.05em; }
-    #daily-screen .d-lb-row { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.25rem; border-bottom:1px solid #1e293b; color:#cbd5e1; border-radius:4px; }
+    #daily-screen .d-lb-row { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.25rem; border-bottom:1px solid var(--surface); color:var(--text-2); border-radius:4px; }
     #daily-screen .d-lb-row.tap { cursor:pointer; }
-    @media (hover:hover) { #daily-screen .d-lb-row.tap:hover { background:#0f172a; } }
+    @media (hover:hover) { #daily-screen .d-lb-row.tap:hover { background:var(--surface-2); } }
     #daily-screen .d-lb-row.me { color:var(--clr-primary-light); font-weight:bold; }
-    #daily-screen .d-lb-row .d-eye { color:#64748b; margin-left:0.2rem; }
-    #daily-screen .d-note { font-size:0.75rem; color:#64748b; text-align:center; }
+    #daily-screen .d-lb-row .d-eye { color:var(--muted); margin-left:0.2rem; }
+    #daily-screen .d-note { font-size:0.75rem; color:var(--muted); text-align:center; }
     #daily-screen .d-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:999px; font-size:0.68rem; font-weight:bold; letter-spacing:0.06em; text-transform:uppercase; }
-    #daily-screen .d-theme { display:flex; align-items:center; gap:0.75rem; padding:0.6rem; border:2px solid #334155; border-radius:10px; background:#0f172a; cursor:pointer; color:#e2e8f0; width:100%; text-align:left; font:inherit; }
+    #daily-screen .d-theme { display:flex; align-items:center; gap:0.75rem; padding:0.6rem; border:2px solid var(--border); border-radius:10px; background:var(--surface-2); cursor:pointer; color:var(--text); width:100%; text-align:left; font:inherit; }
     #daily-screen .d-theme.on { border-color:var(--clr-primary); }
     #daily-screen .d-swatch { display:flex; gap:3px; }
     #daily-screen .d-swatch span { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:0.8rem; }
@@ -232,10 +237,10 @@ function render() {
     ${headerHTML()}
     <div class="card" style="gap:0.75rem">
       <div class="d-queue">
-        ${queue.length ? `<span style="font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em">Next</span>
+        ${queue.length ? `<span style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em">Next</span>
           <div class="d-tile">${esc(queue[0])}</div>${queue.slice(1).map(l => `<div class="d-tile small">${esc(l)}</div>`).join("")}
-          <span style="font-size:0.72rem;color:#64748b">${remaining} left</span>`
-        : `<span style="font-size:0.85rem;color:#22c55e;font-weight:bold">All letters placed — claim any last words, then finish!</span>`}
+          <span style="font-size:0.72rem;color:var(--muted)">${remaining} left</span>`
+        : `<span style="font-size:0.85rem;color:var(--success);font-weight:bold">All letters placed — claim any last words, then finish!</span>`}
       </div>
       ${isBlitz() ? `<div class="d-timer"><div id="d-timer-bar" style="width:100%"></div></div>` : ""}
       ${gridHTML(grid, usedSet, cellSize(), { freshKey: lastPlaced })}
@@ -247,14 +252,14 @@ function render() {
     </div>
     <div class="card" style="gap:0.5rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Your words</h2><span style="font-weight:900;color:var(--clr-primary-light)">${score()} pts</span></div>
-      <div class="d-words">${claimed.length ? claimed.map(c => `<span class="d-word">${esc(c.word)} <span style="color:#64748b">+${c.word.length}</span></span>`).join("") : `<span style="font-size:0.8rem;color:#64748b">No words yet — words go across, down or diagonally, and score one point per letter.${kind === "replay" ? " This replay isn't ranked." : ""}</span>`}</div>
+      <div class="d-words">${claimed.length ? claimed.map(c => `<span class="d-word">${esc(c.word)} <span style="color:var(--muted)">+${c.word.length}</span></span>`).join("") : `<span style="font-size:0.8rem;color:var(--muted)">No words yet — words go across, down or diagonally, and score one point per letter.${kind === "replay" ? " This replay isn't ranked." : ""}</span>`}</div>
     </div>`;
   lastPlaced = null;
   wrap.querySelectorAll(".d-grid .d-cell").forEach(el => el.addEventListener("click", () => onCell(+el.dataset.r, +el.dataset.c)));
   if (isBlitz()) tickBlitz();
 }
 
-function setStatus(text, color = "#94a3b8") { const el = $("daily-status"); if (el) { el.textContent = text; el.style.color = color; } }
+function setStatus(text, color = "var(--text-2)") { const el = $("daily-status"); if (el) { el.textContent = text; el.style.color = color; } }
 
 function placeAt(r, c) {
   applyMove({ place: { r, c } });
@@ -268,7 +273,7 @@ function onCell(r, c) {
   if (result || submitting || view !== "play") return;
   if (claimMode) {
     if (!claimStart) {
-      if (!grid[r][c]) return setStatus("Start on a square with a letter", "#ef4444");
+      if (!grid[r][c]) return setStatus("Start on a square with a letter", "var(--danger)");
       claimStart = { r, c };
       document.querySelector(`.d-cell[data-r="${r}"][data-c="${c}"]`)?.classList.add("sel");
       return setStatus("Now tap the last letter of the word");
@@ -279,15 +284,15 @@ function onCell(r, c) {
       (path ?? []).forEach(p => document.querySelector(`.d-cell[data-r="${p.r}"][data-c="${p.c}"]`)?.classList.add("path-bad"));
       claimStart = null;
       setTimeout(() => { if (view === "play" && !result) render(); }, 700);
-      return setStatus(path ? check.why : "Words must be in a straight line", "#ef4444");
+      return setStatus(path ? check.why : "Words must be in a straight line", "var(--danger)");
     }
     applyMove({ claim: { word: check.word, path } });
     claimMode = false; claimStart = null; save();
     render();
-    return setStatus(`${check.word} +${check.word.length}!`, "#22c55e");
+    return setStatus(`${check.word} +${check.word.length}!`, "var(--success)");
   }
-  if (grid[r][c]) return setStatus("That square already has a letter — tap “Claim a word” to claim", "#eab308");
-  if (next >= puzzle.letters.length) return setStatus("No letters left — claim words or finish", "#eab308");
+  if (grid[r][c]) return setStatus("That square already has a letter — tap “Claim a word” to claim", "var(--warn-ink)");
+  if (next >= puzzle.letters.length) return setStatus("No letters left — claim words or finish", "var(--warn-ink)");
   placeAt(r, c);
 }
 
@@ -306,7 +311,7 @@ function tickBlitz() {
   const bar = $("d-timer-bar");
   if (tileDeadline) {
     const left = Math.max(0, tileDeadline - now);
-    if (bar) { const f = left / (blitzSecs * 1000); bar.style.width = `${f * 100}%`; bar.style.background = f > 0.5 ? "#22c55e" : f > 0.25 ? "#eab308" : "#ef4444"; }
+    if (bar) { const f = left / (blitzSecs * 1000); bar.style.width = `${f * 100}%`; bar.style.background = f > 0.5 ? "var(--success)" : f > 0.25 ? "var(--warn-ink)" : "var(--danger)"; }
     if (left === 0) {
       const empty = [];
       grid.forEach((row, r) => row.forEach((cell, c) => { if (!cell) empty.push({ r, c }); }));
@@ -314,13 +319,13 @@ function tickBlitz() {
       const spot = empty[Math.floor(Math.random() * empty.length)];
       claimMode = false; claimStart = null;
       placeAt(spot.r, spot.c);
-      setStatus("Too slow — the letter dropped on its own!", "#ef4444");
+      setStatus("Too slow — the letter dropped on its own!", "var(--danger)");
     }
   } else if (finalDeadline) {
     const left = Math.max(0, finalDeadline - now);
-    if (bar) { bar.style.width = `${(left / (BLITZ_FINAL_SECS * 1000)) * 100}%`; bar.style.background = "#a78bfa"; }
+    if (bar) { bar.style.width = `${(left / (BLITZ_FINAL_SECS * 1000)) * 100}%`; bar.style.background = "var(--brand-ink)"; }
     const st = $("daily-status");
-    if (st && !claimMode) { st.textContent = `Last chance to claim — ${Math.ceil(left / 1000)}s`; st.style.color = "#a78bfa"; }
+    if (st && !claimMode) { st.textContent = `Last chance to claim — ${Math.ceil(left / 1000)}s`; st.style.color = "var(--brand-ink)"; }
     if (left === 0) { finalDeadline = 0; finish(true); }
   }
 }
@@ -398,7 +403,7 @@ window.dailyShare = async () => {
 function wordsCard(words, title = "Your words") {
   return `<div class="card" style="gap:0.4rem">
       <h2 style="margin:0 0 0.25rem">${title}</h2>
-      <div class="d-words">${words.map(w => `<span class="d-word">${esc(w)} <span style="color:#64748b">+${w.length}</span></span>`).join("") || `<span style="font-size:0.8rem;color:#64748b">No words this time.</span>`}</div>
+      <div class="d-words">${words.map(w => `<span class="d-word">${esc(w)} <span style="color:var(--muted)">+${w.length}</span></span>`).join("") || `<span style="font-size:0.8rem;color:var(--muted)">No words this time.</span>`}</div>
     </div>`;
 }
 
@@ -411,9 +416,9 @@ function renderResult() {
     ${headerHTML()}
     <div class="card" style="gap:0.75rem;align-items:center">
       <div class="d-big">${result.score}</div>
-      <div style="font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.1em">points · ${plural(result.words.length, "word")}${result.rank ? ` · #${result.rank} of ${result.players}` : ""}</div>
+      <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">points · ${plural(result.words.length, "word")}${result.rank ? ` · #${result.rank} of ${result.players}` : ""}</div>
       ${streak ? `<div style="font-size:0.95rem;color:#f97316;font-weight:bold">🔥 ${streak}-day streak</div>` : ""}
-      ${result.coinsEarned ? `<div style="font-size:0.8rem;color:#eab308">+${result.coinsEarned} coins</div>` : ""}
+      ${result.coinsEarned ? `<div style="font-size:0.8rem;color:var(--warn-ink)">+${result.coinsEarned} coins</div>` : ""}
       <div class="d-share">${esc(result.share ?? "")}</div>
       <button class="btn btn-primary" style="width:100%" onclick="dailyShare()">Share result</button>
       <button class="btn btn-secondary" style="width:100%" onclick="dailyReplay()">Play it again — just for fun</button>
@@ -478,8 +483,8 @@ function renderReplayResult() {
     ${headerHTML()}
     <div class="card" style="gap:0.75rem;align-items:center">
       <div class="d-big">${result.score}</div>
-      <div style="font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.1em">replay points · ${plural(result.words.length, "word")}</div>
-      ${ranked !== null ? `<div style="font-size:0.9rem;color:${diff > 0 ? "#22c55e" : "#94a3b8"};font-weight:bold;text-align:center">${diff > 0 ? `${diff} more than your ranked score of ${ranked}!` : diff === 0 ? `Same as your ranked score of ${ranked}` : `Your ranked score was ${ranked}`}</div>` : ""}
+      <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em">replay points · ${plural(result.words.length, "word")}</div>
+      ${ranked !== null ? `<div style="font-size:0.9rem;color:${diff > 0 ? "var(--success)" : "var(--text-2)"};font-weight:bold;text-align:center">${diff > 0 ? `${diff} more than your ranked score of ${ranked}!` : diff === 0 ? `Same as your ranked score of ${ranked}` : `Your ranked score was ${ranked}`}</div>` : ""}
       <div class="d-share">${esc(result.share)}</div>
       <div class="d-row" style="width:100%">
         <button class="btn btn-primary" onclick="dailyReplay()">Try again</button>
@@ -502,8 +507,8 @@ function renderEndlessResult() {
     <div class="card" style="gap:0.75rem;align-items:center">
       ${r.isPB ? `<span class="d-badge" style="background:rgba(234,179,8,0.15);color:#facc15;border:1px solid #a16207">★ New personal best</span>` : ""}
       <div class="d-big">${r.score}</div>
-      <div style="font-size:0.75rem;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;text-align:center">points · ${plural(r.words.length, "word")} · best ${r.best ?? r.score}</div>
-      ${r.ranked && (r.rankWeek || r.rankAll) ? `<div style="font-size:0.85rem;color:#cbd5e1">${r.rankWeek ? `#${r.rankWeek} this week` : ""}${r.rankWeek && r.rankAll ? " · " : ""}${r.rankAll ? `#${r.rankAll} all time` : ""}</div>` : ""}
+      <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;text-align:center">points · ${plural(r.words.length, "word")} · best ${r.best ?? r.score}</div>
+      ${r.ranked && (r.rankWeek || r.rankAll) ? `<div style="font-size:0.85rem;color:var(--text-2)">${r.rankWeek ? `#${r.rankWeek} this week` : ""}${r.rankWeek && r.rankAll ? " · " : ""}${r.rankAll ? `#${r.rankAll} all time` : ""}</div>` : ""}
       ${note ? `<div class="d-note">${note}</div>` : ""}
       <div class="d-share">${esc(r.share ?? "")}</div>
       <div class="d-row" style="width:100%">
@@ -612,7 +617,7 @@ function renderBoardViewer() {
         <span style="font-weight:900;color:var(--clr-primary-light);white-space:nowrap">${pts} / ${d.score} pts</span>
       </div>
       ${gridHTML(g, used, cellSize(), { freshKey: lastCell })}
-      <div class="d-status" style="color:${lastWord ? "#22c55e" : "#94a3b8"}">${lastWord ? `${esc(lastWord)} +${lastWord.length}` : viewer.step >= total ? "Final board" : `Move ${viewer.step} of ${total}`}</div>
+      <div class="d-status" style="color:${lastWord ? "var(--success)" : "var(--text-2)"}">${lastWord ? `${esc(lastWord)} +${lastWord.length}` : viewer.step >= total ? "Final board" : `Move ${viewer.step} of ${total}`}</div>
       <div class="d-timer"><div style="width:${total ? (viewer.step / total) * 100 : 100}%;background:var(--clr-primary)"></div></div>
       <div class="d-row">
         <button class="btn btn-primary" onclick="dailyViewerPlay()">${viewer.timer ? "Pause" : viewer.step >= total ? "Replay ▶" : "Play ▶"}</button>
@@ -634,14 +639,14 @@ function renderThemes() {
   wrap.innerHTML = `
     ${headerHTML()}
     <div class="card" style="gap:0.6rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Tile themes</h2><span style="font-size:0.8rem;color:#eab308">${ctx.getCoins?.() ?? 0} coins</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Tile themes</h2><span style="font-size:0.8rem;color:var(--warn-ink)">${ctx.getCoins?.() ?? 0} coins</span></div>
       <p class="d-note" style="text-align:left;margin:0">Change how your puzzle boards look. Themes are just for looks, and they're yours to keep.</p>
       ${THEMES.map(t => {
         const has = owned.has(t.id);
         return `<button class="d-theme${t.id === cur ? " on" : ""}" onclick="dailyPickTheme('${t.id}')">
           <span class="d-swatch"><span style="background:${t.swatch[0]};color:${t.swatch[1]};border:1px solid ${t.swatch[2]}">A</span><span style="background:${t.swatch[2]}55;border:1px solid ${t.swatch[2]};color:${t.swatch[1]}">B</span></span>
           <span style="flex:1;font-weight:bold">${t.name}</span>
-          <span style="font-size:0.78rem;color:${t.id === cur ? "var(--clr-primary-light)" : has ? "#94a3b8" : "#eab308"}">${t.id === cur ? "In use" : has ? "Use" : `${cost} coins`}</span>
+          <span style="font-size:0.78rem;color:${t.id === cur ? "var(--clr-primary-light)" : has ? "var(--text-2)" : "var(--warn-ink)"}">${t.id === cur ? "In use" : has ? "Use" : `${cost} coins`}</span>
         </button>`;
       }).join("")}
       <button class="btn btn-secondary" style="width:100%" onclick="dailyThemesBack()">Done</button>

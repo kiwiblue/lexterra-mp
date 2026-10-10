@@ -29,20 +29,20 @@ function injectStyles() {
   const st = document.createElement("style");
   st.id = "tut-styles";
   st.textContent = `
-    #tutorial-screen { position:fixed; inset:0; background:#0f172a; z-index:950; overflow-y:auto; display:none; }
+    #tutorial-screen { position:fixed; inset:0; background:var(--bg); z-index:950; overflow-y:auto; display:none; }
     #tutorial-screen .t-wrap { max-width:420px; margin:0 auto; padding:1.25rem 1rem; display:flex; flex-direction:column; gap:1rem; }
     #tutorial-screen .t-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; width:min(100%,320px); margin:0 auto; }
-    #tutorial-screen .t-cell { aspect-ratio:1; border:2px solid #1e3a5f; border-radius:6px; display:flex; align-items:center; justify-content:center;
-      font-weight:900; font-size:clamp(1.2rem,8vw,2.2rem); color:#e2e8f0; background:#0c1628; user-select:none;
+    #tutorial-screen .t-cell { aspect-ratio:1; border:2px solid var(--cell-border); border-radius:6px; display:flex; align-items:center; justify-content:center;
+      font-weight:900; font-size:clamp(1.2rem,8vw,2.2rem); color:var(--text); background:var(--cell-bg); user-select:none;
       text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000; }
-    #tutorial-screen .t-cell.mine { color:#a78bfa; }
-    #tutorial-screen .t-cell.won { background:rgba(124,58,237,0.25); border-color:#7c3aed; }
-    #tutorial-screen .t-cell.target { border-color:#fcd34d; cursor:pointer; animation:t-pulse 1s ease-in-out infinite; }
-    #tutorial-screen .t-cell.picked { border-color:#22c55e; background:rgba(34,197,94,0.25); }
+    #tutorial-screen .t-cell.mine { color:var(--brand-ink); }
+    #tutorial-screen .t-cell.won { background:rgba(var(--brand-rgb),0.25); border-color:var(--brand-fill); }
+    #tutorial-screen .t-cell.target { border-color:var(--daily-fill); cursor:pointer; animation:t-pulse 1s ease-in-out infinite; }
+    #tutorial-screen .t-cell.picked { border-color:var(--success); background:rgba(34,197,94,0.25); }
     @keyframes t-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(252,211,77,0.6); } 50% { box-shadow:0 0 0 6px rgba(252,211,77,0); } }
-    #tutorial-screen .t-text { font-size:0.98rem; line-height:1.55; color:#cbd5e1; text-align:center; min-height:4.5em; }
+    #tutorial-screen .t-text { font-size:0.98rem; line-height:1.55; color:var(--text-2); text-align:center; min-height:4.5em; }
     #tutorial-screen .t-dots { display:flex; gap:6px; justify-content:center; }
-    #tutorial-screen .t-dot { width:8px; height:8px; border-radius:50%; background:#334155; }
+    #tutorial-screen .t-dot { width:8px; height:8px; border-radius:50%; background:var(--border); }
     #tutorial-screen .t-dot.on { background:var(--clr-primary-light); }
   `;
   document.head.appendChild(st);
@@ -61,7 +61,7 @@ function render() {
   $("tut-wrap").innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div style="font-weight:900;letter-spacing:0.12em;color:var(--clr-primary-light)">HOW TO PLAY</div>
-      <button onclick="closeTutorial(false)" style="background:none;border:none;color:#64748b;font-size:0.85rem;cursor:pointer">Skip</button>
+      <button onclick="closeTutorial(false)" style="background:none;border:none;color:var(--muted);font-size:0.85rem;cursor:pointer">Skip</button>
     </div>
     <div class="t-dots">${STEPS.map((_, i) => `<div class="t-dot${i <= step ? " on" : ""}"></div>`).join("")}</div>
     ${s.place ? `<div style="display:flex;justify-content:center"><div style="width:52px;height:52px;border-radius:8px;background:var(--clr-primary);color:white;font-weight:900;font-size:1.8rem;display:flex;align-items:center;justify-content:center;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000">${s.place.letter}</div></div>` : ""}
@@ -78,7 +78,7 @@ function render() {
   document.querySelectorAll("#tut-wrap .t-cell").forEach(el => el.addEventListener("click", () => onCell(+el.dataset.r, +el.dataset.c)));
 }
 
-function nudge(text) { const el = $("tut-text"); if (el) { el.innerHTML = `${STEPS[step].text}<br><span style="color:#fcd34d;font-size:0.85rem">${text}</span>`; } }
+function nudge(text) { const el = $("tut-text"); if (el) { el.innerHTML = `${STEPS[step].text}<br><span style="color:var(--warn-ink);font-size:0.85rem">${text}</span>`; } }
 
 function onCell(r, c) {
   const s = STEPS[step];
