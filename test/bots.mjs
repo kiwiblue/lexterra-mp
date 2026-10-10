@@ -250,7 +250,8 @@ async function liveGame() {
   const coins = await getJson(`coins=${A.uuid}`);
   check("finishing player earned coins", (coins.coins ?? 0) > 0, `coins=${coins.coins}`);
   const wk = await getJson("weekly=1");
-  check("weekly ladder includes the game's points", (wk.top ?? []).some(e => e.name === "ALICE" && e.pts >= aScore) && !JSON.stringify(wk).includes(A.uuid));
+  const aWeek = (await (await post({ type: "profile", uuid: A.uuid })).json()).weekly;
+  check("weekly ladder includes the game's points", aWeek?.pts >= aScore && aWeek.games >= 1 && !JSON.stringify(wk).includes(A.uuid), `pts=${aWeek?.pts}`);
   const leaverXp = await getJson(`playerXp=${C.uuid}`);
   check("player who left forfeits (their seat's points went to the bot)", (leaverXp.xp ?? 0) === 0);
 
@@ -461,8 +462,8 @@ async function daily() {
       check("freezes bought with coins, max 2", f1.freezes === 1 && f2.freezes === 2 && f3.status === 409);
     } finally { await setConfig({ spendStreakFreeze: orig ?? 300 }); }
   }
-  const wk = await getJson("weekly=1");
-  check("daily scores added to the weekly ladder", subs.filter(x => x.res.score > 0).every(x => wk.top.some(e => e.name === x.b.name)));
+  const weeks = await Promise.all(subs.map(async x => (await (await post({ type: "profile", uuid: x.b.uuid })).json()).weekly?.pts));
+  check("daily scores added to the weekly ladder", subs.every((x, i) => weeks[i] === x.res.score), weeks.join(","));
   return bots;
 }
 

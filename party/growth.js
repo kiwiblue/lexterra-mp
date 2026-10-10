@@ -432,11 +432,12 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
         if (!isUuid(msg.uuid) || !TILE_THEMES.includes(msg.theme)) return jsonRes({ error: "bad_request" }, 400);
         const cost = Math.max(0, Number(cfg.spendTileTheme) || 0);
         const coins = (await room.storage.get("player_coins")) ?? [];
-        const ci = coins.findIndex(p => p.uuid === msg.uuid);
+        let ci = coins.findIndex(p => p.uuid === msg.uuid);
         const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
         const key = `theme_${msg.theme}`;
         if (ci >= 0 && coins[ci].colorUnlocks?.[key]) return jsonRes({ coins: balance, cost: 0, owned: true });
         if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
+        if (ci < 0) { coins.push({ uuid: msg.uuid, name: cleanName(msg.name), coins: 0 }); ci = coins.length - 1; }
         coins[ci].coins = balance - cost;
         coins[ci].colorUnlocks = { ...(coins[ci].colorUnlocks ?? {}), [key]: FOREVER };
         await room.storage.put("player_coins", coins);
@@ -488,10 +489,10 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
     case "profile": {
       if (!isUuid(msg.uuid)) return jsonRes({ error: "bad_uuid" }, 400);
       const today = utcDate();
-      const [coins, xp, st, mine, epb] = await Promise.all([
+      const [coins, xp, st, mine, epb, week] = await Promise.all([
         room.storage.get("player_coins"), room.storage.get("player_xp"),
         room.storage.get(`streak:${msg.uuid}`), room.storage.get(`daily_res:${today}:${msg.uuid}`),
-        room.storage.get(`endless_pb:${msg.uuid}`),
+        room.storage.get(`endless_pb:${msg.uuid}`), room.storage.get(`week:${isoWeek().id}`),
       ]);
       const c = (coins ?? []).find(p => p.uuid === msg.uuid);
       const x = (xp ?? []).find(p => p.uuid === msg.uuid);
@@ -500,6 +501,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
         xp: x?.xp ?? 0, gamesPlayed: x?.gamesPlayed ?? 0,
         streak: on(cfg, "streaks") ? effectiveStreak(st, today) : null,
         dailyMine: mine ? { score: mine.score, words: mine.words, share: shareGrid(mine.used) } : null,
+        weekly: on(cfg, "weekly") ? { pts: week?.[msg.uuid]?.pts ?? 0, games: week?.[msg.uuid]?.games ?? 0 } : null,
         endless: on(cfg, "endless") ? { classic: epb?.classic ?? 0, blitz: epb?.blitz ?? 0, plays: epb?.plays ?? 0 } : null,
       });
     }
