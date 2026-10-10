@@ -35,14 +35,15 @@ party/
   index.js      — Game room (Main): room management, game state, turn logic
   lobby.js      — Public games lobby + online counts (Lobby)
   stats.js      — Leaderboards, XP, coins, admin config (Stats)
-  growth.js     — Daily puzzle results, streaks, weekly ladder, analytics, push, My Games (on Stats)
-  daily.js      — Daily puzzle generation (seeded by DAILY_SALT) and move replay
+  growth.js     — Daily & endless puzzle results, board viewing, streaks, weekly ladder, tile themes,
+                  analytics, push, My Games (on Stats)
+  daily.js      — Daily/endless puzzle generation (seeded by DAILY_SALT) and move replay
   rules.js      — Word rules shared by live games and the daily puzzle
   words.js      — Server copy of the dictionary (generated from public/words.js)
   auth.js       — Email magic-link accounts (Auth)
 public/
   index.html    — Game client: home, lobby, board, UI
-  js/daily.js   — Daily puzzle screen
+  js/daily.js   — Puzzle screen: daily, unranked replay, endless Classic/Blitz, board viewer, themes
   js/tutorial.js — 60-second tutorial
   sw.js, manifest.webmanifest, icons/ — installable app (PWA) + push notifications
   admin.html    — Economy settings, feature switches, analytics
@@ -114,7 +115,10 @@ The browser is never trusted for anything that affects scores, coins or other pl
 - An email is only linked to an account when its owner clicks the magic link; sends are rate-limited
   per address and globally.
 - Daily puzzle submissions are replayed on the server (`replayDaily`); one official attempt per
-  player per day. Streak freezes and other coin items are priced by the server.
+  player per day. Today's boards can only be watched by players who have already submitted.
+  Endless puzzles use a server-issued seed (one live board per player, each seed submitted once);
+  Blitz runs must finish within letters × seconds + 50s of the deal to be ranked.
+  Streak freezes, tile themes and other coin items are priced by the server.
 - Push notifications only go to subscriptions a player registered themselves, and are only sent by
   game rooms (internal calls). Async games: seats are reclaimed by account, never by connection id.
 
