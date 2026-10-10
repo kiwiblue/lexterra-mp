@@ -728,6 +728,10 @@
           <button class="seg-tab" data-theme-choice="dark" onclick="setThemeChoice('dark')">Dark</button>
         </div>
       </div>
+      <div class="menu-row static" title="Auto bots adapt to you: win and they get tougher, lose and they ease off — aiming for even games.">
+        <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></span><span>Your bot level<br><span class="hc-sub" id="me-bot-sub" style="font-size:0.8125rem">Bots adapt as you play</span></span></span>
+        <span class="chip" id="me-bot-level" style="background:rgba(var(--brand-rgb),.12);color:var(--brand-ink)">Lv 2</span>
+      </div>
       <button class="menu-row" onclick="openTutorialScreen()">
         <span class="mr-label"><span class="mr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg></span>How to play</span>
         <span class="mr-end">›</span>
@@ -743,7 +747,7 @@
     </div>
 
     <div id="site-footer">
-      © <span id="footer-year"></span> <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="text-decoration:none">Chris Sandford</a> · v0.8.0<br>
+      © <span id="footer-year"></span> <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="text-decoration:none">Chris Sandford</a> · v0.9.0<br>
       <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener">Play offline version</a> · <span id="footer-online">0 players online</span>
     </div>
   </section>
@@ -854,6 +858,7 @@
 <script src="botwords.js"></script>
 <script type="module">
   import PartySocket from "https://esm.sh/partysocket@1.0.2";
+  import { createBotBrain, inGameSkill, DIFFICULTY_SKILL, skillToLevel } from "./js/botai.js";
 
   const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Green:'#22c55e', Yellow:'#eab308', Grey:'#9ca3af', Orange:'#f97316', Pink:'#f472b6', Purple:'#a855f7', Teal:'#14b8a6' };
   const PREMIUM_COLORS = new Set(['Orange','Pink','Purple','Teal']);
@@ -971,6 +976,7 @@
   let playerXp = 0;
   let colorUnlocks = {};  // { "orange": expiryTimestamp, ... }
   let lastProfile = null; // latest profile from the Stats server (home cards reuse it)
+  let myBotSkill = 0.18;  // adaptive bot rating (0–1) from the server; Auto bots play at this level
   let coinConfig = { spendViewUnclaimed: 1, spendUndoLetter: 1, spendPremiumColor: 10 };
 
   // Game UI state
@@ -1034,14 +1040,6 @@
   }
   function isValidWord(w) { const s = getWordSet(); return s ? s.has(w) : false; }
 
-  let botWordSet = null;
-  function getBotWordSet() {
-    if (botWordSet) return botWordSet;
-    if (!window.BOT_WORDS) return null;
-    botWordSet = new Set(window.BOT_WORDS.split('\n').map(w => w.trim()).filter(Boolean));
-    return botWordSet;
-  }
-  function isBotWord(w) { const s = getBotWordSet(); return s ? s.has(w.toUpperCase()) : true; }
 
   function randomRoomCode() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -1173,7 +1171,7 @@
     // Practice game: add an easy bot and start as soon as the room exists
     if (practicePending && newState?.phase === 'lobby' && newState.host === myConnId) {
       const hasBot = Object.values(newState.players ?? {}).some(p => p.isBot);
-      if (!hasBot && !practiceBotRequested) { practiceBotRequested = true; socket.send(JSON.stringify({ type: "add-bot" })); }
+      if (!hasBot && !practiceBotRequested) { practiceBotRequested = true; socket.send(JSON.stringify({ type: "add-bot", skill: myBotSkill })); }
       else if (hasBot) { practicePending = false; socket.send(JSON.stringify({ type: "start" })); }
     }
     // Detect last move before replacing state
@@ -1415,10 +1413,11 @@
           <div class="pdot" style="background:${color}"></div>
           <span style="font-weight:bold;flex:1">${label}</span>
           ${amHost ? `
+            <button class="toggle-btn diff-btn${p.botDifficulty==='auto'?' selected':''}" onclick="setBotDiff('${id}','auto')" title="Adapts to you — gets harder as you win, easier as you lose">Auto · Lv ${skillToLevel(p.botSkill ?? myBotSkill)}</button>
             <button class="toggle-btn diff-btn${p.botDifficulty==='easy'?' selected':''}" onclick="setBotDiff('${id}','easy')">Easy</button>
             <button class="toggle-btn diff-btn${p.botDifficulty==='hard'?' selected':''}" onclick="setBotDiff('${id}','hard')">Hard</button>
             <button class="remove-btn" onclick="removeBot('${id}')" title="Remove bot">×</button>
-          ` : `<span style="font-size:0.75rem;color:var(--muted)">${p.botDifficulty.toUpperCase()}</span>`}
+          ` : `<span style="font-size:0.75rem;color:var(--muted)">${botLabel(p)}</span>`}
         </div>`;
       } else {
         const isMe = id === myConnId;
@@ -1751,7 +1750,7 @@
       const active = id === state.cur;
       const color = COLORS[p.color] ?? "#9ca3af";
       const nameLabel = p.isBot
-        ? `${p.name}<span style="font-size:0.6rem;color:var(--muted);font-weight:normal;margin-left:0.25rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+        ? `${p.name}<span style="font-size:0.6rem;color:var(--muted);font-weight:normal;margin-left:0.25rem">${botLabel(p)}</span>`
         : p.name;
       const passes = p.passesThisRound ?? 0;
       const passText = passes > 0
@@ -1796,7 +1795,7 @@
           ${players.map(([id, p]) => {
             const c = COLORS[p.color] ?? "#9ca3af";
             const label = p.isBot
-              ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>`
+              ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${botLabel(p)}</span>`
               : p.name;
             return `<tr style="border-bottom:1px solid var(--surface)">
               <td style="padding:0.35rem 0.5rem 0.35rem 0">
@@ -2058,7 +2057,7 @@
       `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.5rem;background:var(--surface-2);border-radius:6px">
         <div style="font-size:0.82rem">
           <span style="font-weight:bold;color:var(--text)">${p.name}</span>
-          <span style="color:var(--muted);margin-left:0.4rem">${(p.botDifficulty??'easy').toUpperCase()} · ${p.score} pts</span>
+          <span style="color:var(--muted);margin-left:0.4rem">${botLabel(p)} · ${p.score} pts</span>
         </div>
         <button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.25rem 0.65rem;font-size:0.78rem">Replace</button>
       </div>`
@@ -2832,7 +2831,7 @@
 
     const statsRows = players.map(([id, p]) => {
       const col = COLORS[p.color] ?? '#9ca3af';
-      const label = p.isBot ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : p.name;
+      const label = p.isBot ? `${p.name} <span style="font-size:0.6rem;color:var(--muted)">${botLabel(p)}</span>` : p.name;
       return `<tr style="border-bottom:1px solid var(--surface)">
         <td style="padding:0.35rem 0.5rem 0.35rem 0"><div style="display:flex;align-items:center;gap:0.4rem"><div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0"></div><span>${label}</span></div></td>
         <td style="padding:0.35rem 0 0.35rem 0.5rem;text-align:right">${p.score}</td>
@@ -2853,7 +2852,7 @@
             <div class="player-row" style="margin-bottom:0.5rem">
               <span style="color:var(--faint);width:1.5rem;font-size:0.8rem;flex-shrink:0">${i + 1}.</span>
               <div class="pdot" style="background:${COLORS[p.color] ?? "#9ca3af"};flex-shrink:0"></div>
-              <span style="font-weight:bold;flex:1">${p.name}${p.isBot ? `<span style="font-size:0.72rem;color:var(--muted);font-weight:normal;margin-left:0.3rem">${(p.botDifficulty ?? 'easy').toUpperCase()}</span>` : ''}</span>
+              <span style="font-weight:bold;flex:1">${p.name}${p.isBot ? `<span style="font-size:0.72rem;color:var(--muted);font-weight:normal;margin-left:0.3rem">${botLabel(p)}</span>` : ''}</span>
               <span style="color:var(--clr-primary-light);font-weight:bold;white-space:nowrap">${stat}</span>
             </div>`).join("")}
         </div>
@@ -3333,6 +3332,10 @@
       playerCoins = cd.coins ?? 0;
       colorUnlocks = cd.colorUnlocks ?? {};
       playerXp = xd.xp ?? 0;
+      if (typeof profile.botSkill?.skill === "number") {
+        myBotSkill = profile.botSkill.skill;
+        window.dispatchEvent(new CustomEvent("lx:botskill", { detail: { ...profile.botSkill, level: skillToLevel(myBotSkill) } }));
+      }
       if (cfgd.spendPremiumColor !== undefined) coinConfig.spendPremiumColor = cfgd.spendPremiumColor;
       if (cfgd.spendUndoLetter !== undefined) coinConfig.spendUndoLetter = cfgd.spendUndoLetter;
       if (cfgd.spendViewUnclaimed !== undefined) coinConfig.spendViewUnclaimed = cfgd.spendViewUnclaimed;
@@ -3443,6 +3446,9 @@
 
   window.startGame = function() {
     if (!socket) return;
+    // Auto bots play at the host's latest rating (it moves after every solo game)
+    for (const [id, p] of Object.entries(state?.players ?? {}))
+      if (p.isBot && p.botDifficulty === "auto" && p.botSkill !== myBotSkill) socket.send(JSON.stringify({ type: "bot-difficulty", botId: id, difficulty: "auto", skill: myBotSkill }));
     socket.send(JSON.stringify({ type: "start" }));
   };
 
@@ -3488,7 +3494,7 @@
   };
 
   window.addBot = function() {
-    if (socket) socket.send(JSON.stringify({ type: "add-bot" }));
+    if (socket) socket.send(JSON.stringify({ type: "add-bot", skill: myBotSkill }));
   };
 
   window.removeBot = function(botId) {
@@ -3496,7 +3502,7 @@
   };
 
   window.setBotDiff = function(botId, difficulty) {
-    if (socket) socket.send(JSON.stringify({ type: "bot-difficulty", botId, difficulty }));
+    if (socket) socket.send(JSON.stringify({ type: "bot-difficulty", botId, difficulty, skill: myBotSkill }));
   };
 
   // ── BOT AI ───────────────────────────────────────────────────
@@ -3506,132 +3512,89 @@
     botStateResolver = () => { clearTimeout(t); r(); };
   });
 
-  function randomLetter() {
-    return 'EEEEEEAAAAAAIIIIIOOOOOOUUURRRRSSSSTTTTLLLLNNNNCCCDDDDGGHHBBFFKKMMPPVVWWYYJQXZ'[
-      Math.floor(Math.random() * 70)];
+  // The bot brain lives in js/botai.js: sensible letter placement at every level, and
+  // human-like word spotting that scales with skill. Built once the word lists have loaded.
+  let botBrain = null;
+  function getBotBrain() {
+    if (botBrain) return botBrain;
+    if (!window.BOT_WORDS || !getWordSet()) return null;
+    botBrain = createBotBrain({
+      words: window.BOT_WORDS.split("\n").map(w => w.trim()).filter(Boolean),
+      isWord: (w) => isValidWord(w),
+      isBanned: (w) => isBannedWord(w) || isBotBannedWord(w),
+    });
+    return botBrain;
   }
-
-  function findBotWords(grid, botId) {
-    const { boardSize, minWordLen, territoryMode } = state.settings;
-    const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
-    const claimedWords = (state.claimed ?? []).map(c => c.word.toLowerCase());
-    const isClaimedVariant = w => {
-      const wl = w.toLowerCase();
-      return claimedWords.some(cw =>
-        wl === cw || wl === cw + 's' || wl === cw + 'es' ||
-        (wl.endsWith('ies') && cw === wl.slice(0,-3) + 'y') ||
-        cw === wl + 's' || cw === wl + 'es' ||
-        (cw.endsWith('ies') && wl === cw.slice(0,-3) + 'y')
-      );
+  function botLabel(p) {
+    if (p.botDifficulty === "auto") return `LV ${skillToLevel(p.botSkill ?? myBotSkill)}`;
+    return (p.botDifficulty ?? "easy").toUpperCase();
+  }
+  // Tiles held in territory modes, points in Search — the same measure the end screen ranks by
+  function standingOf(id) {
+    const mode = state.settings?.territoryMode;
+    if (mode && mode !== "off" && state.territory) return state.territory.flat().filter(o => o === id).length;
+    return state.players[id]?.score ?? 0;
+  }
+  function botView() {
+    return {
+      grid: state.grid.map(row => row.map(c => c ? { ...c } : null)),
+      minLen: state.settings?.minWordLen ?? 3,
+      mode: state.settings?.territoryMode ?? "off",
+      territory: state.territory ?? null,
+      claimed: (state.claimed ?? []).map(c => c.word),
     };
-    const results = [];
-    for (const [dr, dc] of dirs) {
-      for (let r = 0; r < boardSize; r++) {
-        for (let c = 0; c < boardSize; c++) {
-          const path = [];
-          let nr = r, nc = c;
-          while (nr >= 0 && nr < boardSize && nc >= 0 && nc < boardSize && grid[nr]?.[nc]?.letter) {
-            path.push({ r: nr, c: nc }); nr += dr; nc += dc;
-          }
-          for (let len = minWordLen; len <= path.length; len++) {
-            const sub = path.slice(0, len);
-            const word = sub.map(p => grid[p.r][p.c].letter).join('');
-            if (isClaimedVariant(word)) continue;
-            if (territoryMode === 'exclusive' && state.territory)
-              if (sub.some(p => state.territory[p.r]?.[p.c] && state.territory[p.r][p.c] !== botId)) continue;
-            if (isValidWord(word) && !isBannedWord(word) && !isBotBannedWord(word) && isBotWord(word)) results.push({ word, path: sub, score: len });
-          }
-        }
-      }
-    }
-    return results;
-  }
-
-  function chooseBestPlacement(emptyCells) {
-    const { boardSize } = state.settings;
-    const topLetters = 'ETAOINSHRD';
-    const testCells = [...emptyCells].sort(() => Math.random() - 0.5).slice(0, 12);
-    let bestScore = -1;
-    let candidates = [];
-    for (const cell of testCells) {
-      for (const letter of topLetters) {
-        const g = state.grid.map(row => row.map(c => c ? { ...c } : null));
-        g[cell.r][cell.c] = { letter, pi: state.cur };
-        // Cube-weight scores so placing for one long word beats placing for many short words
-        const score = findBotWords(g, state.cur).reduce((s, w) => s + Math.pow(w.score, 3), 0);
-        if (score > bestScore) { bestScore = score; candidates = [{ cell, letter }]; }
-        else if (score === bestScore) { candidates.push({ cell, letter }); }
-      }
-    }
-    if (!candidates.length) return { cell: emptyCells[0], letter: randomLetter() };
-    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   async function runBotTurn(botId) {
     let botActed = false;
     try {
       const bot = state.players[botId];
-      const isHard = bot?.botDifficulty === 'hard';
-      await delay(isHard ? 900 : 1400 + Math.random() * 600);
-      if (state.cur !== botId || state.phase !== 'playing') return;
+      const brain = getBotBrain();
+      const base = bot?.botDifficulty === "auto" ? (bot.botSkill ?? myBotSkill) : (DIFFICULTY_SKILL[bot?.botDifficulty] ?? DIFFICULTY_SKILL.easy);
+      const humans = state.turnOrder.filter(id => !state.players[id]?.isBot);
+      const humanBest = Math.max(0, ...humans.map(standingOf));
+      const n = state.settings.boardSize;
+      // Auto bots ease off a little when well ahead and push a little when behind
+      const skill = bot?.botDifficulty === "auto" ? inGameSkill(base, standingOf(botId), humanBest, n * n) : base;
+      await delay(700 + (1 - skill) * 900 + Math.random() * 600);
+      if (state.cur !== botId || state.phase !== 'playing' || !brain) throw new Error("not ready");
 
-      // 1. Place a letter
-      if ((state.players[botId]?.lettersLeft ?? 0) > 0) {
-        const empty = [];
-        const { boardSize } = state.settings;
-        for (let r = 0; r < boardSize; r++)
-          for (let c = 0; c < boardSize; c++)
-            if (!state.grid?.[r]?.[c]) empty.push({ r, c });
-        if (empty.length) {
-          const { cell, letter } = chooseBestPlacement(empty);
-          socket.send(JSON.stringify({ type: 'place', r: cell.r, c: cell.c, letter }));
-          botActed = true;
-          await waitForNextState();
-          await delay(600);
-          if (state.cur !== botId || state.phase !== 'playing') return;
-        }
-      }
-
-      // 2. Claim a word (skip if humans have passed enough times to signal board exhaustion)
-      const humanPlayerCount = state.turnOrder.filter(id => !state.players[id]?.isBot).length;
+      const isFull = () => state.grid.every(row => row.every(Boolean));
+      // Once the board is full and humans keep passing, it's played out — don't drag the game on
       const humanPasses = state.consecutiveHumanPasses ?? 0;
-      const claimPassThreshold = isHard ? 2 * Math.max(1, humanPlayerCount) : Math.max(1, humanPlayerCount);
-      if (humanPasses < claimPassThreshold) {
-        const found = findBotWords(state.grid, botId).sort((a, b) => b.score - a.score);
-        if (found.length) {
-          const minLen = state.settings?.minWordLen ?? 4;
-          const { boardSize } = state.settings;
-          let boardFull = true;
-          outer: for (let r = 0; r < boardSize; r++) for (let c = 0; c < boardSize; c++) if (!state.grid?.[r]?.[c]) { boardFull = false; break outer; }
-          let pick;
-          if (isHard) {
-            if (boardFull) {
-              // Endgame: board is full, claim any word we can find
-              pick = found[0];
-            } else {
-              // Normal: prefer words well above the minimum; only occasionally claim short ones
-              pick = found.find(w => w.score >= minLen + 2)
-                  ?? found.find(w => w.score >= minLen + 1)
-                  ?? (Math.random() < 0.25 ? found[0] : null);
-            }
-          } else {
-            // Easy: random selection so it doesn't always grab the best word
-            pick = found[Math.floor(Math.random() * found.length)];
-          }
-          if (pick) {
-            socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+      const passThreshold = (skill >= 0.6 ? 2 : 1) * Math.max(1, humans.length);
+      const chain = brain.maxChain(skill);
+      let claims = 0;
+      for (let step = 0; step < 12; step++) {
+        // 1. Place a letter
+        if ((state.players[botId]?.lettersLeft ?? 0) > 0 && !isFull()) {
+          const mv = brain.planPlacement(botView(), botId, skill);
+          if (mv) {
+            socket.send(JSON.stringify({ type: 'place', r: mv.r, c: mv.c, letter: mv.letter }));
             botActed = true;
             await waitForNextState();
-            await delay(400);
+            await delay(500);
+            if (state.cur !== botId || state.phase !== 'playing') return;
           }
         }
+        // 2. Maybe claim a word (each claim earns another letter, so stronger bots keep going)
+        if (claims >= chain || (isFull() && humanPasses >= passThreshold)) break;
+        const pick = brain.chooseClaim(botView(), botId, skill, { boardFull: isFull() });
+        if (!pick) break;
+        socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+        botActed = true;
+        claims++;
+        await waitForNextState();
+        await delay(450);
+        if (state.cur !== botId || state.phase !== 'playing') return;
+        if ((state.players[botId]?.lettersLeft ?? 0) <= 0 && !isFull()) break;
       }
 
-      // 3. Pass — always, no looping
+      // 3. End the turn
       if (state.cur === botId && state.phase === 'playing')
         socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
     } catch (e) {
-      console.warn('Bot error:', e);
+      if (e?.message !== "not ready") console.warn('Bot error:', e);
       if (state?.cur === botId && state?.phase === 'playing')
         socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
     }

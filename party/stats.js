@@ -13,7 +13,7 @@
 
 import { Server } from "partyserver";
 import { makeRoom, isInternal, cleanName, isUuid, clientIp } from "./compat.js";
-import { growthGet, growthPost, addWeekly, mergeGrowth } from "./growth.js";
+import { growthGet, growthPost, addWeekly, mergeGrowth, updateBotSkill } from "./growth.js";
 
 const TOP_SNAPS = 5;
 
@@ -445,6 +445,7 @@ const handlers = {
         if (Number(cfgAll.feature_weekly ?? 1) !== 0) {
           try { await addWeekly(room, msg.players); } catch (e) { console.error("weekly ladder update failed", e); }
         }
+        try { await updateBotSkill(room, msg.vsBots); } catch (e) { console.error("bot rating update failed", e); }
 
         // ── Coin earning ────────────────────────────────────────────────
         const stored = (await room.storage.get("coin_config")) ?? {};

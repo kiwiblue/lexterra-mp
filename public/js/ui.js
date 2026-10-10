@@ -250,6 +250,13 @@ $("room-code-input")?.addEventListener("input", (e) => {
 
 window.addEventListener("lx:name", () => refreshIdentity());
 
+// Adaptive bot level (Me tab)
+window.addEventListener("lx:botskill", (e) => {
+  const { level = 1, games = 0, wins = 0, losses = 0 } = e.detail ?? {};
+  $("me-bot-level").textContent = `Lv ${level}`;
+  $("me-bot-sub").textContent = games ? `${wins} won · ${losses} lost vs Auto bots` : "Bots adapt as you play";
+});
+
 // Over-days switched off in admin: hide its card
 const friendsCard = document.querySelector(".mode-card.friends");
 new MutationObserver(() => { friendsCard.style.display = $("mygames-card").style.display === "none" ? "none" : ""; })

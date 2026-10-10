@@ -573,6 +573,56 @@ async function puzzles(dailyBots) {
   } else console.log(`  (skipping blitz time-limit check: budget ${Math.round(budget / 1000)}s)`);
 }
 
+// Solo games against an Auto bot: winning should make the bots harder, losing easier
+async function adaptiveBots() {
+  section = "Adaptive bots"; console.log(`\n▶ ${section}`);
+  const P = new Bot("SOLO");
+  const rating = async () => (await (await post({ type: "profile", uuid: P.uuid })).json()).botSkill;
+  const start = await rating();
+  check("new players start with gentle bots", start && start.skill <= 0.2 && start.games === 0, JSON.stringify(start));
+
+  // One player spells CAT across the top row and claims it; everyone else just passes
+  async function soloGame(playerWins, skill) {
+    P.fresh();
+    const code = await createRoom(P, { boardSize: 5, territoryMode: "off" });
+    P.send({ type: "add-bot", skill });
+    let s = await P.waitState(st => Object.values(st.players).some(p => p.isBot), 8000, "bot added");
+    const botId = Object.keys(s.players).find(id => s.players[id].isBot);
+    const bot = s.players[botId];
+    P.send({ type: "start" });
+    s = await P.waitState(st => st.phase === "playing", 8000, "start");
+    const scorer = playerWins ? P.id : botId;
+    let placed = 0;
+    for (let turn = 0; turn < 40 && s.phase === "playing"; turn++) {
+      if (s.cur === scorer && placed < 3) {
+        s = await place(P, 0, placed, "CAT"[placed]);
+        placed++;
+        if (placed === 3) {
+          P.send({ type: "claim", word: "CAT", path: [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }] });
+          s = await P.waitState(st => st.claimed?.length === 1, 8000, "claim");
+        }
+        s = await passTurn(P, s.cur, false);
+      } else {
+        s = await passTurn(P, s.cur, true);
+      }
+    }
+    s = await P.waitState(st => st.phase === "ended", 8000, "ended");
+    P.close();
+    await sleep(1500);
+    return { bot, ended: s.phase === "ended", winner: s.players[scorer]?.score === 3 };
+  }
+
+  const g1 = await soloGame(true, start.skill);
+  check("bots added in Auto mode at the player's level", g1.bot.botDifficulty === "auto" && Math.abs(g1.bot.botSkill - start.skill) < 0.002, `${g1.bot.botDifficulty} ${g1.bot.botSkill}`);
+  const r1 = await rating();
+  check("beating the bot makes the next ones harder", g1.ended && r1.skill > start.skill && r1.wins === 1 && r1.games === 1, `${start.skill} → ${r1.skill}`);
+  const g2 = await soloGame(false, r1.skill);
+  const r2 = await rating();
+  check("losing to the bot makes the next ones easier", g2.ended && r2.skill < r1.skill && r2.losses === 1 && r2.games === 2, `${r1.skill} → ${r2.skill}`);
+  const tampered = await post({ type: "profile", uuid: P.uuid, botSkill: { skill: 0.99 } });
+  check("players can't set their own rating", (await tampered.json()).botSkill.skill === r2.skill);
+}
+
 async function analyticsAndFlags(dailyBots) {
   section = "Analytics & feature switches"; console.log(`\n▶ ${section}`);
   const bad = await post({ type: "track", event: "drop_tables", uuid: crypto.randomUUID() });
@@ -703,6 +753,7 @@ await run("live", liveGame);
 await run("highstakes", highStakes);
 const dailyBots = (await run("daily", daily)) ?? [];
 await run("puzzles", puzzles, dailyBots);
+await run("adaptive", adaptiveBots);
 await run("analytics", analyticsAndFlags, dailyBots);
 await run("async", asyncGames);
 await run("security", securityRegressions);

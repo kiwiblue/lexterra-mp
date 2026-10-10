@@ -4,6 +4,7 @@
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { isInternal, cleanName, isUuid, clientIp } from "./compat.js";
+import { initialSkill, nextSkill } from "./botskill.js";
 import { dailyPuzzle, endlessPuzzle, replayDaily, shareGrid, utcDate, isDateStr, addDays, daysBetween } from "./daily.js";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
@@ -128,6 +129,20 @@ async function addCoins(room, uuid, name, amount) {
   await room.storage.put("player_coins", coins);
 }
 
+// ── Adaptive bot rating ────────────────────────────────────────────────────
+async function botSkillOf(room, uuid) {
+  const rec = await room.storage.get(`botskill:${uuid}`);
+  if (rec) return rec;
+  const x = ((await room.storage.get("player_xp")) ?? []).find(p => p.uuid === uuid);
+  return { skill: initialSkill(x?.gamesPlayed ?? 0, x?.xp ?? 0), games: 0, wins: 0, losses: 0, draws: 0 };
+}
+// Called from game_end (server-only) after a solo game against Auto bots
+export async function updateBotSkill(room, vs) {
+  if (!vs || !isUuid(vs.uuid) || !["win", "loss", "draw"].includes(vs.result)) return;
+  const rec = await botSkillOf(room, vs.uuid);
+  await room.storage.put(`botskill:${vs.uuid}`, nextSkill(rec, vs.result, Number(vs.margin) || 0));
+}
+
 // Moves growth data from one account to another when a player links a second browser.
 export async function mergeGrowth(room, fromUuid, toUuid) {
   const [sf, st] = await Promise.all([room.storage.get(`streak:${fromUuid}`), room.storage.get(`streak:${toUuid}`)]);
@@ -143,6 +158,11 @@ export async function mergeGrowth(room, fromUuid, toUuid) {
     t.pts += week[fromUuid].pts; t.games += week[fromUuid].games;
     week[toUuid] = t; delete week[fromUuid];
     await room.storage.put(`week:${id}`, week);
+  }
+  const [ba, bb] = await Promise.all([room.storage.get(`botskill:${fromUuid}`), room.storage.get(`botskill:${toUuid}`)]);
+  if (ba) {
+    if (!bb || (ba.games ?? 0) > (bb.games ?? 0)) await room.storage.put(`botskill:${toUuid}`, ba); // keep the better-established rating
+    await room.storage.delete(`botskill:${fromUuid}`);
   }
   const [ea, eb] = await Promise.all([room.storage.get(`endless_pb:${fromUuid}`), room.storage.get(`endless_pb:${toUuid}`)]);
   if (ea) {
@@ -502,6 +522,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
         streak: on(cfg, "streaks") ? effectiveStreak(st, today) : null,
         dailyMine: mine ? { score: mine.score, words: mine.words, share: shareGrid(mine.used) } : null,
         weekly: on(cfg, "weekly") ? { pts: week?.[msg.uuid]?.pts ?? 0, games: week?.[msg.uuid]?.games ?? 0 } : null,
+        botSkill: await botSkillOf(room, msg.uuid),
         endless: on(cfg, "endless") ? { classic: epb?.classic ?? 0, blitz: epb?.blitz ?? 0, plays: epb?.plays ?? 0 } : null,
       });
     }

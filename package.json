@@ -8,7 +8,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:dev": "wrangler deploy --env dev",
-    "test:bots": "node test/bots.mjs"
+    "test:bots": "node test/bots.mjs",
+    "test:botsim": "node test/botsim.mjs"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",

@@ -31,6 +31,8 @@ function cleanSettings(current, incoming) {
   return s;
 }
 
+const cleanSkill = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(Math.min(1, Math.max(0, n)) * 1000) / 1000 : 0.3; };
+
 // ── Claim validation ─────────────────────────────────────────────────
 // The client checks claims for instant feedback, but only this check counts: the path
 // must be a straight line of filled cells spelling a real, unbanned word of the required
@@ -57,6 +59,23 @@ async function notifyLobby(room, msg) {
   } catch {}
 }
 
+// Auto bots play at the host's adaptive rating; strong ones count as "hard" for leaderboards
+const isHardBot = (p) => p.botDifficulty === "hard" || (p.botDifficulty === "auto" && (p.botSkill ?? 0) >= 0.6);
+
+// One player against Auto bots: did they beat the best bot? Feeds the player's adaptive bot rating.
+// Winner is decided the way the end screen does it — tiles in territory modes, points in Search.
+function soloVsBots(state, allEntries) {
+  const humans = allEntries.filter(p => !p.isBot);
+  const bots = allEntries.filter(p => p.isBot);
+  if (humans.length !== 1 || !humans[0].uuid || !bots.some(b => b.botDifficulty === "auto")) return null;
+  const useTiles = state.settings?.territoryMode && state.settings.territoryMode !== "off" && state.territory;
+  const metric = (p) => useTiles ? state.territory.flat().filter(o => o === p.connId).length : (p.score ?? 0);
+  const h = metric(humans[0]);
+  const b = Math.max(...bots.map(metric));
+  if (h === 0 && b === 0) return null; // nothing happened
+  return { uuid: humans[0].uuid, result: h > b ? "win" : h < b ? "loss" : "draw", margin: Math.abs(h - b) / Math.max(1, h + b) };
+}
+
 async function notifyStats(room, state, outcome) {
   try {
     const allEntries = [
@@ -78,8 +97,9 @@ async function notifyStats(room, state, outcome) {
         minWordLen: state.settings?.minWordLen ?? 3,
         timeLimit: state.settings?.timeLimit ?? 120,
         botCount: allEntries.filter(p => p.isBot).length,
-        easyBots: allEntries.filter(p => p.isBot && p.botDifficulty !== 'hard').length,
-        hardBots: allEntries.filter(p => p.isBot && p.botDifficulty === 'hard').length,
+        easyBots: allEntries.filter(p => p.isBot && !isHardBot(p)).length,
+        hardBots: allEntries.filter(p => p.isBot && isHardBot(p)).length,
+        vsBots: soloVsBots(state, allEntries),
         humanCount: humanPlayers.length,
         players: humanPlayers.map(p => ({
           uuid: p.uuid ?? null,
@@ -512,7 +532,7 @@ const handlers = {
         const botId = `bot_${conn.id}_${bots.length}`;
         const takenColors = Object.values(state.players).map(p => p.color);
         const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
-        state.players[botId] ={ name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "easy" };
+        state.players[botId] = { name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "auto", botSkill: cleanSkill(msg.skill) };
         await room.storage.put("state", state);
         room.broadcast(stateMsg(state));
         break;
@@ -534,8 +554,9 @@ const handlers = {
       case "bot-difficulty": {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id || state.phase !== "lobby") return;
-        if (state.players[msg.botId]?.isBot && ["easy", "hard"].includes(msg.difficulty)) {
+        if (state.players[msg.botId]?.isBot && ["auto", "easy", "hard"].includes(msg.difficulty)) {
           state.players[msg.botId].botDifficulty = msg.difficulty;
+          if (msg.difficulty === "auto") state.players[msg.botId].botSkill = cleanSkill(msg.skill ?? state.players[msg.botId].botSkill);
           await room.storage.put("state", state);
           room.broadcast(stateMsg(state));
         }
