@@ -380,8 +380,9 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       }
       if (!(await ipAllowance(room, req, "endless", Number(cfg.ipEndlessStarts) || 300))) return jsonRes({ error: "too_many_today" }, 429);
       const seed = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, "0")).join("");
-      await room.storage.put(`endless_cur:${msg.uuid}`, { seed, mode: msg.mode, at: Date.now() });
-      return jsonRes({ seed, mode: msg.mode, blitzSecs: Number(cfg.endlessBlitzSecs) || 10, puzzle: await endlessPuzzle(seed, room.env.DAILY_SALT) });
+      const secs = Number(cfg.endlessBlitzSecs) || 10;
+      await room.storage.put(`endless_cur:${msg.uuid}`, { seed, mode: msg.mode, at: Date.now(), secs });
+      return jsonRes({ seed, mode: msg.mode, blitzSecs: secs, puzzle: await endlessPuzzle(seed, room.env.DAILY_SALT) });
     }
 
     case "endless_submit": {
@@ -397,7 +398,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       const name = cleanName(msg.name);
       // Blitz gives each letter a few seconds; the whole run must fit in that budget (plus the
       // final claiming window and some slack for the network) to count for the leaderboard.
-      const secs = Number(cfg.endlessBlitzSecs) || 10;
+      const secs = cur.secs ?? (Number(cfg.endlessBlitzSecs) || 10); // the clock the run started with
       const inTime = cur.mode !== "blitz" || Date.now() - cur.at <= (puzzle.letters.length * secs + 30 + 20) * 1000;
       const ranked = inTime && r.complete && r.score > 0;
       const pbKey = `endless_pb:${uuid}`;

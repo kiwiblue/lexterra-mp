@@ -452,18 +452,21 @@ async function loadDailyBoards() {
     }
     const best = $("daily-best-card");
     if (!best) return;
-    const data = top[0] ? await fetchBoard(puzzle.date, top[0].pid) : null;
+    // Show the highest-placed board that's available (very old results may not have one)
+    let data = null, at = 0;
+    for (; at < Math.min(top.length, 5) && !data; at++) data = await fetchBoard(puzzle.date, top[at].pid);
+    at--;
     if (!$("daily-best-card")) return;
     if (!data) { best.style.display = "none"; return; }
     const { g, used } = boardAt(data, data.moves.length);
     best.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;width:100%;gap:0.5rem">
-        <h2 style="margin:0">Today's best board</h2>
+        <h2 style="margin:0">${at === 0 ? "Today's best board" : `Today's #${at + 1} board`}</h2>
         <span style="font-weight:900;color:var(--clr-primary-light);white-space:nowrap">${esc(data.name)} · ${data.score}</span>
       </div>
       ${gridHTML(g, used, cellSize(5, 40, 3), { mini: true })}
       <button class="btn btn-secondary" style="width:100%" id="daily-best-btn">Watch how they did it</button>`;
-    $("daily-best-btn").addEventListener("click", () => openBoard(puzzle.date, top[0].pid, data));
+    $("daily-best-btn").addEventListener("click", () => openBoard(puzzle.date, top[at].pid, data));
   } catch {}
 }
 

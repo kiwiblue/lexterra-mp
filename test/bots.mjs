@@ -466,6 +466,112 @@ async function daily() {
   return bots;
 }
 
+// Replays a stored board the way the client viewer does and returns its score
+function boardScore(board) {
+  return board.moves.filter(m => m.claim).reduce((s, m) => s + m.claim.word.length, 0);
+}
+
+async function puzzles(dailyBots) {
+  section = "Puzzle boards & leader"; console.log(`\n▶ ${section}`);
+  const d = await getJson("daily=1");
+  const lb = await getJson(`dailylb=${d.puzzle.date}`);
+  check("home card shows today's leader", d.leader && d.leader.name === lb.top[0].name && d.leader.score === lb.top[0].score, d.leader && `${d.leader.name} ${d.leader.score}`);
+  const stranger = await post({ type: "daily_board", uuid: crypto.randomUUID(), date: d.puzzle.date, pid: lb.top[0].pid });
+  check("can't see today's boards before playing", stranger.status === 403);
+  if (dailyBots.length) {
+    const me = dailyBots[dailyBots.length - 1];
+    // Watch the best-placed bot from this run (older entries today may predate saved boards)
+    const pidOf = async (u) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(u))).slice(0, 8), x => x.toString(16).padStart(2, "0")).join("");
+    const ours = new Set(await Promise.all(dailyBots.map(x => pidOf(x.uuid))));
+    const target = lb.top.find(e => ours.has(e.pid));
+    const res = await post({ type: "daily_board", uuid: me.uuid, date: d.puzzle.date, pid: target.pid });
+    const board = await res.json();
+    check("after playing, you can watch another player's board", res.status === 200 && board.name === target.name && board.moves?.length > 0, `${res.status} ${board.error ?? ""}`);
+    check("replaying their moves gives their score", boardScore(board) === board.score && board.score === target.score, `${boardScore(board)} vs ${board.score}`);
+    check("board view leaks no account ids", !JSON.stringify(board).match(/[0-9a-f]{8}-[0-9a-f]{4}-/));
+    const bad = await post({ type: "daily_board", uuid: me.uuid, date: d.puzzle.date, pid: "0000000000000000" });
+    check("unknown player → not found", bad.status === 404);
+    const fut = await post({ type: "daily_board", uuid: me.uuid, date: "2099-01-01", pid: lb.top[0].pid });
+    check("future boards refused", fut.status === 400);
+  }
+
+  section = "Endless puzzles"; console.log(`\n▶ ${section}`);
+  const name = `ENDLESS${rand()}`;
+  const uuid = crypto.randomUUID();
+  // A Blitz run left idle past its time budget must not be ranked (checked at the end)
+  const lateUuid = crypto.randomUUID();
+  const origSecs = ADMIN ? (await getConfig()).endlessBlitzSecs : null;
+  if (ADMIN) await setConfig({ endlessBlitzSecs: 1 }); // short clock so the test only waits ~75s
+  const late = await (await post({ type: "endless_start", uuid: lateUuid, mode: "blitz" })).json();
+  const lateStarted = Date.now();
+  if (ADMIN) await setConfig({ endlessBlitzSecs: origSecs ?? 10 });
+
+  const s1 = await (await post({ type: "endless_start", uuid, mode: "classic" })).json();
+  check("classic puzzle dealt", s1.seed && s1.puzzle?.letters?.length === 22);
+  const s1b = await (await post({ type: "endless_start", uuid, mode: "classic" })).json();
+  check("unfinished classic puzzle resumes", s1b.seed === s1.seed && s1b.resumed === true);
+  const sol = solveDaily(s1.puzzle);
+  const r1 = await (await post({ type: "endless_submit", uuid, name, seed: s1.seed, moves: sol.moves })).json();
+  check("server score matches bot's scoring", r1.score === sol.score && r1.ranked && r1.isPB, `${sol.score}/${r1.score}`);
+  const dup = await post({ type: "endless_submit", uuid, name, seed: s1.seed, moves: sol.moves });
+  check("each board can only be submitted once", dup.status === 409);
+  const s2 = await (await post({ type: "endless_start", uuid, mode: "classic", fresh: true })).json();
+  check("new puzzle is a different board", s2.seed !== s1.seed && JSON.stringify(s2.puzzle.letters) !== JSON.stringify(s1.puzzle.letters));
+  const cheat = await post({ type: "endless_submit", uuid, name, seed: s2.seed, moves: [{ claim: { word: "ZZZ", path: [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }] } }] });
+  check("fake words rejected", cheat.status === 400);
+  const wrongSeed = await post({ type: "endless_submit", uuid, name, seed: "ffffffffffffffff", moves: [] });
+  check("made-up seeds rejected", wrongSeed.status === 409);
+  const half = await (await post({ type: "endless_submit", uuid, name, seed: s2.seed, moves: solveDaily(s2.puzzle).moves.slice(0, 6) })).json();
+  check("unfinished boards aren't ranked", half.ok && half.complete === false && half.ranked === false);
+  const elb = await getJson("endlesslb=classic&period=week");
+  check("classic weekly leaderboard lists the bot, no ids", elb.top.some(e => e.name === name && e.score === r1.score) && !JSON.stringify(elb).includes(uuid));
+  const alb = await getJson("endlesslb=classic");
+  check("classic all-time leaderboard sorted", alb.top.every((e, i, a) => i === 0 || a[i - 1].score >= e.score));
+  const prof = await (await post({ type: "profile", uuid })).json();
+  check("personal best saved", prof.endless?.classic === r1.score && prof.endless.plays === 2);
+
+  const b = await (await post({ type: "endless_start", uuid, mode: "blitz" })).json();
+  check("blitz puzzle dealt with a per-letter clock", b.seed && b.blitzSecs > 0, `${b.blitzSecs}s`);
+  const bsol = solveDaily(b.puzzle);
+  const br = await (await post({ type: "endless_submit", uuid, name, seed: b.seed, moves: bsol.moves })).json();
+  check("fast blitz run is ranked separately", br.ranked && br.mode === "blitz" && (await getJson("endlesslb=blitz")).top.some(e => e.name === name));
+  const bad = await post({ type: "endless_start", uuid, mode: "hyper" });
+  check("unknown modes rejected", bad.status === 400);
+
+  section = "Tile themes"; console.log(`\n▶ ${section}`);
+  const broke = await post({ type: "spend", item: "tileTheme", theme: "neon", uuid: crypto.randomUUID() });
+  check("can't buy a theme without coins", broke.status === 402);
+  const weird = await post({ type: "spend", item: "tileTheme", theme: "<script>", uuid });
+  check("unknown themes rejected", weird.status === 400);
+  if (ADMIN && dailyBots.length) {
+    const orig = (await getConfig()).spendTileTheme;
+    await setConfig({ spendTileTheme: 1 });
+    try {
+      const buyer = dailyBots[0];
+      const before = (await (await post({ type: "profile", uuid: buyer.uuid })).json()).coins;
+      const t1 = await (await post({ type: "spend", item: "tileTheme", theme: "ocean", uuid: buyer.uuid })).json();
+      const t2 = await (await post({ type: "spend", item: "tileTheme", theme: "ocean", uuid: buyer.uuid })).json();
+      const p2 = await (await post({ type: "profile", uuid: buyer.uuid })).json();
+      check("theme bought once, kept forever", t1.owned && t1.coins === before - 1 && t2.cost === 0 && p2.coins === before - 1 && p2.colorUnlocks?.theme_ocean > Date.now() + 1e12, `${before}→${p2.coins}`);
+    } finally { await setConfig({ spendTileTheme: orig ?? 150 }); }
+
+    await setConfig({ feature_endless: 0 });
+    try {
+      const off = await post({ type: "endless_start", uuid, mode: "classic" });
+      const offProf = await (await post({ type: "profile", uuid })).json();
+      check("endless switch turns the mode off", off.status === 404 && offProf.endless === null);
+    } finally { await setConfig({ feature_endless: 1 }); }
+  }
+
+  // Blitz budget = letters × seconds + 50s; wait it out, then submit a perfect run
+  const budget = (late.puzzle.letters.length * late.blitzSecs + 50) * 1000;
+  if (budget <= 90000) {
+    await sleep(Math.max(0, budget + 1500 - (Date.now() - lateStarted)));
+    const lr = await (await post({ type: "endless_submit", uuid: lateUuid, name: "LATE", seed: late.seed, moves: solveDaily(late.puzzle).moves })).json();
+    check("blitz runs over the time limit aren't ranked", lr.ok && lr.inTime === false && lr.ranked === false);
+  } else console.log(`  (skipping blitz time-limit check: budget ${Math.round(budget / 1000)}s)`);
+}
+
 async function analyticsAndFlags(dailyBots) {
   section = "Analytics & feature switches"; console.log(`\n▶ ${section}`);
   const bad = await post({ type: "track", event: "drop_tables", uuid: crypto.randomUUID() });
@@ -580,7 +686,7 @@ async function abuseLimits(savedCaps) {
 // ════════════════════════════════════════════════════════════════════════════
 console.log(`Lexterra bot tests → ${BASE}${ADMIN ? "" : "  (no admin password: some checks skipped)"}`);
 // All bots share this machine's IP, so lift the per-IP daily caps for the run (restored at the end)
-const CAP_KEYS = ["ipDailySubmits", "ipNewVisitors", "ipPushSubscribes"];
+const CAP_KEYS = ["ipDailySubmits", "ipNewVisitors", "ipPushSubscribes", "ipEndlessStarts"];
 let savedCaps = null;
 if (ADMIN) {
   const cfg = await getConfig();
@@ -595,6 +701,7 @@ const run = async (name, fn, ...args) => {
 await run("live", liveGame);
 await run("highstakes", highStakes);
 const dailyBots = (await run("daily", daily)) ?? [];
+await run("puzzles", puzzles, dailyBots);
 await run("analytics", analyticsAndFlags, dailyBots);
 await run("async", asyncGames);
 await run("security", securityRegressions);
