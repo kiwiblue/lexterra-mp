@@ -29,7 +29,7 @@ function injectStyles() {
   const st = document.createElement("style");
   st.id = "tut-styles";
   st.textContent = `
-    #tutorial-screen { position:fixed; inset:0; background:rgba(15,23,42,0.97); z-index:950; overflow-y:auto; display:none; }
+    #tutorial-screen { position:fixed; inset:0; background:#0f172a; z-index:950; overflow-y:auto; display:none; }
     #tutorial-screen .t-wrap { max-width:420px; margin:0 auto; padding:1.25rem 1rem; display:flex; flex-direction:column; gap:1rem; }
     #tutorial-screen .t-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; width:min(100%,320px); margin:0 auto; }
     #tutorial-screen .t-cell { aspect-ratio:1; border:2px solid #1e3a5f; border-radius:6px; display:flex; align-items:center; justify-content:center;
