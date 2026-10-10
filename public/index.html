@@ -260,11 +260,14 @@
     #daily-card > * { position: relative; z-index: 1; }
     #daily-card .hero-over { color: var(--daily); }
     #daily-card h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-    #daily-card .btn-primary { background: var(--daily-fill); color: var(--daily-on); width: 100%; min-height: 48px; }
-    #daily-card .btn-secondary { width: 100%; min-height: 48px; background: var(--surface); }
+    #daily-card-btn { width: 100%; min-height: 48px; }
+    #daily-card-btn.btn-primary { background: var(--daily-fill); color: var(--daily-on); }
+    #daily-card-btn.btn-secondary { background: var(--surface); }
+    #daily-freeze-row { align-items: center; }
+    #daily-freeze-text { flex: 1; min-width: 0; }
+    #daily-freeze-btn { background: var(--surface); white-space: nowrap; }
     #daily-card .hc-sub b, #daily-card .hc-sub strong { color: var(--text); }
     #daily-freeze-row { padding-top: 10px; border-top: 1px dashed rgba(var(--daily-rgb), .5); }
-    #daily-freeze-btn { min-height: 36px; }
 
     /* Game-mode grid */
     .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
