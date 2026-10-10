@@ -1,0 +1,14 @@
+# Cloudflare Pages response headers
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+
+# Admin page: keep it out of search results
+/admin*
+  X-Robots-Tag: noindex, nofollow
+
+# Service worker must always be re-checked so updates reach players promptly
+/sw.js
+  Cache-Control: no-cache
