@@ -33,7 +33,7 @@ function injectStyles() {
     #tutorial-screen .t-wrap { max-width:420px; margin:0 auto; padding:1.25rem 1rem; display:flex; flex-direction:column; gap:1rem; }
     #tutorial-screen .t-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; width:min(100%,320px); margin:0 auto; }
     #tutorial-screen .t-cell { aspect-ratio:1; border:2px solid var(--cell-border); border-radius:6px; display:flex; align-items:center; justify-content:center;
-      font-weight:900; font-size:clamp(1.2rem,8vw,2.2rem); color:var(--text); background:var(--cell-bg); user-select:none;
+      font-weight:900; font-size:clamp(1.2rem,8vw,2.2rem); color:var(--tile-ink); background:var(--cell-bg); user-select:none;
       text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000; }
     #tutorial-screen .t-cell.mine { color:var(--brand-ink); }
     #tutorial-screen .t-cell.won { background:rgba(var(--brand-rgb),0.25); border-color:var(--brand-fill); }

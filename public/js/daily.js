@@ -134,7 +134,7 @@ function injectStyles() {
   st.textContent = `
     #daily-screen { position:fixed; inset:0; background:var(--bg); z-index:900; overflow-y:auto; display:none;
       --acc:var(--daily); --acc-fill:var(--daily-fill); --acc-on:var(--daily-on); --acc-rgb:var(--daily-rgb);
-      --d-bg:var(--cell-bg); --d-border:var(--cell-border); --d-text:var(--text); --d-starter:var(--daily-fill); --d-used-bg:rgba(34,197,94,0.18); --d-used-border:#166534; --d-glow:0 0 0 transparent; }
+      --d-bg:var(--cell-bg); --d-border:var(--cell-border); --d-text:var(--tile-ink); --d-starter:var(--daily-fill); --d-used-bg:rgba(34,197,94,0.18); --d-used-border:#166534; --d-glow:0 0 0 transparent; }
     #daily-screen.th-neon  { --d-bg:#0b0820; --d-border:#3b2a7a; --d-text:#67e8f9; --d-starter:#f0abfc; --d-used-bg:rgba(217,70,239,0.22); --d-used-border:#d946ef; --d-glow:0 0 8px rgba(103,232,249,0.7); }
     #daily-screen.th-gold  { --d-bg:#1c1405; --d-border:#57400c; --d-text:#fde68a; --d-starter:#fb923c; --d-used-bg:rgba(234,179,8,0.22); --d-used-border:#ca8a04; }
     #daily-screen.th-ocean { --d-bg:#082f49; --d-border:#0e7490; --d-text:#e0f2fe; --d-starter:#a5f3fc; --d-used-bg:rgba(6,182,212,0.25); --d-used-border:#06b6d4; }
@@ -166,7 +166,7 @@ function injectStyles() {
     #daily-screen .d-queue { display:flex; align-items:center; gap:0.5rem; justify-content:center; }
     #daily-screen .d-tile { width:48px; height:48px; border-radius:10px; background:var(--acc-fill); color:var(--acc-on); font-family:var(--font-display); font-weight:800; font-size:1.6rem; box-shadow:0 2px 0 rgba(0,0,0,.18);
       display:flex; align-items:center; justify-content:center; }
-    #daily-screen .d-tile.small { width:30px; height:30px; font-size:0.95rem; background:var(--surface); border:1px solid var(--border); opacity:0.8; }
+    #daily-screen .d-tile.small { width:30px; height:30px; font-size:0.95rem; background:var(--surface-2); border:1px solid var(--border); opacity:1;  color:var(--text-2); box-shadow:none;}
     #daily-screen .d-timer { height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; }
     #daily-screen .d-timer > div { height:100%; background:var(--success); transition:width 0.1s linear, background 0.2s; }
     #daily-screen .d-status { min-height:1.2em; text-align:center; font-size:0.82rem; color:var(--text-2); }
@@ -174,12 +174,12 @@ function injectStyles() {
     #daily-screen .d-row .btn { flex:1; padding:0.6rem 0.5rem; font-size:0.9rem; }
     #daily-screen .d-words { display:flex; flex-wrap:wrap; gap:0.35rem; }
     #daily-screen .d-word { padding:0.2rem 0.5rem; background:var(--surface-2); border-left:3px solid var(--success); border-radius:6px; font-size:0.82rem; color:var(--text); }
-    #daily-screen .d-big { font-size:2.4rem; font-weight:900; color:var(--clr-primary-light); text-align:center; line-height:1; }
+    #daily-screen .d-big { font-size:2.4rem; font-weight:900; color:var(--acc); text-align:center; line-height:1; }
     #daily-screen .d-share { white-space:pre; font-size:1.25rem; line-height:1.15; text-align:center; letter-spacing:0.05em; }
     #daily-screen .d-lb-row { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; font-size:0.85rem; padding:0.35rem 0.25rem; border-bottom:1px solid var(--surface); color:var(--text-2); border-radius:4px; }
     #daily-screen .d-lb-row.tap { cursor:pointer; }
     @media (hover:hover) { #daily-screen .d-lb-row.tap:hover { background:var(--surface-2); } }
-    #daily-screen .d-lb-row.me { color:var(--clr-primary-light); font-weight:bold; }
+    #daily-screen .d-lb-row.me { color:var(--acc); font-weight:bold; }
     #daily-screen .d-lb-row .d-eye { color:var(--muted); margin-left:0.2rem; }
     #daily-screen .d-note { font-size:0.75rem; color:var(--muted); text-align:center; }
     #daily-screen .d-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:999px; font-size:0.68rem; font-weight:bold; letter-spacing:0.06em; text-transform:uppercase; }
@@ -210,7 +210,8 @@ function gridHTML(g, usedSet, cs, { mini = false, freshKey = null } = {}) {
 
 function headerHTML() {
   let title, sub;
-  if (kind === "daily") { title = `DAILY #${puzzle.number}`; sub = view === "play" ? `${esc(puzzle.date)} · same board for everyone` : esc(puzzle.date); }
+  const nice = puzzle.date ? new Date(puzzle.date + "T00:00:00Z").toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }) : "";
+  if (kind === "daily") { title = `DAILY #${puzzle.number}`; sub = view === "play" ? `${esc(nice)} · same board for everyone` : esc(nice); }
   else if (kind === "replay") { title = `DAILY #${puzzle.number} · REPLAY`; sub = "Just for fun — your ranked score stays"; }
   else if (mode === "blitz") { title = "⚡ BLITZ"; sub = `${blitzSecs} seconds per letter`; }
   else { title = "ENDLESS"; sub = "Classic · take your time"; }
@@ -251,7 +252,7 @@ function render() {
       </div>
     </div>
     <div class="card" style="gap:0.5rem">
-      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Your words</h2><span style="font-weight:900;color:var(--clr-primary-light)">${score()} pts</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2 style="margin:0">Your words</h2><span style="font-weight:900;color:var(--acc)">${score()} pts</span></div>
       <div class="d-words">${claimed.length ? claimed.map(c => `<span class="d-word">${esc(c.word)} <span style="color:var(--muted)">+${c.word.length}</span></span>`).join("") : `<span style="font-size:0.8rem;color:var(--muted)">No words yet — words go across, down or diagonally, and score one point per letter.${kind === "replay" ? " This replay isn't ranked." : ""}</span>`}</div>
     </div>`;
   lastPlaced = null;
@@ -467,7 +468,7 @@ async function loadDailyBoards() {
     best.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;width:100%;gap:0.5rem">
         <h2 style="margin:0">${at === 0 ? "Today's best board" : `Today's #${at + 1} board`}</h2>
-        <span style="font-weight:900;color:var(--clr-primary-light);white-space:nowrap">${esc(data.name)} · ${data.score}</span>
+        <span style="font-weight:900;color:var(--acc);white-space:nowrap">${esc(data.name)} · ${data.score}</span>
       </div>
       ${gridHTML(g, used, cellSize(5, 40, 3), { mini: true })}
       <button class="btn btn-secondary" style="width:100%" id="daily-best-btn">Watch how they did it</button>`;
@@ -614,7 +615,7 @@ function renderBoardViewer() {
     <div class="card" style="gap:0.75rem">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem">
         <h2 style="margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}'s board</h2>
-        <span style="font-weight:900;color:var(--clr-primary-light);white-space:nowrap">${pts} / ${d.score} pts</span>
+        <span style="font-weight:900;color:var(--acc);white-space:nowrap">${pts} / ${d.score} pts</span>
       </div>
       ${gridHTML(g, used, cellSize(), { freshKey: lastCell })}
       <div class="d-status" style="color:${lastWord ? "var(--success)" : "var(--text-2)"}">${lastWord ? `${esc(lastWord)} +${lastWord.length}` : viewer.step >= total ? "Final board" : `Move ${viewer.step} of ${total}`}</div>
@@ -646,7 +647,7 @@ function renderThemes() {
         return `<button class="d-theme${t.id === cur ? " on" : ""}" onclick="dailyPickTheme('${t.id}')">
           <span class="d-swatch"><span style="background:${t.swatch[0]};color:${t.swatch[1]};border:1px solid ${t.swatch[2]}">A</span><span style="background:${t.swatch[2]}55;border:1px solid ${t.swatch[2]};color:${t.swatch[1]}">B</span></span>
           <span style="flex:1;font-weight:bold">${t.name}</span>
-          <span style="font-size:0.78rem;color:${t.id === cur ? "var(--clr-primary-light)" : has ? "var(--text-2)" : "var(--warn-ink)"}">${t.id === cur ? "In use" : has ? "Use" : `${cost} coins`}</span>
+          <span style="font-size:0.78rem;color:${t.id === cur ? "var(--acc)" : has ? "var(--text-2)" : "var(--warn-ink)"}">${t.id === cur ? "In use" : has ? "Use" : `${cost} coins`}</span>
         </button>`;
       }).join("")}
       <button class="btn btn-secondary" style="width:100%" onclick="dailyThemesBack()">Done</button>

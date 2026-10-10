@@ -61,7 +61,7 @@
       --endless: #0F766E; --endless-fill: #0F766E; --endless-on: #FFFFFF; --endless-rgb: 15, 118, 110;
       --success: #15803D; --success-rgb: 21, 128, 61; --danger: #B91C1C; --danger-rgb: 185, 28, 28;
       --warn-ink: #B45309; --warn-bg: #FEF3C7;
-      --cell-bg: #FFFFFF; --cell-border: #D9D2C5;
+      --cell-bg: #FFFFFF; --cell-border: #D9D2C5; --tile-ink: #FFFFFF;
       --scrim: rgba(28, 25, 23, 0.45);
       --e1: 0 1px 2px rgba(28,25,23,.05), 0 1px 3px rgba(28,25,23,.07);
       --e2: 0 6px 16px rgba(28,25,23,.10);
@@ -87,7 +87,7 @@
       --endless: #3DD6C4; --endless-fill: #3DD6C4; --endless-on: #0E1116; --endless-rgb: 61, 214, 196;
       --success: #4ADE80; --success-rgb: 74, 222, 128; --danger: #F87171; --danger-rgb: 248, 113, 113;
       --warn-ink: #FCD34D; --warn-bg: #2A2110;
-      --cell-bg: #10151C; --cell-border: #2A3A52;
+      --cell-bg: #10151C; --cell-border: #2A3A52; --tile-ink: #E2E8F0;
       --scrim: rgba(5, 7, 10, 0.7);
       --e1: none; --e2: 0 8px 24px rgba(0,0,0,.35); --e3: 0 16px 48px rgba(0,0,0,.55);
     }
@@ -104,7 +104,7 @@
         --endless: #3DD6C4; --endless-fill: #3DD6C4; --endless-on: #0E1116; --endless-rgb: 61, 214, 196;
         --success: #4ADE80; --success-rgb: 74, 222, 128; --danger: #F87171; --danger-rgb: 248, 113, 113;
         --warn-ink: #FCD34D; --warn-bg: #2A2110;
-        --cell-bg: #10151C; --cell-border: #2A3A52;
+        --cell-bg: #10151C; --cell-border: #2A3A52; --tile-ink: #E2E8F0;
         --scrim: rgba(5, 7, 10, 0.7);
         --e1: none; --e2: 0 8px 24px rgba(0,0,0,.35); --e3: 0 16px 48px rgba(0,0,0,.55);
       }
@@ -290,7 +290,8 @@
     /* Join-with-code row */
     .card.code-row { flex-direction: row; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; }
     .code-row label { font-size: 0.875rem; font-weight: 600; color: var(--text-2); white-space: nowrap; }
-    #room-code-input { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.25em; font-weight: 600; text-align: center; height: 44px; flex: 1; min-width: 0; padding: 0 8px; }
+    .card.code-row { justify-content: center; }
+    #room-code-input { max-width: 260px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.25em; font-weight: 600; text-align: center; height: 44px; flex: 1; min-width: 0; padding: 0 8px; }
     .code-row .btn { flex-shrink: 0; min-height: 44px; }
 
     /* Lists */
@@ -307,6 +308,16 @@
     .lb-row:last-child { border-bottom: none; }
     .wk-row { display: flex; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
     .wk-row.me { color: var(--brand-ink); font-weight: 700; }
+    .rk-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 2px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+    .rk-row:last-child { border-bottom: 0; }
+    .rk-pos { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8125rem; font-weight: 700; background: var(--surface-2); color: var(--muted); flex-shrink: 0; }
+    .rk-row:nth-child(1) .rk-pos { background: #F5B700; color: #1C1917; }
+    .rk-row:nth-child(2) .rk-pos { background: #CBD5E1; color: #1C1917; }
+    .rk-row:nth-child(3) .rk-pos { background: #D6A27A; color: #1C1917; }
+    .rk-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rk-score { font-family: var(--font-display); font-weight: 700; font-size: 1.0625rem; }
+    .rk-row.me { background: rgba(var(--brand-rgb), .08); border-radius: var(--r-md); padding-left: 8px; padding-right: 8px; }
+    .rk-row.me .rk-name { color: var(--brand-ink); }
 
     /* Me tab */
     .profile-card { flex-direction: row; align-items: center; gap: 14px; }
@@ -320,8 +331,11 @@
     .stat { background: var(--surface-2); border-radius: var(--r-md); padding: 12px 10px; text-align: center; }
     .stat b { display: block; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
     .stat span { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-    .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 2px; border-bottom: 1px solid var(--border); background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
-    .menu-row:last-child { border-bottom: 0; }
+    .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 6px 2px; border: 0; background: none; width: 100%; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+    .menu-row + .menu-row { border-top: 1px solid var(--border); }
+    .auth-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    .auth-form input { flex: 1 1 200px; min-width: 0; }
+    .auth-form .btn { flex: 1 0 auto; }
     .menu-row .mr-label { display: flex; align-items: center; gap: 12px; font-weight: 500; }
     .menu-row .mr-icon { width: 32px; height: 32px; border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--text-2); }
     .menu-row .mr-icon svg { width: 18px; height: 18px; }
@@ -418,6 +432,7 @@
     .lbtn:hover { border-color: var(--brand-ink); }
     .lbtn.sel { border-color: var(--brand-ink); background: rgba(var(--brand-rgb), .16); color: var(--brand-ink); }
     .action-bar { display: flex; gap: 8px; }
+    #end-board-container { display: flex; justify-content: center; }
     .info-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
     .info-tags:last-child { margin-bottom: 0; }
     .info-tag { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 600; color: var(--text-2); }
@@ -439,6 +454,9 @@
     #site-footer a { color: inherit; }
 
     /* ── Responsive ────────────────────────────────────────────────────── */
+    @media (max-width: 479px) {
+      .setting-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
     @media (max-width: 380px) {
       .mode-card { min-height: 140px; padding: 14px; }
       .mc-desc { font-size: 0.78rem; }
@@ -602,8 +620,30 @@
 
   <!-- ═══ RANKS ═══ -->
   <section class="tab-panel" id="tab-ranks" aria-label="Leaderboards">
-    <div class="greet"><div><h2>Leaderboards</h2><p>See who's on top — this week and all time.</p></div></div>
-    <div class="card" id="high-scores-card">
+    <div class="greet"><div><h2>Leaderboards</h2><p>See who's on top in every game.</p></div></div>
+    <div class="seg-tab-bar" role="tablist" aria-label="Leaderboard">
+      <button class="seg-tab selected" data-rank="daily" onclick="setRankView('daily')">Daily</button>
+      <button class="seg-tab" data-rank="endless" onclick="setRankView('endless')">Endless</button>
+      <button class="seg-tab" data-rank="matches" onclick="setRankView('matches')">Matches</button>
+    </div>
+    <div class="card rank-view" id="rank-daily">
+      <div class="hc-row"><h2 id="rank-daily-title">Today's daily puzzle</h2><span class="chip" id="rank-daily-count"></span></div>
+      <div id="rank-daily-rows" class="list"><p class="placeholder">Loading…</p></div>
+      <button class="btn btn-daily btn-block" onclick="openDailyScreen()" id="rank-daily-btn">Play today's puzzle</button>
+    </div>
+    <div class="card rank-view" id="rank-endless" style="display:none">
+      <div class="seg-tab-bar">
+        <button class="seg-tab selected" data-emode="classic" onclick="setEndlessRank('classic')">Classic</button>
+        <button class="seg-tab" data-emode="blitz" onclick="setEndlessRank('blitz')">⚡ Blitz</button>
+      </div>
+      <div class="pill-group">
+        <span class="pill-label">Period</span>
+        <button class="size-pill selected" data-eperiod="week" onclick="setEndlessRank(null,'week')">This week</button>
+        <button class="size-pill" data-eperiod="all" onclick="setEndlessRank(null,'all')">All time</button>
+      </div>
+      <div id="rank-endless-rows" class="list"><p class="placeholder">Loading…</p></div>
+    </div>
+    <div class="card rank-view" id="high-scores-card" style="display:none">
       <div class="seg-tab-bar">
         <button class="seg-tab selected" id="lb-view-leaderboard" onclick="lbSetTab('leaderboard')">Leaderboard</button>
         <button class="seg-tab" id="lb-view-highscores" onclick="lbSetTab('highscores')">High scores</button>
@@ -655,8 +695,8 @@
         <div id="auth-input-view">
           <h2 style="margin-bottom:4px">Save your progress</h2>
           <p class="hc-sub" style="margin:0 0 12px;padding-right:2rem">Enter your email to keep your coins, scores and games — and play on any device. No password needed.</p>
-          <div style="display:flex;gap:8px">
-            <input type="email" id="auth-email-input" placeholder="you@example.com" onkeydown="if(event.key==='Enter')authSubmitEmail()" style="flex:1;min-width:0">
+          <div class="auth-form">
+            <input type="email" id="auth-email-input" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')authSubmitEmail()">
             <button id="auth-submit-btn" class="btn btn-primary" onclick="authSubmitEmail()" style="white-space:nowrap">Save progress</button>
           </div>
           <p id="auth-status" style="font-size:0.8125rem;color:var(--danger);margin:8px 0 0;min-height:1em"></p>
@@ -1260,7 +1300,7 @@
   function renderLobby() {
     show("lobby-screen");
     const subEl = document.getElementById('subtitle');
-    if (subEl) subEl.textContent = 'MULTIPLAYER';
+    if (subEl) subEl.textContent = 'Game lobby';
     sendLobbyHello("game");
     document.getElementById("room-code-display").textContent = roomId;
 
@@ -1568,10 +1608,10 @@
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
           ${state.settings?.pace === 'async' ? `
-          <button class="btn-danger btn-leave" onclick="leaveAsyncGame()">HOME — KEEP MY SEAT</button>
-          <button class="btn-danger" onclick="returnToLobby()">RESIGN</button>` : `
-          ${isHost ? `<button class="btn-danger" onclick="restartToLobby()">RESTART GAME</button>` : ''}
-          <button class="btn-danger btn-leave" onclick="returnToLobby()">RETURN TO LOBBY</button>`}
+          <button class="btn-danger btn-leave" onclick="leaveAsyncGame()">Home — keep my seat</button>
+          <button class="btn-danger" onclick="returnToLobby()">Resign</button>` : `
+          ${isHost ? `<button class="btn-danger" onclick="restartToLobby()">Restart game</button>` : ''}
+          <button class="btn-danger btn-leave" onclick="returnToLobby()">Leave game</button>`}
         </div>
       </div>`;
     const grid = document.getElementById("game-grid");
@@ -2181,7 +2221,7 @@
         const owner = state.territory?.[r]?.[c];
         const ownerColor = owner ? pColor(owner) : null;
         cell.style.background = ownerColor ? ownerColor + "55" : "";
-        cell.style.color = gCell ? (pColor(gCell.pi) ?? "var(--text)") : "var(--text)";
+        cell.style.color = gCell ? (pColor(gCell.pi) ?? "var(--tile-ink)") : "var(--tile-ink)";
         cell.innerHTML = gCell ? `<span class="gcell-letter">${gCell.letter}</span>` : '';
         cell.className = "gcell";
         if (claimPath) {
@@ -2305,9 +2345,9 @@
     }
     html += `<div class="action-bar" style="margin-top:${lettersLeft > 0 || claimMode ? "0.75rem" : "0"}">
       <button class="btn ${claimMode ? "btn-primary" : "btn-secondary"}" onclick="toggleClaimMode()" style="flex:1">
-        ${claimMode ? "Cancel Claim" : "Claim Word"}
+        ${claimMode ? "Cancel claim" : "Claim word"}
       </button>
-      ${!claimMode ? `<button class="btn btn-secondary" onclick="doPass()" style="flex:1">${hasActedThisTurn ? "Finish Turn" : "Pass"}</button>` : ""}
+      ${!claimMode ? `<button class="btn ${hasActedThisTurn ? "btn-primary" : "btn-secondary"}" onclick="doPass()" style="flex:1">${hasActedThisTurn ? "Finish turn" : "Pass"}</button>` : ""}
     </div>`;
     if (pendingUndo && !claimMode) {
       const cost = coinConfig.spendUndoLetter;
@@ -2730,7 +2770,7 @@
         const gCell = state.grid?.[r]?.[c];
         const owner = state.territory?.[r]?.[c];
         const ownerColor = owner ? pColor(owner) : null;
-        const letterColor = gCell ? (pColor(gCell.pi) ?? 'var(--text)') : 'var(--faint)';
+        const letterColor = gCell ? (pColor(gCell.pi) ?? 'var(--tile-ink)') : 'var(--faint)';
         const isHl = hlPath.some(p => p.r === r && p.c === c);
         const bg = isHl ? hlColor + '33' : (ownerColor ? ownerColor + '55' : '');
         const border = isHl ? `2px solid ${hlColor}` : '2px solid var(--cell-border)';
@@ -3617,6 +3657,7 @@
   const IS_PROD = PROD_HOSTS.includes(location.hostname);
   const SERVER_HOST = IS_PROD ? "api.lexterragame.com" : "dev-api.lexterragame.com";
   const STATS_URL = `https://${SERVER_HOST}/parties/stats/main`;
+  window.LX_STATS_URL = STATS_URL; // read by js/ui.js (Ranks tab)
   if (!IS_PROD) document.getElementById("subtitle")?.insertAdjacentHTML("beforeend", '<span class="dev-badge">DEV</span>');
 
   // ── Growth features ──────────────────────────────────────────────────────

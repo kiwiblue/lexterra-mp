@@ -158,9 +158,61 @@ window.addEventListener("lx:stats", (e) => {
   $("me-xp").textContent = xp.toLocaleString();
 });
 
+// ── Ranks tab: Daily · Endless · Matches ───────────────────────────────────
+let rankView = "daily", endlessMode = "classic", endlessPeriod = "week", myPidCache = null;
+async function myPid() {
+  if (myPidCache) return myPidCache;
+  const uuid = store.get("lexterra_uuid");
+  if (!uuid || !crypto.subtle) return null;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uuid));
+  return (myPidCache = Array.from(new Uint8Array(buf).slice(0, 8), b => b.toString(16).padStart(2, "0")).join(""));
+}
+async function rankRows(list, el, scoreKey = "score", unit = "pts") {
+  const me = await myPid();
+  el.innerHTML = list.length ? list.slice(0, 20).map((e, i) =>
+    `<div class="rk-row${e.pid === me ? " me" : ""}"><span class="rk-pos">${i + 1}</span><span class="rk-name">${esc(e.name)}${e.pid === me ? " (you)" : ""}</span><span class="rk-score">${e[scoreKey]}<span class="hc-sub" style="font-family:var(--font-ui);font-weight:500"> ${unit}</span></span></div>`).join("")
+    : `<p class="placeholder">No scores yet — yours could be first!</p>`;
+}
+async function loadRanks() {
+  const base = window.LX_STATS_URL;
+  if (!base) return;
+  try {
+    if (rankView === "daily") {
+      const lb = await (await fetch(`${base}?dailylb=${new Date().toISOString().slice(0, 10)}`)).json();
+      $("rank-daily-count").textContent = lb.top?.length ? `${lb.top.length}${lb.top.length >= 50 ? "+" : ""} played` : "";
+      await rankRows(lb.top ?? [], $("rank-daily-rows"));
+      $("rank-daily-btn").style.display = $("daily-card")?.style.display === "none" ? "none" : "";
+      $("rank-daily-btn").textContent = $("daily-card-btn")?.textContent || "Play today's puzzle";
+    } else if (rankView === "endless") {
+      const lb = await (await fetch(`${base}?endlesslb=${endlessMode}&period=${endlessPeriod}`)).json();
+      await rankRows(lb.top ?? [], $("rank-endless-rows"));
+    }
+  } catch {
+    const el = $(rankView === "daily" ? "rank-daily-rows" : "rank-endless-rows");
+    if (el) el.innerHTML = `<p class="placeholder">Couldn't load the leaderboard.</p>`;
+  }
+}
+window.setRankView = function (v) {
+  rankView = v;
+  document.querySelectorAll("[data-rank]").forEach(b => b.classList.toggle("selected", b.dataset.rank === v));
+  $("rank-daily").style.display = v === "daily" ? "" : "none";
+  $("rank-endless").style.display = v === "endless" ? "" : "none";
+  $("high-scores-card").style.display = v === "matches" ? "" : "none";
+  loadRanks();
+};
+window.setEndlessRank = function (mode, period) {
+  if (mode) endlessMode = mode;
+  if (period) endlessPeriod = period;
+  document.querySelectorAll("[data-emode]").forEach(b => b.classList.toggle("selected", b.dataset.emode === endlessMode));
+  document.querySelectorAll("[data-eperiod]").forEach(b => b.classList.toggle("selected", b.dataset.eperiod === endlessPeriod));
+  loadRanks();
+};
+const origSetTab = window.setTab;
+window.setTab = function (tab, opts) { origSetTab(tab, opts); if (tab === "ranks") loadRanks(); };
+
 // ── Small DOM-driven touches ───────────────────────────────────────────────
 // Daily hero: overline shows today's date
-$("daily-over").textContent = `Daily puzzle · ${new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`;
+$("daily-over").textContent = `Daily puzzle · ${new Date().toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" })}`;
 
 // Endless card: friendly text until there's a personal best to show
 const endlessBest = $("endless-best");

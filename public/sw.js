@@ -1,8 +1,8 @@
 // Lexterra service worker: app shell caching (installable/offline-friendly) and push notifications.
 // Pages are fetched network-first so players always get the latest version when online.
 
-const CACHE = "lexterra-v2";
-const SHELL = ["/", "/words.js", "/botwords.js", "/js/daily.js", "/js/tutorial.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "lexterra-v3";
+const SHELL = ["/", "/words.js", "/botwords.js", "/js/daily.js", "/js/tutorial.js", "/js/ui.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
