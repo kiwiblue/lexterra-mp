@@ -30,9 +30,9 @@ const getJson = async (q) => (await fetch(`${STATS}?${q}`)).json();
 // ── Bot client ─────────────────────────────────────────────────────────────
 class Bot {
   constructor(name, uuid = crypto.randomUUID()) { this.name = name; this.uuid = uuid; this.msgs = []; this.waiters = []; }
-  async connect(room) {
+  async connect(room, id) {
     this.room = room;
-    this.id = `${this.name.toLowerCase()}-${rand()}`;
+    this.id = id ?? `${this.name.toLowerCase().replace(/[^a-z0-9]/g, "")}-${rand()}`;
     this.ws = new WebSocket(`${WS}/parties/main/${room}?_pk=${this.id}`);
     this.ws.addEventListener("message", (e) => {
       const m = JSON.parse(e.data);
@@ -44,6 +44,7 @@ class Bot {
     return this;
   }
   send(o) { this.ws.send(JSON.stringify(o)); }
+  raw(t) { this.ws.send(t); }
   state() { return [...this.msgs].reverse().find(m => m.type === "state")?.state; }
   me() { return this.state()?.players?.[this.id]; }
   waitFor(pred, ms = 8000, label = "") {
@@ -344,6 +345,54 @@ async function asyncGames() {
     check("My Games shows the finished game for both", endB?.phase === "ended" && ["ended", "left"].includes(endA?.phase), `${endB?.phase}/${endA?.phase}`);
     A.close(); B.close();
 
+    // ── Attacks on async seats ──
+    const E = new Bot("ASYE"), F = new Bot("ASYF");
+    const code3 = await createRoom(E, { pace: "async", boardSize: 5 });
+    await joinRoom(F, code3);
+    E.send({ type: "start" });
+    await E.waitState(st => st.phase === "playing" && st.turnDeadline);
+    // M1: a pass disguised with a nested "hover" must still update the turn deadline
+    const dl0 = E.state().turnDeadline;
+    await sleep(1100);
+    const turnMoved = E.waitNewState(st => st.cur === F.id && st.turnDeadline > dl0, 8000, "crafted pass");
+    E.raw(JSON.stringify({ type: "pass", isRealPass: true, x: { type: "hover" } }));
+    s = await turnMoved.catch(() => E.state());
+    check("crafted 'hover' pass can't skip the async bookkeeping", s.cur === F.id && s.turnDeadline > dl0);
+    // M2: the current player reconnecting must not extend their deadline
+    const dlF = s.turnDeadline; // the deadline the server set when the turn passed to F
+    const oldF = F.id;
+    F.close(); await sleep(600);
+    await F.connect(code3);
+    F.send({ type: "rejoin", oldConnId: oldF, uuid: F.uuid });
+    s = await F.waitState(st => st.players?.[F.id], 8000, "F rejoin");
+    await sleep(800);
+    check("reconnecting doesn't reset your turn deadline", F.state().turnDeadline === dlF, `${dlF} → ${F.state().turnDeadline}`);
+    // H1: F goes offline; an attacker uses F's (public) connection id without F's account
+    const fId = F.id;
+    F.close(); await sleep(800);
+    const X = new Bot("XATTACK");
+    await X.connect(code3, fId);
+    await X.waitFor(m => m.type === "state");
+    X.send({ type: "pass", isRealPass: true });
+    X.send({ type: "leave_game" });
+    await sleep(700);
+    s = E.state();
+    check("acting as an offline player's connection id is ignored", s.cur === fId && s.turnOrder.includes(fId));
+    X.send({ type: "rejoin", oldConnId: fId });
+    X.send({ type: "rejoin", oldConnId: fId, uuid: crypto.randomUUID() });
+    const xe = await X.waitFor(m => m.type === "error", 5000).catch(() => null);
+    await sleep(500);
+    check("rejoining someone's seat without their account is refused", !!xe && E.state().turnOrder.includes(fId));
+    X.send({ type: "join", name: "X", uuid: crypto.randomUUID() });
+    await sleep(500);
+    check("joining with a seated player's connection id is refused", E.state().players[fId]?.name === "ASYF");
+    X.close();
+    // H1: a second socket can't take over a *live* connection id
+    const Y = new Bot("YATTACK");
+    const hijack = await Y.connect(code3, E.id).then(() => "connected", () => "refused");
+    check("a live player's connection id can't be taken over", hijack === "refused");
+    E.close();
+
     // Feature switch: async off → can't start
     await setConfig({ feature_async: 0 });
     const C = new Bot("ASYC"), D = new Bot("ASYD");
@@ -389,8 +438,12 @@ async function daily() {
   const lb = await getJson(`dailylb=${p.date}`);
   const sorted = [...(lb.top ?? [])].every((e, i, a) => i === 0 || a[i - 1].score >= e.score);
   check("daily leaderboard sorted, no UUIDs", sorted && lb.top.length >= 12 && !JSON.stringify(lb).includes(bots[0].uuid));
-  const mine = await getJson(`daily=1&uuid=${bots[0].uuid}`);
-  check("home card knows you've played", mine.mine?.score === subs[0].res.score);
+  const prof = await (await post({ type: "profile", uuid: bots[0].uuid })).json();
+  check("profile (POST) knows you've played", prof.dailyMine?.score === subs[0].res.score && prof.streak?.current === 1);
+  const pub = await getJson(`daily=1&uuid=${bots[0].uuid}`);
+  check("public daily endpoint never returns a player's result", !("mine" in pub));
+  const empty = await post({ type: "daily_submit", uuid: crypto.randomUUID(), name: "EMPTY", date: p.date, moves: [] });
+  check("empty submissions rejected (no free coins)", empty.status === 400);
 
   // Streak freezes
   section = "Streaks"; console.log(`\n▶ ${section}`);
@@ -458,6 +511,10 @@ async function securityRegressions() {
   check("server-only push sends rejected", pushTurn.status === 403);
   const badSub = await post({ type: "push_subscribe", uuid: A.uuid, subscription: { endpoint: "http://evil.example/x", keys: { p256dh: "a", auth: "b" } } });
   check("non-https push endpoints rejected", badSub.status === 400);
+  const ssrf = await post({ type: "push_subscribe", uuid: A.uuid, subscription: { endpoint: "https://evil.example/collect", keys: { p256dh: "a", auth: "b" } } });
+  check("push endpoints limited to real push services", ssrf.status === 400);
+  const badRoom = await new Bot("R").connect("BAD!ROOM").then(() => "connected", () => "refused");
+  check("invalid room codes refused", badRoom === "refused");
   const evil = new Bot("EVIL");
   await evil.connect(code);
   evil.send({ type: "create", name: "EVIL", uuid: evil.uuid, settings: {} });
@@ -502,8 +559,34 @@ async function load() {
   check("move latency acceptable (p95 < 1.5s)", p(0.95) < 1500, `median ${p(0.5)}ms, p95 ${p(0.95)}ms, total ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 }
 
+async function abuseLimits(savedCaps) {
+  section = "Abuse limits"; console.log(`\n▶ ${section}`);
+  if (!ADMIN) return check("dev admin password available", false);
+  const d = await getJson("daily=1");
+  await setConfig({ ipDailySubmits: 1 });
+  const capped = await post({ type: "daily_submit", uuid: crypto.randomUUID(), name: "CAP", date: d.puzzle.date, moves: solveDaily(d.puzzle).moves });
+  check("per-IP daily-result cap enforced", capped.status === 429);
+  await setConfig(savedCaps); // restore before locking ourselves out of admin
+  // Admin password: 5 wrong guesses lock this IP out briefly (20s on dev)
+  const statuses = [];
+  for (let i = 0; i < 6; i++) statuses.push((await post({ type: "admin_analytics", password: `wrong-${i}` })).status);
+  const whileLocked = (await post({ type: "admin_analytics", password: ADMIN })).status;
+  check("admin password guessing locked out after 5 tries", statuses.slice(0, 5).every(s => s === 401) && statuses[5] === 429 && whileLocked === 429, statuses.join(","));
+  await sleep(21000);
+  const after = (await post({ type: "admin_analytics", password: ADMIN })).status;
+  check("lockout expires", after === 200);
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 console.log(`Lexterra bot tests → ${BASE}${ADMIN ? "" : "  (no admin password: some checks skipped)"}`);
+// All bots share this machine's IP, so lift the per-IP daily caps for the run (restored at the end)
+const CAP_KEYS = ["ipDailySubmits", "ipNewVisitors", "ipPushSubscribes"];
+let savedCaps = null;
+if (ADMIN) {
+  const cfg = await getConfig();
+  savedCaps = Object.fromEntries(CAP_KEYS.map(k => [k, cfg[k]]));
+  await setConfig(Object.fromEntries(CAP_KEYS.map(k => [k, 100000])));
+}
 const run = async (name, fn, ...args) => {
   if (ONLY && !ONLY.includes(name)) return;
   try { return await fn(...args); }
@@ -516,6 +599,8 @@ await run("analytics", analyticsAndFlags, dailyBots);
 await run("async", asyncGames);
 await run("security", securityRegressions);
 await run("load", load);
+if (savedCaps) await run("abuse", abuseLimits, savedCaps);
+if (savedCaps && ONLY && !ONLY.includes("abuse")) await setConfig(savedCaps);
 
 const failed = results.filter(r => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

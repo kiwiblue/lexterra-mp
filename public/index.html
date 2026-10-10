@@ -564,7 +564,8 @@
   function isBotWord(w) { const s = getBotWordSet(); return s ? s.has(w.toUpperCase()) : true; }
 
   function randomRoomCode() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from(crypto.getRandomValues(new Uint8Array(6)), b => chars[b % chars.length]).join("");
   }
 
   function show(screenId) {
@@ -656,7 +657,8 @@
       const overlay = document.getElementById("reconnect-overlay");
       if (overlay) overlay.style.display = "none";
       const savedConnId = localStorage.getItem("lexterra_connId");
-      const isReconnect = !isSpectating && savedConnId && savedConnId !== socket.id && state !== null;
+      // Any reconnect (even with the same id) must re-prove the account to get the seat back
+      const isReconnect = !isSpectating && state !== null;
       myConnId = socket.id;
       if (isReconnect) {
         socket.send(JSON.stringify({ type: "rejoin", oldConnId: savedConnId, uuid: getPlayerUUID() }));
@@ -2835,13 +2837,13 @@
     const uuid = getPlayerUUID();
     const base = `https://${SERVER_HOST}/parties/stats/main`;
     try {
-      const [cr, xr, cfgr] = await Promise.all([
-        fetch(`${base}?coins=${uuid}`),
-        fetch(`${base}?playerXp=${uuid}`),
+      const [pr, cfgr] = await Promise.all([
+        fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "profile", uuid }) }),
         fetch(`${base}?config`),
       ]);
-      const cd = await cr.json();
-      const xd = await xr.json();
+      const profile = await pr.json();
+      const cd = profile, xd = profile;
+      if (profile.streak) streakInfo = profile.streak;
       const cfgd = await cfgr.json();
       playerCoins = cd.coins ?? 0;
       colorUnlocks = cd.colorUnlocks ?? {};
@@ -3204,12 +3206,13 @@
     if (!card) return;
     if (!features.daily) { card.style.display = "none"; return; }
     try {
-      const uuid = encodeURIComponent(getPlayerUUID());
-      const [d, st] = await Promise.all([
-        fetch(`${STATS_URL}?daily=1&uuid=${uuid}`).then(r => r.json()),
-        features.streaks ? fetch(`${STATS_URL}?streak=${uuid}`).then(r => r.json()) : Promise.resolve(null),
+      const [d, prof] = await Promise.all([
+        fetch(`${STATS_URL}?daily=1`).then(r => r.json()),
+        statsPost({ type: "profile", uuid: getPlayerUUID() }).then(r => r.json()),
       ]);
       if (!d.puzzle) { card.style.display = "none"; return; }
+      d.mine = prof.dailyMine;
+      const st = features.streaks ? prof.streak : null;
       streakInfo = st;
       card.style.display = "";
       document.getElementById("daily-card-title").textContent = `Daily Puzzle #${d.puzzle.number}`;
@@ -3290,8 +3293,10 @@
         else if (g.phase === "left") { meta = "You left this game"; label = "View"; }
         else if (g.yourTurn) { meta = `Your turn · ${fmtLeft(g.deadline)} left`; label = "Play"; }
         else meta = `${escHtml(g.curName ?? "Opponent")}'s turn · ${fmtLeft(g.deadline)} left`;
-        return `<div class="mg-row${g.yourTurn ? ' turn' : ''}"><div style="min-width:0"><div class="mg-title">${vs}</div><div class="mg-meta">${meta} · ${escHtml(g.roomId)}</div></div><button class="btn ${g.yourTurn ? 'btn-primary' : 'btn-secondary'}" onclick="openAsyncGame('${escHtml(g.roomId)}')">${label}</button></div>`;
+        if (!/^[A-Z0-9]{4,8}$/.test(g.roomId)) return "";
+        return `<div class="mg-row${g.yourTurn ? ' turn' : ''}"><div style="min-width:0"><div class="mg-title">${vs}</div><div class="mg-meta">${meta} · ${g.roomId}</div></div><button class="btn ${g.yourTurn ? 'btn-primary' : 'btn-secondary'}" data-room="${g.roomId}">${label}</button></div>`;
       }).join("") : `<p class="hc-sub" style="margin:0">Play friends over hours or days — take your turn whenever suits. Start one, then invite a friend.</p>`;
+      list.querySelectorAll("button[data-room]").forEach(b => b.addEventListener("click", () => window.openAsyncGame(b.dataset.room)));
       const pb = document.getElementById("push-enable-btn");
       pb.style.display = features.push && games.length && pushSupported() && Notification.permission !== "granted" ? "" : "none";
     } catch { card.style.display = "none"; }
@@ -3604,7 +3609,7 @@
 </div>
 
 <div id="site-footer" style="text-align:center;font-size:0.65rem;color:#475569;user-select:none;padding:16px 0 10px;margin-top:1rem">
-  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.6.0 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
+  © <span id="footer-year"></span> · <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Chris Sandford</a> · v0.6.1 · <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Play Offline Version</a> · <span id="footer-online">0 players online</span>
 </div>
 </body>
 </html>

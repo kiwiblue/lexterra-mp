@@ -8,6 +8,10 @@ import { isBannedWord, isDictionaryWord, claimedVariant, straightPath } from "./
 const BASE_COLORS = ["Red","Blue","Yellow","Green","Grey"];
 const PREMIUM_COLORS_SV = ["Orange","Pink","Purple","Teal"];
 
+// Messages anyone may send before proving which seat (account) they own
+const OPEN_MESSAGE_TYPES = new Set(["create", "join", "rejoin", "watch", "join_request", "hover"]);
+const bindConn = (conn, uuid) => { try { conn.setState({ ...(conn.state ?? {}), uuid }); } catch {} };
+
 // Everything sent to browsers goes through publicState so player UUIDs never leak.
 const stateMsg = (state) => JSON.stringify({ type: "state", state: publicState(state) });
 
@@ -178,6 +182,7 @@ function performPass(state, isRealPass) {
   state.players[nextId].lettersLeft = 1;
   advanceHighStakesTurn(state, state.cur, nextId);
   state.cur = nextId;
+  state.turnNo = (state.turnNo ?? 0) + 1;
   return state.consecutivePasses >= state.turnOrder.length * 2;
 }
 
@@ -205,10 +210,11 @@ const humanUuids = (st) => Object.entries(st?.players ?? {}).filter(([, p]) => !
 async function asyncHooks(room, before) {
   const after = await room.storage.get("state");
   if (!isAsync(after)) return;
-  const key = (st) => st && JSON.stringify([st.phase, st.cur, humanUuids(st).map(([id, p]) => [id, p.uuid, p.score ?? 0, p.name])]);
+  const key = (st) => st && JSON.stringify([st.phase, st.cur, st.turnNo, humanUuids(st).map(([id, p]) => [id, p.uuid, p.score ?? 0, p.name])]);
   if (key(before) === key(after)) return;
 
-  const turnChanged = after.phase === "playing" && (before?.phase !== "playing" || before?.cur !== after.cur);
+  // Count turns, not connection ids — reconnecting changes your id but mustn't reset your deadline
+  const turnChanged = after.phase === "playing" && (before?.phase !== "playing" || (before?.turnNo ?? 0) !== (after.turnNo ?? 0));
   if (turnChanged) {
     after.turnDeadline = Date.now() + (after.settings.asyncTurnMs ?? 86400000);
     await room.storage.put("state", after);
@@ -320,6 +326,7 @@ async function processDisconnect(connId, room) {
         const next = state.turnOrder[0];
         advanceHighStakesTurn(state, connId, next);
         state.cur = next;
+        state.turnNo = (state.turnNo ?? 0) + 1;
         Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
         state.players[next].lettersLeft = 1;
       }
@@ -353,6 +360,14 @@ const handlers = {
       if (st && Object.values(st.players ?? {}).some(p => !p.isBot && p.uuid === msg.uuid)) msg = { type: "rejoin", uuid: msg.uuid };
     }
 
+    // Seats belong to accounts, not connection ids (which clients choose and everyone can see).
+    // Every action except joining/spectating needs a connection that proved the seat's account.
+    if (!OPEN_MESSAGE_TYPES.has(msg.type)) {
+      const st = await room.storage.get("state");
+      const seat = st?.players?.[conn.id];
+      if (!seat?.uuid || conn.state?.uuid !== seat.uuid) return;
+    }
+
     switch (msg.type) {
 
       // Host creates a new game
@@ -376,8 +391,10 @@ const handlers = {
           consecutivePasses: 0,
         };
         const validForHost = msg.hasPremium ? [...BASE_COLORS, ...PREMIUM_COLORS_SV] : BASE_COLORS;
-        state.players[conn.id] = { name: cleanName(msg.name, "HOST"), color: validForHost.includes(msg.color) ? msg.color : "Red", uuid: isUuid(msg.uuid) ? msg.uuid : null, score: 0, wordsFound: 0, isReady: false, isHost: true };
+        if (!isUuid(msg.uuid)) { conn.send(JSON.stringify({ type: "error", message: "Please reload the page and try again." })); return; }
+        state.players[conn.id] = { name: cleanName(msg.name, "HOST"), color: validForHost.includes(msg.color) ? msg.color : "Red", uuid: msg.uuid, score: 0, wordsFound: 0, isReady: false, isHost: true };
         await room.storage.put("state", state);
+        bindConn(conn, msg.uuid);
         room.broadcast(stateMsg(state));
         break;
       }
@@ -401,6 +418,8 @@ const handlers = {
           conn.send(JSON.stringify({ type: "error", message: "Game not available." }));
           return;
         }
+        if (!isUuid(msg.uuid)) { conn.send(JSON.stringify({ type: "error", message: "Please reload the page and try again." })); return; }
+        if (state.players[conn.id]) { conn.send(JSON.stringify({ type: "error", message: "Connection already in use — please reload." })); return; }
         const playerEntries = Object.entries(state.players);
         if (playerEntries.length >= 4) {
           // Bump the last bot to make room, or reject if no bots
@@ -427,13 +446,14 @@ const handlers = {
         state.players[conn.id] = {
           name: cleanName(msg.name),
           color: joinColor,
-          uuid: isUuid(msg.uuid) ? msg.uuid : null,
+          uuid: msg.uuid,
           score: 0,
           wordsFound: 0,
           isReady: false,
           isHost: false,
         };
         await room.storage.put("state", state);
+        bindConn(conn, msg.uuid);
         room.broadcast(stateMsg(state));
         break;
       }
@@ -558,6 +578,7 @@ const handlers = {
           : null;
         state.turnOrder = Object.keys(state.players).filter(id => !state.players[id].isBot || true);
         state.cur = state.turnOrder[0];
+        state.turnNo = 1;
         state.consecutivePasses = 0;
         state.consecutiveHumanPasses = 0;
         state.boardFullBadGuesses = 0;
@@ -755,6 +776,7 @@ const handlers = {
           state.players[nextId].lettersLeft = 1;
           advanceHighStakesTurn(state, state.cur, nextId);
           state.cur = nextId;
+          state.turnNo = (state.turnNo ?? 0) + 1;
           if (state.consecutivePasses >= state.turnOrder.length * 2) {
             state.phase = "ended";
             if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
@@ -790,42 +812,44 @@ const handlers = {
               if (state.grid[r][c]?.pi === oldId) state.grid[r][c].pi = conn.id;
         }
 
+        // A seat is only ever reclaimed by the account that owns it; oldConnId is just a hint.
+        if (!isUuid(msg.uuid)) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please rejoin." })); return; }
+        const owns = (p) => !!p && !p.isBot && p.uuid === msg.uuid;
+        const prefer = (ids) => ids.includes(msg.oldConnId) ? msg.oldConnId : ids[0];
+
         // Path 1: Still within grace period — player never officially left.
-        // Find by connId first, then fall back to UUID (covers DO-restart edge case
-        // where pendingDisconnects survived but connId rotated).
-        const pendingId = pendingDisconnects.has(msg.oldConnId) ? msg.oldConnId
-          : msg.uuid ? [...pendingDisconnects.keys()].find(id => state.players[id]?.uuid === msg.uuid) : null;
-        if (pendingId && state.players[pendingId]) {
+        const pendingId = prefer([...pendingDisconnects.keys()].filter(id => owns(state.players[id])));
+        if (pendingId) {
           clearTimeout(pendingDisconnects.get(pendingId));
           pendingDisconnects.delete(pendingId);
-          remapActiveId(pendingId);
+          if (pendingId !== conn.id) remapActiveId(pendingId);
+          bindConn(conn, msg.uuid);
           await room.storage.put("state", state);
           room.broadcast(stateMsg(state));
           return;
         }
 
-        // Path 2: Player is still in active state (DO restart wiped pendingDisconnects
-        // before the grace-period timer fired, so processDisconnect never ran).
-        // Find by connId first, then UUID.
-        const activeId = (state.players[msg.oldConnId] && !state.players[msg.oldConnId].isBot) ? msg.oldConnId
-          : msg.uuid ? Object.keys(state.players).find(id => !state.players[id].isBot && state.players[id].uuid === msg.uuid) : null;
-        if (activeId && activeId !== conn.id) {
+        // Path 2: Player is still in active state (async games, a DO restart, or a reconnect
+        // that reused the same connection id).
+        const activeId = prefer(Object.keys(state.players).filter(id => owns(state.players[id])));
+        if (activeId) {
           if (pendingDisconnects.has(activeId)) { clearTimeout(pendingDisconnects.get(activeId)); pendingDisconnects.delete(activeId); }
-          remapActiveId(activeId);
+          if (activeId !== conn.id) remapActiveId(activeId);
+          bindConn(conn, msg.uuid);
           await room.storage.put("state", state);
           room.broadcast(stateMsg(state));
           return;
         }
 
         // Path 3: Post-grace — restore from disconnectedPlayers.
-        // Find by connId first, then UUID (covers stale-connId edge case).
-        const savedKey = state.disconnectedPlayers?.[msg.oldConnId] ? msg.oldConnId
-          : msg.uuid ? Object.keys(state.disconnectedPlayers ?? {}).find(k => state.disconnectedPlayers[k].player.uuid === msg.uuid) : null;
+        const savedKey = prefer(Object.keys(state.disconnectedPlayers ?? {}).filter(k => owns(state.disconnectedPlayers[k].player)));
         if (!savedKey) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please rejoin." })); return; }
+        if (state.players[conn.id]) { conn.send(JSON.stringify({ type: "error", message: "Connection already in use — please reload." })); return; }
 
         const saved = state.disconnectedPlayers[savedKey];
         state.players[conn.id] = saved.player;
         delete state.disconnectedPlayers[savedKey];
+        bindConn(conn, msg.uuid);
         remapTimeBank(state, savedKey, conn.id);
         if (state.phase === "playing") {
           const insertAt = Math.min(saved.turnIndex, state.turnOrder.length);
@@ -873,6 +897,7 @@ const handlers = {
         const { botId, requestConnId, mode } = msg;
         const req = state.pendingJoinRequest;
         if (!req || req.connId !== requestConnId || Date.now() > req.expiresAt) return;
+        if (!isUuid(req.uuid) || state.players[requestConnId]) return;
 
         if (mode === "add") {
           if (Object.keys(state.players).length >= 4) return;
@@ -927,7 +952,7 @@ const handlers = {
         broadcastSpectatorCount(room);
         await room.storage.put("state", state);
         for (const c of room.getConnections()) {
-          if (c.id === requestConnId) { c.send(JSON.stringify({ type: "join_granted" })); break; }
+          if (c.id === requestConnId) { bindConn(c, req.uuid); c.send(JSON.stringify({ type: "join_granted" })); break; }
         }
         room.broadcast(stateMsg(state));
         break;
@@ -1010,6 +1035,7 @@ const handlers = {
             const next = state.turnOrder[0];
             advanceHighStakesTurn(state, conn.id, next);
             state.cur = next;
+            state.turnNo = (state.turnNo ?? 0) + 1;
             Object.values(state.players).forEach(p => { p.lettersLeft = 0; });
             state.players[next].lettersLeft = 1;
           }
@@ -1157,15 +1183,33 @@ const handlers = {
 // staying awake while players are connected, so hibernation stays off.
 export class Main extends Server {
   room = Object.assign(makeRoom(this), { spectatorConns: new Set() });
-  onConnect(conn) { return handlers.onConnect(conn, this.room); }
+  live = new Map(); // connection id → socket currently using it
+
+  async fetch(request) {
+    if (!/^[A-Z0-9]{4,8}$/.test(this.name)) return new Response("Invalid room code", { status: 400 });
+    // A connection id that's already connected can't be taken over by a second socket
+    if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
+      const id = new URL(request.url).searchParams.get("_pk");
+      if (id && this.live.has(id)) return new Response("Connection id already in use", { status: 409 });
+    }
+    return super.fetch(request);
+  }
+
+  onConnect(conn) { this.live.set(conn.id, conn); return handlers.onConnect(conn, this.room); }
   async onMessage(conn, message) {
-    // Cursor hovers and spectator pings don't change game state — skip the async bookkeeping
-    if (typeof message !== "string" || /"type"\s*:\s*"(hover|watch)"/.test(message)) return handlers.onMessage(message, conn, this.room);
+    // Cursor hovers and spectator pings don't change game state — skip the async bookkeeping.
+    // Decide from the parsed type (not the raw text) so a crafted message can't dodge it.
+    let type = null;
+    try { type = JSON.parse(message)?.type; } catch {}
+    if (type === "hover" || type === "watch") return handlers.onMessage(message, conn, this.room);
     const before = await this.ctx.storage.get("state");
     await handlers.onMessage(message, conn, this.room);
     if (isAsync(before) || isAsync(await this.ctx.storage.get("state"))) await asyncHooks(this.room, before);
   }
-  onClose(conn) { return handlers.onClose(conn, this.room); }
+  onClose(conn) {
+    if (this.live.get(conn.id) === conn) this.live.delete(conn.id);
+    return handlers.onClose(conn, this.room);
+  }
   onRequest(req) { return handlers.onRequest(req, this.room); }
   onAlarm() { return handlers.onAlarm(this.room); }
 }

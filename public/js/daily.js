@@ -216,7 +216,15 @@ window.dailyFinish = async () => {
       body: JSON.stringify({ type: "daily_submit", uuid: ctx.getUUID(), name: ctx.getName(), date: puzzle.date, moves }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error === "wrong_day" ? "This puzzle has ended — a new one is ready." : `Couldn't submit (${data.error}${data.word ? `: ${data.word}` : ""}).`);
+    if (!res.ok) {
+      const why = {
+        wrong_day: "This puzzle has ended — a new one is ready.",
+        empty: "Place at least one letter before finishing.",
+        too_many_today: "Too many daily results from this network today — try again tomorrow.",
+        rate_limited: "Slow down a moment, then try again.",
+      }[data.error];
+      throw new Error(why ?? `Couldn't submit (${data.error}${data.word ? `: ${data.word}` : ""}).`);
+    }
     result = data;
     try { localStorage.removeItem(storeKey()); } catch {}
     ctx.track("daily_done");
@@ -292,11 +300,15 @@ export async function openDaily(context) {
   document.body.style.overflow = "hidden";
   $("daily-wrap").innerHTML = `<p class="placeholder" style="padding-top:3rem">Loading today's puzzle…</p>`;
   try {
-    const data = await (await fetch(`https://${ctx.host}/parties/stats/main?daily=1&uuid=${encodeURIComponent(ctx.getUUID())}`)).json();
+    const base = `https://${ctx.host}/parties/stats/main`;
+    const [data, prof] = await Promise.all([
+      fetch(`${base}?daily=1`).then(r => r.json()),
+      fetch(base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "profile", uuid: ctx.getUUID() }) }).then(r => r.json()),
+    ]);
     if (!data.puzzle) throw new Error();
     puzzle = data.puzzle;
     ctx.nextAt = data.nextAt;
-    result = data.mine ? { ...data.mine, players: data.players } : null;
+    result = prof.dailyMine ? { ...prof.dailyMine, players: data.players } : null;
     if (!result) { restore(); if (!moves.length) ctx.track("daily_start"); }
     render();
   } catch {

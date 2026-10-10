@@ -136,6 +136,12 @@
       <div class="field"><label>Streak freeze price (coins)</label><input type="number" id="spendStreakFreeze" min="0"></div>
       <div class="field"><label>Hours per turn (over-days games)</label><input type="number" id="asyncTurnHours" min="1"></div>
     </div>
+    <div class="section-label">Abuse limits (per visitor IP, per day)</div>
+    <div class="grid">
+      <div class="field"><label>Daily-puzzle results</label><input type="number" id="ipDailySubmits" min="1"></div>
+      <div class="field"><label>New players counted</label><input type="number" id="ipNewVisitors" min="1"></div>
+      <div class="field"><label>Push sign-ups</label><input type="number" id="ipPushSubscribes" min="1"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -189,6 +195,7 @@ const FIELD_KEYS = [
   "spendUndoLetter","spendViewUnclaimed","spendPremiumColor","spendCustomTile",
   "highStakesStart","highStakesMax","highStakesLetterBonus","highStakesClaimBonus","highStakesMinTurn",
   "dailyComplete","streakBonus7","spendStreakFreeze","asyncTurnHours",
+  "ipDailySubmits","ipNewVisitors","ipPushSubscribes",
 ];
 
 function showMsg(id, text, type) {

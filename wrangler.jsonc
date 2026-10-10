@@ -30,6 +30,9 @@
 
   "vars": { "ENVIRONMENT": "production" },
 
+  // Per-IP burst limit on POST requests (see party/server.js)
+  "ratelimits": [{ "name": "POST_LIMIT", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }],
+
   "observability": { "enabled": true },
 
   // ── Dev environment ── `npm run deploy:dev` → https://dev-api.lexterragame.com
@@ -41,6 +44,7 @@
       "routes": [{ "pattern": "dev-api.lexterragame.com", "custom_domain": true }],
       "workers_dev": true,
       "vars": { "ENVIRONMENT": "dev" },
+      "ratelimits": [{ "name": "POST_LIMIT", "namespace_id": "1002", "simple": { "limit": 1500, "period": 60 } }],
       "durable_objects": {
         "bindings": [
           { "name": "Main", "class_name": "Main" },

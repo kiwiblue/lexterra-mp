@@ -2,7 +2,9 @@
 // Routes /parties/<party>/<room> to the matching Durable Object, same URLs as PartyKit.
 
 import { routePartykitRequest, getServerByName } from "partyserver";
-import { INTERNAL_HEADER } from "./compat.js";
+import { INTERNAL_HEADER, CLIENT_IP_HEADER } from "./compat.js";
+
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
 
 export { Main } from "./index.js";
 export { Lobby } from "./lobby.js";
@@ -11,10 +13,16 @@ export { Auth } from "./auth.js";
 
 export default {
   async fetch(request, env) {
-    // Everything arriving here is from outside — never let it pose as a server-to-server call
-    if (request.headers.has(INTERNAL_HEADER)) {
-      request = new Request(request);
-      request.headers.delete(INTERNAL_HEADER);
+    // Everything arriving here is from outside — never let it pose as a server-to-server call,
+    // and stamp the real visitor IP (from Cloudflare, not the client) for per-IP limits.
+    const ip = request.headers.get("cf-connecting-ip") ?? "";
+    request = new Request(request);
+    request.headers.delete(INTERNAL_HEADER);
+    request.headers.set(CLIENT_IP_HEADER, ip);
+    // Burst protection on every write endpoint
+    if (request.method === "POST" && ip && env.POST_LIMIT) {
+      const { success } = await env.POST_LIMIT.limit({ key: ip });
+      if (!success) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "Content-Type": "application/json", ...CORS } });
     }
     // Dev only: a stand-in push service so the bot tests can verify that turn notifications are
     // produced, signed (VAPID) and encrypted (aes128gcm). Inert in production.

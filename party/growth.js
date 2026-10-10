@@ -3,7 +3,7 @@
 // Every feature can be switched off from the admin page (feature_* flags in the coin config).
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
-import { isInternal, cleanName, isUuid } from "./compat.js";
+import { isInternal, cleanName, isUuid, clientIp } from "./compat.js";
 import { dailyPuzzle, replayDaily, shareGrid, utcDate, isDateStr, addDays, daysBetween } from "./daily.js";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
@@ -54,6 +54,38 @@ function applyStreak(rec, date) {
   rec.best = Math.max(rec.best ?? 0, rec.current);
   rec.lastDate = date;
   return rec;
+}
+
+// ── Per-IP daily allowances ──────────────────────────────────────────────
+// Creating new identities (daily results, analytics visitors, push subscriptions) is capped per
+// visitor IP per UTC day, so scripts can't flood storage or the leaderboards with fake accounts.
+async function pruneDaily(room) {
+  const today = utcDate();
+  if (await room.storage.get(`pruned:${today}`)) return;
+  await room.storage.put(`pruned:${today}`, 1);
+  for (let back = 2; back <= 10; back++) {
+    const d = addDays(today, -back);
+    for (const prefix of [`ipcap:${d}:`, `an_cap:${d}:`]) {
+      const old = await room.storage.list({ prefix, limit: 1000 });
+      const keys = [...old.keys()];
+      for (let i = 0; i < keys.length; i += 128) await room.storage.delete(keys.slice(i, i + 128));
+    }
+  }
+  for (let back = 36; back <= 45; back++) {
+    const old = await room.storage.list({ prefix: `an_seen:${addDays(today, -back)}:`, limit: 1000 });
+    const keys = [...old.keys()];
+    for (let i = 0; i < keys.length; i += 128) await room.storage.delete(keys.slice(i, i + 128));
+  }
+}
+export async function ipAllowance(room, req, bucket, max) {
+  const ip = clientIp(req);
+  if (!ip) return true; // internal calls
+  await pruneDaily(room);
+  const key = `ipcap:${utcDate()}:${bucket}:${ip}`;
+  const n = (await room.storage.get(key)) ?? 0;
+  if (n >= max) return false;
+  await room.storage.put(key, n + 1);
+  return true;
 }
 
 // ── Shared helpers used from stats.js ─────────────────────────────────────
@@ -115,9 +147,17 @@ export async function mergeGrowth(room, fromUuid, toUuid) {
 }
 
 // ── Push ───────────────────────────────────────────────────────────────────
-function validSubscription(s) {
-  return s && typeof s === "object" && typeof s.endpoint === "string" && s.endpoint.startsWith("https://") && s.endpoint.length < 1000
-    && s.keys && typeof s.keys.p256dh === "string" && typeof s.keys.auth === "string" && s.keys.p256dh.length < 200 && s.keys.auth.length < 100;
+// Only real browser push services (plus the dev test receiver on dev) — never arbitrary URLs
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/,
+  /\.notify\.windows\.com$/, /^web\.push\.apple\.com$/, /\.push\.apple\.com$/];
+function validSubscription(s, env) {
+  if (!s || typeof s !== "object" || typeof s.endpoint !== "string" || s.endpoint.length >= 1000) return false;
+  let url;
+  try { url = new URL(s.endpoint); } catch { return false; }
+  if (url.protocol !== "https:" || url.port) return false;
+  const devSink = env.ENVIRONMENT === "dev" && url.hostname === "dev-api.lexterragame.com" && url.pathname.startsWith("/__push_sink/");
+  if (!devSink && !PUSH_HOSTS.some(re => re.test(url.hostname))) return false;
+  return !!s.keys && typeof s.keys.p256dh === "string" && typeof s.keys.auth === "string" && s.keys.p256dh.length < 200 && s.keys.auth.length < 100;
 }
 
 async function sendPush(room, uuid, message) {
@@ -131,7 +171,8 @@ async function sendPush(room, uuid, message) {
   for (const sub of subs) {
     try {
       const payload = await buildPushPayload({ data: JSON.stringify(message), options: { ttl: 86400, urgency: "normal", topic: "turn" } }, sub, vapid);
-      const res = await fetch(sub.endpoint, payload);
+      if (!validSubscription(sub, env)) continue; // stored before the host allowlist existed
+      const res = await fetch(sub.endpoint, { ...payload, signal: AbortSignal.timeout(5000) });
       if (res.status === 404 || res.status === 410) continue; // subscription gone
       if (res.ok) sent++;
       keep.push(sub);
@@ -139,12 +180,17 @@ async function sendPush(room, uuid, message) {
       keep.push(sub);
     }
   }
-  if (keep.length !== subs.length) await room.storage.put(`push:${uuid}`, keep);
+  if (keep.length !== subs.length) {
+    // Re-read so a subscription added while we were sending isn't lost; drop only the dead ones
+    const dead = new Set(subs.filter(s => !keep.includes(s)).map(s => s.endpoint));
+    const now = (await room.storage.get(`push:${uuid}`)) ?? [];
+    await room.storage.put(`push:${uuid}`, now.filter(s => !dead.has(s.endpoint)));
+  }
   return sent;
 }
 
 // ── Analytics ──────────────────────────────────────────────────────────────
-async function track(room, uuid, event) {
+async function track(room, uuid, event, req, cfg) {
   const today = utcDate();
   const pid = await pidOf(uuid);
   const counts = (await room.storage.get(`an:${today}`)) ?? {};
@@ -154,20 +200,14 @@ async function track(room, uuid, event) {
     await room.storage.put(seenKey, 1);
     counts.visitors = (counts.visitors ?? 0) + 1;
     if (!(await room.storage.get(`an_first:${pid}`))) {
+      if (!(await ipAllowance(room, req, "visitor", Number(cfg.ipNewVisitors) || 20))) { await room.storage.put(`an:${today}`, counts); return; }
       await room.storage.put(`an_first:${pid}`, today);
       const cohort = (await room.storage.get(`an_cohort:${today}`)) ?? [];
       cohort.push(pid);
       await room.storage.put(`an_cohort:${today}`, cohort);
       counts.newPlayers = (counts.newPlayers ?? 0) + 1;
     }
-    // Once a day, drop "seen" markers older than 35 days (retention only needs day 1 and 7)
-    if (!(await room.storage.get(`an_pruned:${today}`))) {
-      await room.storage.put(`an_pruned:${today}`, 1);
-      for (let back = 36; back <= 45; back++) {
-        const old = await room.storage.list({ prefix: `an_seen:${addDays(today, -back)}:` });
-        if (old.size) await room.storage.delete([...old.keys()].slice(0, 128));
-      }
-    }
+    await pruneDaily(room);
   } else {
     // Count each player at most 20 times per event per day so a script can't inflate numbers
     const capKey = `an_cap:${today}:${pid}:${event}`;
@@ -209,10 +249,8 @@ export async function growthGet(url, room, cfg) {
     if (!on(cfg, "daily")) return jsonRes({ error: "disabled" }, 404);
     const date = utcDate();
     const puzzle = await dailyPuzzle(date, room.env.DAILY_SALT);
-    const uuid = q.get("uuid");
-    const mine = isUuid(uuid) ? (await room.storage.get(`daily_res:${date}:${uuid}`)) ?? null : null;
     const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
-    return jsonRes({ puzzle, mine: mine && { score: mine.score, words: mine.words, share: shareGrid(mine.used) }, players: lb.length, nextAt: Date.parse(addDays(date, 1) + "T00:00:00Z") });
+    return jsonRes({ puzzle, players: lb.length, nextAt: Date.parse(addDays(date, 1) + "T00:00:00Z") });
   }
 
   if (q.has("dailylb")) {
@@ -261,22 +299,27 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       const puzzle = await dailyPuzzle(date, room.env.DAILY_SALT);
       const r = replayDaily(puzzle, moves);
       if (!r.ok) return jsonRes({ error: r.error, word: r.word }, 400);
+      if (r.placed === 0) return jsonRes({ error: "empty" }, 400);
+      if (!(await ipAllowance(room, req, "daily", Number(cfg.ipDailySubmits) || 3))) return jsonRes({ error: "too_many_today" }, 429);
       const name = cleanName(msg.name);
       await room.storage.put(resKey, { score: r.score, words: r.words, used: r.used, name, at: Date.now() });
 
       const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
-      lb.push({ uuid, name, score: r.score, words: r.words.length });
-      lb.sort((a, b) => b.score - a.score || b.words - a.words);
-      const rank = lb.findIndex(e => e.uuid === uuid) + 1;
-      await room.storage.put(`daily_lb:${date}`, lb.slice(0, DAILY_LB_SIZE));
+      if (r.score > 0) {
+        lb.push({ uuid, name, score: r.score, words: r.words.length });
+        lb.sort((a, b) => b.score - a.score || b.words - a.words);
+        await room.storage.put(`daily_lb:${date}`, lb.slice(0, DAILY_LB_SIZE));
+      }
+      const rank = lb.findIndex(e => e.uuid === uuid) + 1 || null;
 
       let streak = null, coins = 0;
       if (on(cfg, "streaks")) {
         streak = applyStreak(await room.storage.get(`streak:${uuid}`), date);
         await room.storage.put(`streak:${uuid}`, streak);
-        if (streak.current > 0 && streak.current % 7 === 0) coins += Number(cfg.streakBonus7) || 0;
+        if (r.complete && streak.current > 0 && streak.current % 7 === 0) coins += Number(cfg.streakBonus7) || 0;
       }
-      coins += Number(cfg.dailyComplete) || 0;
+      // Coins only for finishing the puzzle (every letter placed) with at least one word
+      if (r.complete && r.score > 0) coins += Number(cfg.dailyComplete) || 0;
       await addCoins(room, uuid, name, coins);
       if (r.score > 0) {
         await addXp(room, uuid, name, r.score);
@@ -305,13 +348,14 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
 
     case "track": {
       if (!isUuid(msg.uuid) || !ANALYTICS_EVENTS.has(msg.event)) return jsonRes({ error: "bad_event" }, 400);
-      await track(room, msg.uuid, msg.event);
+      await track(room, msg.uuid, msg.event, req, cfg);
       return jsonRes({ ok: true });
     }
 
     case "push_subscribe": {
       if (!on(cfg, "push")) return jsonRes({ error: "disabled" }, 404);
-      if (!isUuid(msg.uuid) || !validSubscription(msg.subscription)) return jsonRes({ error: "bad_subscription" }, 400);
+      if (!isUuid(msg.uuid) || !validSubscription(msg.subscription, room.env)) return jsonRes({ error: "bad_subscription" }, 400);
+      if (!(await ipAllowance(room, req, "push", Number(cfg.ipPushSubscribes) || 10))) return jsonRes({ error: "too_many_today" }, 429);
       const sub = { endpoint: msg.subscription.endpoint, keys: { p256dh: msg.subscription.keys.p256dh, auth: msg.subscription.keys.auth } };
       const subs = ((await room.storage.get(`push:${msg.uuid}`)) ?? []).filter(s => s.endpoint !== sub.endpoint);
       subs.push(sub);
@@ -321,9 +365,28 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
 
     case "push_unsubscribe": {
       if (!isUuid(msg.uuid) || typeof msg.endpoint !== "string") return jsonRes({ error: "bad_request" }, 400);
-      const subs = ((await room.storage.get(`push:${msg.uuid}`)) ?? []).filter(s => s.endpoint !== msg.endpoint);
-      await room.storage.put(`push:${msg.uuid}`, subs);
+      const before = (await room.storage.get(`push:${msg.uuid}`)) ?? [];
+      const subs = before.filter(s => s.endpoint !== msg.endpoint);
+      if (subs.length !== before.length) await room.storage.put(`push:${msg.uuid}`, subs);
       return jsonRes({ ok: true });
+    }
+
+    // Everything the home screen needs about the player, in one POST (keeps the uuid out of URLs)
+    case "profile": {
+      if (!isUuid(msg.uuid)) return jsonRes({ error: "bad_uuid" }, 400);
+      const today = utcDate();
+      const [coins, xp, st, mine] = await Promise.all([
+        room.storage.get("player_coins"), room.storage.get("player_xp"),
+        room.storage.get(`streak:${msg.uuid}`), room.storage.get(`daily_res:${today}:${msg.uuid}`),
+      ]);
+      const c = (coins ?? []).find(p => p.uuid === msg.uuid);
+      const x = (xp ?? []).find(p => p.uuid === msg.uuid);
+      return jsonRes({
+        name: c?.name ?? x?.name ?? null, coins: c?.coins ?? 0, colorUnlocks: c?.colorUnlocks ?? {},
+        xp: x?.xp ?? 0, gamesPlayed: x?.gamesPlayed ?? 0,
+        streak: on(cfg, "streaks") ? effectiveStreak(st, today) : null,
+        dailyMine: mine ? { score: mine.score, words: mine.words, share: shareGrid(mine.used) } : null,
+      });
     }
 
     case "mygames": {
@@ -372,7 +435,8 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
     }
 
     case "admin_analytics": {
-      if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
+      const denied = await isAdmin(msg.password, room.env, req, room);
+      if (denied) return denied;
       return jsonRes({ days: await analyticsReport(room, 14) });
     }
   }

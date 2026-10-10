@@ -12,7 +12,7 @@
 // GET (no params) → aggregate report
 
 import { Server } from "partyserver";
-import { makeRoom, isInternal, cleanName, isUuid } from "./compat.js";
+import { makeRoom, isInternal, cleanName, isUuid, clientIp } from "./compat.js";
 import { growthGet, growthPost, addWeekly, mergeGrowth } from "./growth.js";
 
 const TOP_SNAPS = 5;
@@ -20,7 +20,7 @@ const TOP_SNAPS = 5;
 // ── Admin password ─────────────────────────────────────────────────────────
 // Stored as the ADMIN_PASSWORD Worker secret (wrangler secret put ADMIN_PASSWORD), never
 // in source. If it isn't set, admin actions are refused. Compared in constant time.
-async function isAdmin(password, env) {
+async function passwordMatches(password, env) {
   if (!env.ADMIN_PASSWORD || typeof password !== "string") return false;
   const enc = new TextEncoder();
   const [a, b] = await Promise.all([
@@ -28,6 +28,20 @@ async function isAdmin(password, env) {
     crypto.subtle.digest("SHA-256", enc.encode(env.ADMIN_PASSWORD)),
   ]);
   return crypto.subtle.timingSafeEqual(a, b);
+}
+// Returns null if allowed, or the error Response. After 5 wrong passwords from one IP, that IP is
+// locked out for 15 minutes (20 seconds on dev, so the bot tests can check it).
+const ADMIN_MAX_FAILS = 5;
+async function isAdmin(password, env, req, room) {
+  const ip = clientIp(req) ?? "internal";
+  const key = `adminfail:${ip}`;
+  const rec = (await room.storage.get(key)) ?? { n: 0, until: 0 };
+  if (rec.until > Date.now()) return new Response("Too many attempts — try again later", { status: 429, headers: CORS });
+  if (await passwordMatches(password, env)) { if (rec.n) await room.storage.delete(key); return null; }
+  rec.n += 1;
+  if (rec.n >= ADMIN_MAX_FAILS) { rec.n = 0; rec.until = Date.now() + (env.ENVIRONMENT === "dev" ? 20000 : 15 * 60000); }
+  await room.storage.put(key, rec);
+  return new Response("Unauthorized", { status: 401, headers: CORS });
 }
 
 // ── Coin earn/spend config defaults ───────────────────────────────────────
@@ -66,6 +80,10 @@ const DEFAULT_COIN_CONFIG = {
   spendStreakFreeze:    300, // coins for one streak freeze (max 2 held)
   // Async games
   asyncTurnHours:        24, // hours a player has to take their turn before it auto-passes
+  // Abuse limits — per visitor IP per UTC day
+  ipDailySubmits:         3, // daily-puzzle results (one per account; caps throwaway accounts)
+  ipNewVisitors:         20, // new players counted in analytics
+  ipPushSubscribes:      10, // push-notification sign-ups
   // Feature switches (1 = on, 0 = off) — turn a feature off here to roll it back instantly
   feature_tutorial: 1,
   feature_daily:    1,
@@ -239,7 +257,8 @@ const handlers = {
       }
 
       if (msg.type === "config_update") {
-        if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
+        const denied = await isAdmin(msg.password, room.env, req, room);
+        if (denied) return denied;
         if (!msg.config || typeof msg.config !== "object") return new Response("Bad request", { status: 400, headers: CORS });
         // Keep only known keys with sane values so a bad save can't break coin maths
         const clean = {};
@@ -256,7 +275,8 @@ const handlers = {
       }
 
       if (msg.type === "admin_data") {
-        if (!(await isAdmin(msg.password, room.env))) return new Response("Unauthorized", { status: 401, headers: CORS });
+        const denied = await isAdmin(msg.password, room.env, req, room);
+        if (denied) return denied;
         const coins = (await room.storage.get("player_coins")) ?? [];
         const sorted = [...coins].sort((a, b) => (b.coins ?? 0) - (a.coins ?? 0));
         return new Response(JSON.stringify(sorted), {
@@ -417,7 +437,9 @@ const handlers = {
         xp.sort((a, b) => b.xp - a.xp);
         await room.storage.put("player_xp", xp);
 
-        if (Number(cfgAll.feature_weekly ?? 1) !== 0) await addWeekly(room, msg.players);
+        if (Number(cfgAll.feature_weekly ?? 1) !== 0) {
+          try { await addWeekly(room, msg.players); } catch (e) { console.error("weekly ladder update failed", e); }
+        }
 
         // ── Coin earning ────────────────────────────────────────────────
         const stored = (await room.storage.get("coin_config")) ?? {};

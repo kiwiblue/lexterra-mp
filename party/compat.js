@@ -13,6 +13,11 @@ const BINDINGS = { main: "Main", lobby: "Lobby", stats: "Stats", auth: "Auth" };
 export const INTERNAL_HEADER = "x-lexterra-internal";
 export const isInternal = (req) => req.headers.get(INTERNAL_HEADER) === "1";
 
+// The Worker entry sets this from Cloudflare's CF-Connecting-IP (overwriting anything the client
+// sent), so Durable Objects can rate-limit per visitor. Absent on internal calls.
+export const CLIENT_IP_HEADER = "x-lexterra-client-ip";
+export const clientIp = (req) => req.headers.get(CLIENT_IP_HEADER) || null;
+
 // Player names are rendered into HTML by every client, so strip anything that could
 // break out of text or attribute context. Emoji and other unicode are fine.
 export function cleanName(raw, fallback = "PLAYER") {
