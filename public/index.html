@@ -491,6 +491,10 @@
       .sheet-grip { display: none; }
       #join-status { bottom: 32px; }
     }
+    @media (min-width: 900px) and (max-width: 1099px) {
+      .hstat-label { display: none; }
+      #header-brand .subtitle { display: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
     }
@@ -2234,7 +2238,7 @@
         if (highlightedWord && !cell.classList.contains('path-ok') && !cell.classList.contains('path-bad')) {
           const claim = state.claimed?.find(c => c.word === highlightedWord);
           if (claim?.path?.some(p => p.r === r && p.c === c)) {
-            const hlColor = pColor(claim.connId) ?? 'var(--brand-ink)';
+            const hlColor = pColor(claim.connId) ?? '#a78bfa'; // hex: an alpha suffix is appended below
             cell.style.setProperty('--hl-color', hlColor);
             cell.style.setProperty('--hl-bg', hlColor + '33');
             cell.classList.add('path-hl');
@@ -2763,7 +2767,7 @@
     const hlClaim = hw ? (state.claimed ?? []).find(c => c.word === hw) : null;
     const hlUnc = !hlClaim && hw ? endUnclaimedWords.find(u => u.word === hw) : null;
     const hlPath = hlClaim?.path ?? hlUnc?.path ?? [];
-    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? 'var(--brand-ink)') : (hlUnc ? '#f59e0b' : null);
+    const hlColor = hlClaim ? (pColor(hlClaim.connId) ?? '#a78bfa') : (hlUnc ? '#f59e0b' : null); // hex: alpha suffix appended
     let cells = '';
     for (let r = 0; r < boardSize; r++) {
       for (let c = 0; c < boardSize; c++) {
@@ -3049,9 +3053,10 @@
       // Fewest bots last (most bots last within same human count)
       return (a.botCount ?? 0) - (b.botCount ?? 0);
     });
-    window.dispatchEvent(new CustomEvent("lx:publicgames", { detail: { count: entries.length } }));
+    const announce = () => window.dispatchEvent(new CustomEvent("lx:publicgames", { detail: { count: list.querySelectorAll(".public-game-row").length } }));
     if (!entries.length) {
       list.innerHTML = '<p class="placeholder">No open games right now.</p>';
+      announce();
       return;
     }
     list.innerHTML = entries.map(g => {
@@ -3071,6 +3076,7 @@
             : `<button class="btn btn-live btn-sm" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
         </div>`;
     }).join('');
+    announce();
   }
 
   function fmtOpponents(e) {
@@ -3337,6 +3343,7 @@
         localStorage.setItem("lexterra_name", cd.name);
         const inp = document.getElementById("player-name");
         if (inp && !inp.matches(":focus")) inp.value = cd.name;
+        window.dispatchEvent(new Event("lx:name"));
       }
     } catch {}
     updateHeaderStats();

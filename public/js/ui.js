@@ -39,6 +39,8 @@ window.openSheet = function (id) {
 };
 window.closeSheet = function (silent = false) {
   if (!openSheetId) return;
+  // Closing the name sheet without saving puts the last saved name back
+  if (openSheetId === "name" && nameInput && !nameInput.value.trim()) nameInput.value = store.get("lexterra_name") || "";
   $(`sheet-${openSheetId}`)?.classList.remove("open");
   openSheetId = null;
   document.body.style.overflow = "";
@@ -48,7 +50,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && openShee
 
 // ── Player name (asked for the first time it's needed) ─────────────────────
 const nameInput = $("player-name");
-const currentName = () => (nameInput?.value.trim().toUpperCase() || store.get("lexterra_name") || "");
+// The game reads the name from the input, so that's the source of truth here too
+const currentName = () => (nameInput?.value.trim().toUpperCase() || "");
 const hasName = () => !!currentName() && currentName() !== "PLAYER";
 let afterName = null;
 
@@ -244,6 +247,13 @@ $("room-code-input")?.addEventListener("input", (e) => {
   const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (v !== e.target.value) e.target.value = v;
 });
+
+window.addEventListener("lx:name", () => refreshIdentity());
+
+// Over-days switched off in admin: hide its card
+const friendsCard = document.querySelector(".mode-card.friends");
+new MutationObserver(() => { friendsCard.style.display = $("mygames-card").style.display === "none" ? "none" : ""; })
+  .observe($("mygames-card"), { attributes: true, attributeFilter: ["style"] });
 
 applyTheme(store.get("lexterra_theme") || "system");
 refreshIdentity();

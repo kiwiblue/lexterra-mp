@@ -5,7 +5,7 @@
 const MIN_LEN = 3;
 const BLITZ_FINAL_SECS = 30; // claiming window after the last Blitz letter lands
 const THEMES = [
-  { id: "classic", name: "Classic", swatch: ["#0c1628", "#e2e8f0", "var(--success)"] },
+  { id: "classic", name: "Classic", swatch: ["#0c1628", "#e2e8f0", "#22c55e"] },
   { id: "neon",    name: "Neon",    swatch: ["#0b0820", "#67e8f9", "#d946ef"] },
   { id: "gold",    name: "Gold",    swatch: ["#1c1405", "#fde68a", "#ca8a04"] },
   { id: "ocean",   name: "Ocean",   swatch: ["#082f49", "#e0f2fe", "#06b6d4"] },
