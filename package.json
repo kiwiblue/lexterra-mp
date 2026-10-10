@@ -2,11 +2,13 @@
   "name": "lexterra-mp",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "author": "Chris Sandford",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "deploy:dev": "wrangler deploy --env dev"
+    "deploy:dev": "wrangler deploy --env dev",
+    "test:bots": "node test/bots.mjs"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",

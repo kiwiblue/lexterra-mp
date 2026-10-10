@@ -78,7 +78,7 @@
     #page-header { display: flex; align-items: flex-start; justify-content: space-between; width: 100%; max-width: 420px; }
     #header-brand { display: flex; flex-direction: column; cursor: pointer; }
     #header-brand h1 { margin-bottom: 0.25rem; }
-    #header-stats { display: none; flex-direction: column; align-items: flex-end; gap: 0.15rem; padding-top: 0.45rem; min-width: 56px; }
+    #header-stats { display: none; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; column-gap: 0.7rem; row-gap: 0.15rem; padding-top: 0.45rem; min-width: 56px; max-width: 150px; }
     .hstat { display: flex; align-items: baseline; gap: 0.25rem; }
     .hstat-val { font-size: 0.88rem; font-weight: 900; color: var(--clr-primary-light); }
     .hstat-label { font-size: 0.6rem; color: #475569; text-transform: uppercase; letter-spacing: 0.07em; }
@@ -1954,11 +1954,12 @@
         if (!lbl || !state.turnDeadline) { if (lbl) lbl.textContent = ""; return; }
         const ms = Math.max(0, state.turnDeadline - Date.now());
         const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60;
-        lbl.textContent = h ? `${h}h ${m}m` : `${m}m`;
+        lbl.textContent = h ? `${h}h` : `${m}m`;
+        lbl.style.whiteSpace = "nowrap";
         lbl.style.color = ms < 3600000 ? "#ef4444" : ms < 6 * 3600000 ? "#eab308" : "var(--clr-primary-light)";
       };
       tick();
-      timerInterval = setInterval(tick, 30000);
+      timerInterval = setInterval(tick, 1000);
       return;
     }
     if (tl === 'high') {
@@ -3227,7 +3228,7 @@
         btn.className = "btn btn-primary";
       }
       const fr = document.getElementById("daily-freeze-row");
-      if (features.streaks && st) {
+      if (features.streaks && st && (st.current > 0 || st.freezes > 0)) {
         fr.style.display = "flex";
         document.getElementById("daily-freeze-text").textContent = `❄️ Streak freezes: ${st.freezes}/2 — covers a missed day`;
         const fb = document.getElementById("daily-freeze-btn");

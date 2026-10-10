@@ -571,7 +571,10 @@ const handlers = {
         delete state.timedOutPlayer;
         delete state.turnDeadline;
         if (asyncCfg) {
-          state.settings.asyncTurnMs = Math.max(1, Number(asyncCfg.asyncTurnHours) || 24) * 3600000;
+          // Dev allows turns of a few seconds so the bot test suite can exercise timeouts
+          const minHours = room.env.ENVIRONMENT === "dev" ? 0.001 : 1;
+          state.settings.asyncTurnMs = Math.max(minHours, Number(asyncCfg.asyncTurnHours) || 24) * 3600000;
+          state.turnDeadline = Date.now() + state.settings.asyncTurnMs;
         } else if (state.settings.timeLimit === "high") {
           const hs = await fetchHighStakesConfig(room);
           state.settings.highStakes = hs;
@@ -771,8 +774,8 @@ const handlers = {
 
         // Remap every reference to an active player's old connId → new connId
         function remapActiveId(oldId) {
-          state.players[conn.id] = state.players[oldId];
-          delete state.players[oldId];
+          // Rebuild in the same order so the scoreboard doesn't reshuffle when someone rejoins
+          state.players = Object.fromEntries(Object.entries(state.players).map(([k, v]) => [k === oldId ? conn.id : k, v]));
           remapTimeBank(state, oldId, conn.id);
           if (state.host === oldId) state.host = conn.id;
           if (state.cur === oldId) state.cur = conn.id;

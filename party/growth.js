@@ -236,6 +236,10 @@ export async function growthGet(url, room, cfg) {
 
   if (q.has("pushkey")) return jsonRes({ key: on(cfg, "push") ? room.env.VAPID_PUBLIC_KEY ?? null : null });
 
+  if (q.has("push_sink") && room.env.ENVIRONMENT === "dev") {
+    return jsonRes((await room.storage.get(`push_sink:${String(q.get("push_sink")).slice(0, 64)}`)) ?? { ok: 0, bad: 0 });
+  }
+
   return null;
 }
 
@@ -356,6 +360,15 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       if (!on(cfg, "push")) return new Response("ok");
       const sent = await sendPush(room, msg.uuid, { title: msg.title, body: msg.body, url: msg.url, tag: msg.tag });
       return jsonRes({ sent });
+    }
+
+    case "push_sink_hit": { // dev-only test receiver (see server.js)
+      if (!isInternal(req) || room.env.ENVIRONMENT !== "dev") return new Response("Forbidden", { status: 403 });
+      const k = `push_sink:${String(msg.id).slice(0, 64)}`;
+      const rec = (await room.storage.get(k)) ?? { ok: 0, bad: 0 };
+      rec[msg.ok ? "ok" : "bad"]++;
+      await room.storage.put(k, rec);
+      return new Response("ok");
     }
 
     case "admin_analytics": {

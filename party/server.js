@@ -1,7 +1,7 @@
 // Lexterra MP — Cloudflare Worker entry (PartyServer)
 // Routes /parties/<party>/<room> to the matching Durable Object, same URLs as PartyKit.
 
-import { routePartykitRequest } from "partyserver";
+import { routePartykitRequest, getServerByName } from "partyserver";
 import { INTERNAL_HEADER } from "./compat.js";
 
 export { Main } from "./index.js";
@@ -15,6 +15,23 @@ export default {
     if (request.headers.has(INTERNAL_HEADER)) {
       request = new Request(request);
       request.headers.delete(INTERNAL_HEADER);
+    }
+    // Dev only: a stand-in push service so the bot tests can verify that turn notifications are
+    // produced, signed (VAPID) and encrypted (aes128gcm). Inert in production.
+    if (env.ENVIRONMENT === "dev" && new URL(request.url).pathname.startsWith("/__push_sink/")) {
+      const stub = await getServerByName(env.Stats, "main");
+      const id = new URL(request.url).pathname.split("/")[2] ?? "";
+      if (request.method === "POST") {
+        const body = await request.arrayBuffer();
+        const ok = /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=[\w-]+$/.test(request.headers.get("authorization") ?? "")
+          && request.headers.get("content-encoding") === "aes128gcm" && body.byteLength > 100;
+        await stub.fetch(new Request("https://internal/parties/stats/main/", {
+          method: "POST", headers: { "Content-Type": "application/json", "x-lexterra-internal": "1" },
+          body: JSON.stringify({ type: "push_sink_hit", id, ok }),
+        }));
+        return new Response(null, { status: ok ? 201 : 400 });
+      }
+      return stub.fetch(new Request(`https://internal/parties/stats/main/?push_sink=${encodeURIComponent(id)}`, { headers: { "x-lexterra-internal": "1" } }));
     }
     return (await routePartykitRequest(request, env)) ?? new Response("Not found", { status: 404 });
   },
