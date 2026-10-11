@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import { createBotBrain, inGameSkill } from "../public/js/botai.js";
-import { initialSkill, nextSkill } from "../party/botskill.js";
+import { initialSkill, nextSkill, TARGET_WIN_RATE } from "../party/botskill.js";
 import { isBannedWord } from "../party/rules.js";
 
 const root = new URL("..", import.meta.url);
@@ -79,20 +79,20 @@ for (const mode of ["conquest", "off"]) {
 }
 
 // 2. Adaptation: a "player" of fixed strength vs Auto bots that re-rate after every game
-console.log("Adaptive rating — player strength vs Auto bot, 80 games each (Conquest 5×5):");
+console.log(`Adaptive rating — player strength vs Auto bot, 120 games each (Conquest 5×5), target ${Math.round(TARGET_WIN_RATE * 100)}% player wins:`);
 for (const [label, h, start] of [["new, weak player", 0.15, initialSkill(0, 0)], ["average player", 0.5, initialSkill(10, 600)], ["strong player", 0.9, initialSkill(40, 4000)]]) {
   let rec = { skill: start, games: 0 };
   const late = [];
   const path = [];
-  for (let g = 0; g < 80; g++) {
+  for (let g = 0; g < 120; g++) {
     const ps = g % 2 ? [{ id: "H", skill: h }, { id: "BOT", skill: rec.skill, adaptive: true }] : [{ id: "BOT", skill: rec.skill, adaptive: true }, { id: "H", skill: h }];
     const m = playGame(ps, { mode: "conquest" });
     const r = result(m, "H", "BOT");
     rec = nextSkill(rec, r, Math.abs(m.H - m.BOT) / Math.max(1, m.H + m.BOT));
     if (g >= 30) late.push(r === "win" ? 1 : r === "draw" ? 0.5 : 0);
-    if (g % 10 === 9) path.push(rec.skill.toFixed(2));
+    if (g % 15 === 14) path.push(rec.skill.toFixed(2));
   }
   const rate = Math.round((late.reduce((a, b) => a + b, 0) / late.length) * 100);
-  console.log(`  ${label.padEnd(18)} starts ${start.toFixed(2)} → bot skill ${path.join(" → ")} · player win rate (games 31–80): ${rate}%`);
+  console.log(`  ${label.padEnd(18)} starts ${start.toFixed(2)} → bot skill ${path.join(" → ")} · player win rate (games 31–120): ${rate}%`);
 }
 console.log(`\nDone in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
