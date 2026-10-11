@@ -747,7 +747,7 @@
     </div>
 
     <div id="site-footer">
-      © <span id="footer-year"></span> <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="text-decoration:none">Chris Sandford</a> · v0.9.1<br>
+      © <span id="footer-year"></span> <a href="https://buymeacoffee.com/chrissandford" target="_blank" rel="noopener" style="text-decoration:none">Chris Sandford</a> · v0.9.2<br>
       <a href="https://kiwiblue.github.io/lexterra/" target="_blank" rel="noopener">Play offline version</a> · <span id="footer-online">0 players online</span>
     </div>
   </section>
@@ -857,7 +857,7 @@
 <script src="words.js"></script>
 <script src="botwords.js"></script>
 <script type="module">
-  import PartySocket from "https://esm.sh/partysocket@1.0.2";
+  import PartySocket from "./js/vendor/partysocket/index.js"; // partysocket 1.3.0, served from this site
   import { createBotBrain, inGameSkill, DIFFICULTY_SKILL, skillToLevel } from "./js/botai.js";
 
   const COLORS = { Red:'#ef4444', Blue:'#3b82f6', Green:'#22c55e', Yellow:'#eab308', Grey:'#9ca3af', Orange:'#f97316', Pink:'#f472b6', Purple:'#a855f7', Teal:'#14b8a6' };
@@ -1413,10 +1413,10 @@
           <div class="pdot" style="background:${color}"></div>
           <span style="font-weight:bold;flex:1">${label}</span>
           ${amHost ? `
-            <button class="toggle-btn diff-btn${p.botDifficulty==='auto'?' selected':''}" onclick="setBotDiff('${id}','auto')" title="Adapts to you — gets harder as you win, easier as you lose">Auto · Lv ${skillToLevel(p.botSkill ?? myBotSkill)}</button>
-            <button class="toggle-btn diff-btn${p.botDifficulty==='easy'?' selected':''}" onclick="setBotDiff('${id}','easy')">Easy</button>
-            <button class="toggle-btn diff-btn${p.botDifficulty==='hard'?' selected':''}" onclick="setBotDiff('${id}','hard')">Hard</button>
-            <button class="remove-btn" onclick="removeBot('${id}')" title="Remove bot">×</button>
+            <button class="toggle-btn diff-btn${p.botDifficulty==='auto'?' selected':''}" onclick="setBotDiff('${safeId(id)}','auto')" title="Adapts to you — gets harder as you win, easier as you lose">Auto · Lv ${skillToLevel(p.botSkill ?? myBotSkill)}</button>
+            <button class="toggle-btn diff-btn${p.botDifficulty==='easy'?' selected':''}" onclick="setBotDiff('${safeId(id)}','easy')">Easy</button>
+            <button class="toggle-btn diff-btn${p.botDifficulty==='hard'?' selected':''}" onclick="setBotDiff('${safeId(id)}','hard')">Hard</button>
+            <button class="remove-btn" onclick="removeBot('${safeId(id)}')" title="Remove bot">×</button>
           ` : `<span style="font-size:0.75rem;color:var(--muted)">${botLabel(p)}</span>`}
         </div>`;
       } else {
@@ -1757,7 +1757,7 @@
         ? `<span style="color:#f97316;font-size:0.7rem;margin-left:0.25rem">${passes} pass${passes !== 1 ? 'es' : ''}</span>`
         : '';
       const clockText = highStakesOn
-        ? `<span id="tb-${id}" style="font-size:0.7rem;color:var(--text-2);margin-left:0.25rem;font-variant-numeric:tabular-nums">${fmtClock(state.timeBank[id] ?? 0)}</span>`
+        ? `<span id="tb-${safeId(id)}" style="font-size:0.7rem;color:var(--text-2);margin-left:0.25rem;font-variant-numeric:tabular-nums">${fmtClock(state.timeBank[id] ?? 0)}</span>`
         : '';
       const pinfo = isTerritoryMode
         ? `<div class="pinfo">
@@ -2059,7 +2059,7 @@
           <span style="font-weight:bold;color:var(--text)">${p.name}</span>
           <span style="color:var(--muted);margin-left:0.4rem">${botLabel(p)} · ${p.score} pts</span>
         </div>
-        <button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.25rem 0.65rem;font-size:0.78rem">Replace</button>
+        <button class="btn btn-secondary" onclick="grantJoin('${safeId(id)}','replace')" style="padding:0.25rem 0.65rem;font-size:0.78rem">Replace</button>
       </div>`
     ).join('');
     document.getElementById('jr-name').textContent = `${name} wants to join`;
@@ -2090,7 +2090,7 @@
     if (!el) return;
     if (!name) { el.style.display = 'none'; return; }
     const botBtns = (bots ?? []).map(([id, p]) =>
-      `<button class="btn btn-secondary" onclick="grantJoin('${id}','replace')" style="padding:0.2rem 0.5rem;font-size:0.75rem">${p.name} (${p.score}pts)</button>`
+      `<button class="btn btn-secondary" onclick="grantJoin('${safeId(id)}','replace')" style="padding:0.2rem 0.5rem;font-size:0.75rem">${p.name} (${p.score}pts)</button>`
     ).join('');
     el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
       <span style="font-size:0.82rem;color:var(--text-2)"><span style="color:var(--text);font-weight:bold">${name}</span> wants to join</span>
@@ -2475,16 +2475,16 @@
     const el = document.getElementById("timer-label");
     Object.keys(bank).forEach(id => {
       const remaining = id === state.cur ? Math.max(0, bank[id] - elapsed) : bank[id];
-      const badge = document.getElementById(`tb-${id}`);
+      const badge = document.getElementById(`tb-${safeId(id)}`);
       const color = remaining <= 15 ? "var(--danger)" : remaining <= 40 ? "var(--warn-ink)" : "var(--text-2)";
       if (badge) { badge.textContent = fmtClock(remaining); badge.style.color = color; }
       if (id === state.cur && el) { el.textContent = fmtClock(remaining); el.style.color = remaining <= 15 ? "var(--danger)" : remaining <= 40 ? "var(--warn-ink)" : "var(--clr-primary-light)"; }
     });
-    if (state.cur === myConnId && !highStakesTimedOut) {
+    if (state.cur === myConnId) {
       const mine = Math.max(0, (bank[myConnId] ?? 0) - elapsed);
-      if (mine <= 0) {
-        highStakesTimedOut = true;
-        socket.send(JSON.stringify({ type: 'time_up', isRealPass: !hasActedThisTurn }));
+      if (mine <= 0 && (!highStakesTimedOut || Date.now() - highStakesTimedOut > 2000)) {
+        highStakesTimedOut = Date.now(); // re-sent every 2 s until the server agrees (clocks can differ slightly)
+        socket.send(JSON.stringify({ type: 'time_up', isRealPass: !hasActedThisTurn, turnNo: state.turnNo ?? 0 }));
       }
     }
   }
@@ -2505,7 +2505,7 @@
           claimPath = path;
           const v = validateClaim(claimPath);
           if (v.valid) {
-            socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+            socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score, turnNo: state.turnNo ?? 0 }));
             flashTimeBonus(state.settings?.highStakes?.claimBonus);
             hasActedThisTurn = true;
             claimMode = false; claimStart = null; claimPath = null;
@@ -2525,7 +2525,7 @@
     if (state.grid?.[r]?.[c]) return;
     const me = state.players[myConnId];
     if (!me || me.lettersLeft <= 0) return;
-    socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter }));
+    socket.send(JSON.stringify({ type: "place", r, c, letter: selLetter, turnNo: state.turnNo ?? 0 }));
     flashTimeBonus(state.settings?.highStakes?.letterBonus);
     hasActedThisTurn = true;
     pendingUndo = true;
@@ -2547,12 +2547,19 @@
       }
       return;
     }
-    socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score }));
+    socket.send(JSON.stringify({ type: "claim", word: v.word, path: claimPath, score: v.score, turnNo: state.turnNo ?? 0 }));
     flashTimeBonus(state.settings?.highStakes?.claimBonus);
     hasActedThisTurn = true;
     claimMode = false; claimStart = null; claimPath = null;
   };
-  window.doPass = () => { if (socket) socket.send(JSON.stringify({ type: "pass", isRealPass: !hasActedThisTurn })); };
+  let lastPassTurn = -1;
+  window.doPass = () => {
+    if (!socket) return;
+    const t = state?.turnNo ?? 0;
+    if (t === lastPassTurn) return; // one pass per turn, however many taps or timer ticks
+    lastPassTurn = t;
+    socket.send(JSON.stringify({ type: "pass", isRealPass: !hasActedThisTurn, turnNo: t }));
+  };
   window.doUndo = () => {
     if (!pendingUndo || !socket) return;
     const cost = coinConfig.spendUndoLetter;
@@ -3074,8 +3081,8 @@
             <span style="color:var(--muted);font-size:0.8125rem">${meta}</span>
           </div>
           ${isPlaying
-            ? `<button class="btn btn-secondary btn-sm" onclick="watchGame('${g.roomId}')">Watch</button>`
-            : `<button class="btn btn-live btn-sm" onclick="joinPublicGame('${g.roomId}')">Join</button>`}
+            ? `<button class="btn btn-secondary btn-sm" onclick="watchGame('${safeId(g.roomId)}')">Watch</button>`
+            : `<button class="btn btn-live btn-sm" onclick="joinPublicGame('${safeId(g.roomId)}')">Join</button>`}
         </div>`;
     }).join('');
     announce();
@@ -3112,7 +3119,7 @@
     return `<div class="lb-row">
       <span style="width:1.5rem;color:var(--muted);font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${rank}.</span>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.snapId ? `<a href="?view=${entry.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank">${entry.name}${isMe ? ' ★' : ''}</a>` : `${entry.name}${isMe ? ' ★' : ''}`}</div>
+        <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${entry.snapId ? `<a href="?view=${encodeURIComponent(entry.snapId)}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank" rel="noopener">${entry.name}${isMe ? ' ★' : ''}</a>` : `${entry.name}${isMe ? ' ★' : ''}`}</div>
         <div style="font-size:0.7rem;color:var(--muted);margin-top:0.08rem">${fmtOpponents(entry)} · ${entry.boardSize ?? 5}×${entry.boardSize ?? 5} · min-${entry.minWordLen} · ${date}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
@@ -3238,7 +3245,7 @@
       return `<div class="lb-row">
         <span style="width:1.5rem;color:var(--muted);font-size:0.72rem;flex-shrink:0;padding-top:0.1rem">${i + 1}.</span>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.snapId ? `<a href="?view=${e.snapId}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank">${e.name}${isMe ? ' ★' : ''}</a>` : `${e.name}${isMe ? ' ★' : ''}`}</div>
+          <div style="font-weight:bold${isMe ? ';color:var(--clr-primary-light)' : ''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.snapId ? `<a href="?view=${encodeURIComponent(e.snapId)}" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)" target="_blank" rel="noopener">${e.name}${isMe ? ' ★' : ''}</a>` : `${e.name}${isMe ? ' ★' : ''}`}</div>
           <div style="font-size:0.7rem;color:var(--muted);margin-top:0.08rem">${fmtOpponents(e)} · min-${e.minWordLen} · ${date}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:0.5rem">
@@ -3527,7 +3534,7 @@
   }
   function botLabel(p) {
     if (p.botDifficulty === "auto") return `LV ${skillToLevel(p.botSkill ?? myBotSkill)}`;
-    return (p.botDifficulty ?? "easy").toUpperCase();
+    return { easy: "EASY", hard: "HARD" }[p.botDifficulty] ?? "EASY";
   }
   // Tiles held in territory modes, points in Search — the same measure the end screen ranks by
   function standingOf(id) {
@@ -3570,7 +3577,7 @@
         if ((state.players[botId]?.lettersLeft ?? 0) > 0 && !isFull()) {
           const mv = brain.planPlacement(botView(), botId, skill);
           if (mv) {
-            socket.send(JSON.stringify({ type: 'place', r: mv.r, c: mv.c, letter: mv.letter }));
+            socket.send(JSON.stringify({ type: 'place', r: mv.r, c: mv.c, letter: mv.letter, turnNo: state.turnNo ?? 0 }));
             botActed = true;
             await waitForNextState();
             await delay(500);
@@ -3581,7 +3588,7 @@
         if (claims >= chain || (isFull() && humanPasses >= passThreshold)) break;
         const pick = brain.chooseClaim(botView(), botId, skill, { boardFull: isFull() });
         if (!pick) break;
-        socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score }));
+        socket.send(JSON.stringify({ type: 'claim', word: pick.word, path: pick.path, score: pick.score, turnNo: state.turnNo ?? 0 }));
         botActed = true;
         claims++;
         await waitForNextState();
@@ -3592,11 +3599,11 @@
 
       // 3. End the turn
       if (state.cur === botId && state.phase === 'playing')
-        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
+        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed, turnNo: state.turnNo ?? 0 }));
     } catch (e) {
       if (e?.message !== "not ready") console.warn('Bot error:', e);
       if (state?.cur === botId && state?.phase === 'playing')
-        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed }));
+        socket.send(JSON.stringify({ type: 'pass', isRealPass: !botActed, turnNo: state.turnNo ?? 0 }));
     }
   }
 
@@ -3605,7 +3612,7 @@
     show("game-screen");
     document.getElementById("game-screen").innerHTML = '<div style="text-align:center;padding:3rem;color:var(--muted)">Loading game preview…</div>';
     try {
-      const res = await fetch(`https://${SERVER_HOST}/parties/stats/main?snapId=${snapId}`);
+      const res = await fetch(`https://${SERVER_HOST}/parties/stats/main?snapId=${encodeURIComponent(snapId)}`);
       if (!res.ok) throw new Error("not found");
       const snap = await res.json();
       state = {
@@ -3638,6 +3645,8 @@
   function track(event) { statsPost({ type: "track", event, uuid: getPlayerUUID() }).catch(() => {}); }
   function levelFor(xp) { return Math.floor(Math.sqrt(Math.max(0, xp) / 25)) + 1; }
   const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  // Ids from the server (connection ids, room codes) are plain tokens; strip anything else before using them in markup
+  function safeId(v) { return String(v ?? "").replace(/[^A-Za-z0-9_-]/g, ""); }
   const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   async function renderGrowth() {
@@ -3898,9 +3907,17 @@
     if (!token) return;
     window.history.replaceState({}, "", location.pathname);
     try {
-      const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify", token }) });
-      const data = await res.json();
+      const verify = (confirm) => fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        action: "verify", token, confirm, nonce: localStorage.getItem("lexterra_auth_nonce"), uuid: getPlayerUUID(),
+      }) }).then(r => r.json());
+      let data = await verify(false);
+      // A link that wasn't requested from this browser: make sure the player means to sign in here
+      if (data.needsConfirm) {
+        const ok = confirm(`Sign this device in as ${data.email}?\n\nOnly continue if this is your email address. Anything you've earned on this device will be added to that account.`);
+        data = ok ? await verify(true) : { ok: false, error: "Sign-in cancelled." };
+      }
       if (data.ok) {
+        localStorage.removeItem("lexterra_auth_nonce");
         localStorage.setItem("lexterra_uuid",  data.uuid);
         localStorage.setItem("lexterra_email", data.email);
         location.reload();
@@ -3971,7 +3988,7 @@
       const res  = await fetch(AUTH_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "register", email, uuid: getPlayerUUID() }) });
       const data = await res.json();
       if (data.ok) {
-        localStorage.setItem("lexterra_email", email);
+        if (data.nonce) localStorage.setItem("lexterra_auth_nonce", data.nonce);
         document.getElementById("auth-input-view").style.display = "none";
         document.getElementById("auth-sent-view").style.display  = "";
         const card = document.getElementById("auth-card");
@@ -4007,7 +4024,7 @@
     // Opened from a turn notification or My Games link → back to your seat
     window.history.replaceState({}, '', location.pathname);
     window.openAsyncGame(_gameParam);
-  } else if (_roomParam) {
+  } else if (/^[A-Za-z0-9]{4,8}$/.test(_roomParam ?? "")) {
     // Auto-join from share link — clear any pending rejoin so it doesn't conflict
     window.history.replaceState({}, '', location.pathname);
     localStorage.removeItem("lexterra_room");

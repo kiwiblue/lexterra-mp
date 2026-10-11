@@ -95,6 +95,7 @@
     <div class="grid">
       <div class="field"><label>Points per coin (interval)</label><input type="number" id="pointsInterval" min="1"></div>
       <div class="field"><label>Long word bonus (per word)</label><input type="number" id="longWordBonus" min="0"></div>
+      <div class="field"><label>Max coins per day from solo games</label><input type="number" id="soloCoinsPerDay" min="0"></div>
     </div>
   </div>
 
@@ -195,7 +196,7 @@ const FIELD_KEYS = [
   "gameWin_5","gameWin_8","gameWin_10",
   "gameWinHuman_5","gameWinHuman_8","gameWinHuman_10",
   "highScoreDay","highScoreMonth","highScoreYear",
-  "pointsInterval","longWordBonus",
+  "pointsInterval","longWordBonus","soloCoinsPerDay",
   "spendUndoLetter","spendViewUnclaimed","spendPremiumColor","spendCustomTile",
   "highStakesStart","highStakesMax","highStakesLetterBonus","highStakesClaimBonus","highStakesMinTurn",
   "dailyComplete","streakBonus7","spendStreakFreeze","asyncTurnHours","endlessBlitzSecs","spendTileTheme",

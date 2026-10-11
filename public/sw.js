@@ -1,8 +1,8 @@
 // Lexterra service worker: app shell caching (installable/offline-friendly) and push notifications.
 // Pages are fetched network-first so players always get the latest version when online.
 
-const CACHE = "lexterra-v3";
-const SHELL = ["/", "/words.js", "/botwords.js", "/js/daily.js", "/js/tutorial.js", "/js/ui.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "lexterra-v4";
+const SHELL = ["/", "/words.js", "/botwords.js", "/js/daily.js", "/js/tutorial.js", "/js/ui.js", "/js/botai.js", "/js/vendor/partysocket/index.js", "/js/vendor/partysocket/ws.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -40,6 +40,14 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// Notification links may only open pages on this site
+function sameOrigin(u) {
+  try {
+    const url = new URL(typeof u === "string" ? u : "/", self.location.origin);
+    return url.origin === self.location.origin ? url.pathname + url.search : "/";
+  } catch { return "/"; }
+}
+
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data?.text() }; }
@@ -50,7 +58,7 @@ self.addEventListener("push", (event) => {
     badge: "/icons/icon-192.png",
     tag: typeof data.tag === "string" ? data.tag : undefined,
     renotify: true,
-    data: { url: typeof data.url === "string" && data.url.startsWith("/") && !data.url.startsWith("//") ? data.url : "/" },
+    data: { url: sameOrigin(data.url) },
   }));
 });
 

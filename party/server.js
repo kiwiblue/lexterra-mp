@@ -11,6 +11,13 @@ export { Lobby } from "./lobby.js";
 export { Stats } from "./stats.js";
 export { Auth } from "./auth.js";
 
+const ALLOWED_ROOMS = {
+  main: /^[A-Z0-9]{4,8}$/, // game rooms
+  lobby: /^main$/,
+  stats: /^main$/,
+  auth: /^main$/,
+};
+
 export default {
   async fetch(request, env) {
     // Everything arriving here is from outside — never let it pose as a server-to-server call,
@@ -18,7 +25,12 @@ export default {
     const ip = request.headers.get("cf-connecting-ip") ?? "";
     request = new Request(request);
     request.headers.delete(INTERNAL_HEADER);
+    for (const h of [...request.headers.keys()]) if (h.startsWith("x-partykit-")) request.headers.delete(h);
     request.headers.set(CLIENT_IP_HEADER, ip);
+    // Only the instances the game actually uses. Any other name would create a fresh, empty copy
+    // of a global service — with its own lockouts and send caps — so it's refused outright.
+    const m = new URL(request.url).pathname.match(/^\/parties\/([^/]+)\/([^/]+)/);
+    if (m && !ALLOWED_ROOMS[m[1]]?.test(m[2])) return new Response("Not found", { status: 404, headers: CORS });
     // Burst protection on every write endpoint
     if (request.method === "POST" && ip && env.POST_LIMIT) {
       const { success } = await env.POST_LIMIT.limit({ key: ip });

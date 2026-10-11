@@ -55,6 +55,7 @@ async function notifyLobby(room, msg) {
       method: "POST",
       body: JSON.stringify(msg),
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(5000),
     });
   } catch {}
 }
@@ -83,14 +84,17 @@ async function notifyStats(room, state, outcome) {
       ...Object.entries(state.disconnectedPlayers ?? {}).map(([connId, d]) => ({ connId, ...d.player })),
     ];
     const humanPlayers = allEntries.filter(p => !p.isBot);
-    const scores = humanPlayers.map(p => p.score ?? 0).sort((a, b) => b - a);
+    // Winner across every seat (bots included), ranked the way the end screen ranks: tiles in
+    // territory modes, points in Search. Beating only other humans while a bot won isn't a win.
+    const useTiles = state.settings?.territoryMode && state.settings.territoryMode !== "off" && state.territory;
+    const standing = (p) => useTiles ? state.territory.flat().filter(o => o === p.connId).length : (p.score ?? 0);
+    const best = Math.max(0, ...allEntries.map(standing));
     const boardSize = state.settings?.boardSize ?? 5;
     const longThreshold = boardSize >= 10 ? 7 : boardSize >= 8 ? 6 : 5;
     const claimed = state.claimed ?? [];
-    await room.context.parties.stats.get("main").fetch("/", {
-      method: "POST",
-      body: JSON.stringify({
+    const body = JSON.stringify({
         type: "game_end",
+        gameId: state.gameId ?? null, // lets Stats ignore a repeat of the same game
         outcome,
         mode: state.settings?.territoryMode ?? "off",
         boardSize,
@@ -106,7 +110,7 @@ async function notifyStats(room, state, outcome) {
           name: p.name,
           score: p.score ?? 0,
           wordsFound: p.wordsFound ?? 0,
-          won: (p.score ?? 0) === scores[0] && scores[0] > 0,
+          won: best > 0 && standing(p) === best,
           longWordCount: claimed.filter(c => c.connId === p.connId && (c.word?.length ?? 0) >= longThreshold).length,
         })),
         snapshot: {
@@ -127,10 +131,19 @@ async function notifyStats(room, state, outcome) {
           ]),
           settings: state.settings ?? {},
         },
-      }),
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch {}
+      });
+    // One retry if Stats is slow or briefly unavailable (safe: Stats ignores a repeated gameId)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await room.context.parties.stats.get("main").fetch("/", {
+          method: "POST", body, headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) return;
+        console.error("game_end not recorded", res.status);
+      } catch (e) { console.error("game_end send failed", e?.message); }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  } catch (e) { console.error("notifyStats failed", e); }
 }
 
 const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes of no player action → end game
@@ -219,9 +232,9 @@ const isAsync = (state) => state?.settings?.pace === "async";
 async function statsPost(room, body) {
   try {
     await room.context.parties.stats.get("main").fetch("/", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
     });
-  } catch {}
+  } catch (e) { console.error("stats call failed", body?.type, e?.message); }
 }
 
 const humanUuids = (st) => Object.entries(st?.players ?? {}).filter(([, p]) => !p.isBot && p.uuid);
@@ -306,7 +319,7 @@ async function asyncAlarm(room, state) {
 
 // Grace period before processing a disconnect — gives mobile users time to
 // reconnect after briefly switching apps without being booted from the game.
-const pendingDisconnects = new Map(); // connId → timeoutId
+// (timers live on each room: room.pendingDisconnects, connId → timeoutId)
 const DISCONNECT_GRACE_MS = 30000;
 
 async function processDisconnect(connId, room) {
@@ -378,6 +391,12 @@ const handlers = {
     if (msg.type === "join" && isUuid(msg.uuid)) {
       const st = await room.storage.get("state");
       if (st && Object.values(st.players ?? {}).some(p => !p.isBot && p.uuid === msg.uuid)) msg = { type: "rejoin", uuid: msg.uuid };
+    }
+
+    // Actions tagged with an old turn number are leftovers (double taps, timers firing late)
+    if (["place", "claim", "pass", "time_up"].includes(msg.type) && Number.isInteger(msg.turnNo)) {
+      const st = await room.storage.get("state");
+      if (st && msg.turnNo !== (st.turnNo ?? 0)) return;
     }
 
     // Seats belong to accounts, not connection ids (which clients choose and everyone can see).
@@ -496,7 +515,9 @@ const handlers = {
         if (name) {
           state.players[conn.id].name = name;
           const uuid = state.players[conn.id].uuid;
-          if (uuid) {
+          const last = room.renameAt.get(conn.id) ?? 0;
+          if (uuid && Date.now() - last > 10000) {
+            room.renameAt.set(conn.id, Date.now());
             room.context.parties.stats.get("main").fetch("/", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -529,7 +550,9 @@ const handlers = {
         if (Object.keys(state.players).length >= 4) return;
         if (state.settings?.pace === "async") return; // bots are driven by the host's browser, which isn't open in async games
         const bots = Object.values(state.players).filter(p => p.isBot);
-        const botId = `bot_${conn.id}_${bots.length}`;
+        let n = bots.length;
+        while (state.players[`bot_${conn.id}_${n}`]) n++;
+        const botId = `bot_${conn.id}_${n}`;
         const takenColors = Object.values(state.players).map(p => p.color);
         const color = ["Red","Blue","Yellow","Green","Grey"].find(c => !takenColors.includes(c)) ?? "Grey";
         state.players[botId] = { name: `BOT${bots.length + 1}`, color, score: 0, wordsFound: 0, isReady: true, isHost: false, isBot: true, botDifficulty: "auto", botSkill: cleanSkill(msg.skill) };
@@ -590,6 +613,8 @@ const handlers = {
           if (Object.values(state.players).some(p => p.isBot)) return;
         }
         state.lastActivity = Date.now();
+        state.gameId = `${room.id}-${state.lastActivity.toString(36)}`;
+        state.disconnectedPlayers = {}; // people who left the lobby aren't part of this game
         if (state.isPublic) await notifyLobby(room, { type: "update", roomId: room.id, patch: { phase: "playing", lastActivity: state.lastActivity } });
         const { boardSize } = state.settings;
         state.phase = "playing";
@@ -839,10 +864,10 @@ const handlers = {
         const prefer = (ids) => ids.includes(msg.oldConnId) ? msg.oldConnId : ids[0];
 
         // Path 1: Still within grace period — player never officially left.
-        const pendingId = prefer([...pendingDisconnects.keys()].filter(id => owns(state.players[id])));
+        const pendingId = prefer([...room.pendingDisconnects.keys()].filter(id => owns(state.players[id])));
         if (pendingId) {
-          clearTimeout(pendingDisconnects.get(pendingId));
-          pendingDisconnects.delete(pendingId);
+          clearTimeout(room.pendingDisconnects.get(pendingId));
+          room.pendingDisconnects.delete(pendingId);
           if (pendingId !== conn.id) remapActiveId(pendingId);
           bindConn(conn, msg.uuid);
           await room.storage.put("state", state);
@@ -854,7 +879,7 @@ const handlers = {
         // that reused the same connection id).
         const activeId = prefer(Object.keys(state.players).filter(id => owns(state.players[id])));
         if (activeId) {
-          if (pendingDisconnects.has(activeId)) { clearTimeout(pendingDisconnects.get(activeId)); pendingDisconnects.delete(activeId); }
+          if (room.pendingDisconnects.has(activeId)) { clearTimeout(room.pendingDisconnects.get(activeId)); room.pendingDisconnects.delete(activeId); }
           if (activeId !== conn.id) remapActiveId(activeId);
           bindConn(conn, msg.uuid);
           await room.storage.put("state", state);
@@ -863,7 +888,7 @@ const handlers = {
         }
 
         // Path 3: Post-grace — restore from disconnectedPlayers.
-        const savedKey = prefer(Object.keys(state.disconnectedPlayers ?? {}).filter(k => owns(state.disconnectedPlayers[k].player)));
+        const savedKey = prefer(Object.keys(state.disconnectedPlayers ?? {}).filter(k => owns(state.disconnectedPlayers[k].player) && !state.disconnectedPlayers[k].left));
         if (!savedKey) { conn.send(JSON.stringify({ type: "error", message: "Slot expired — please rejoin." })); return; }
         if (state.players[conn.id]) { conn.send(JSON.stringify({ type: "error", message: "Connection already in use — please reload." })); return; }
 
@@ -892,6 +917,8 @@ const handlers = {
 
       // Spectator announces themselves
       case "watch": {
+        const st = await room.storage.get("state");
+        if (st?.players?.[conn.id]) return; // seated players aren't spectators
         room.spectatorConns.add(conn.id);
         broadcastSpectatorCount(room);
         break;
@@ -902,9 +929,12 @@ const handlers = {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         if (!room.spectatorConns.has(conn.id)) return;
+        const prev = state.pendingJoinRequest;
+        if (prev && prev.connId !== conn.id && Date.now() < prev.expiresAt) return; // one request at a time
         const expiresAt = Date.now() + 30000;
         const reqName = cleanName(msg.name);
-        state.pendingJoinRequest = { connId: conn.id, name: reqName, color: msg.color, uuid: isUuid(msg.uuid) ? msg.uuid : null, hasPremium: msg.hasPremium === true, expiresAt };
+        const color = [...BASE_COLORS, ...PREMIUM_COLORS_SV].includes(msg.color) ? msg.color : null;
+        state.pendingJoinRequest = { connId: conn.id, name: reqName, color, uuid: isUuid(msg.uuid) ? msg.uuid : null, hasPremium: msg.hasPremium === true, expiresAt };
         await room.storage.put("state", state);
         room.broadcast(JSON.stringify({ type: "spectator_request", connId: conn.id, name: reqName, expiresAt }));
         break;
@@ -946,6 +976,7 @@ const handlers = {
           if (!bot?.isBot) return;
           state.players[requestConnId] = {
             name: req.name,
+            uuid: req.uuid,
             color: bot.color,
             score: bot.score,
             wordsFound: bot.wordsFound,
@@ -984,16 +1015,18 @@ const handlers = {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "playing") return;
         if (state.host !== conn.id) return;
-        const { oldConnId, difficulty } = msg;
-        const saved = state.disconnectedPlayers?.[oldConnId];
-        if (!saved) return;
+        const { oldConnId } = msg;
+        const difficulty = ["auto", "easy", "hard"].includes(msg.difficulty) ? msg.difficulty : "easy";
+        if (typeof oldConnId !== "string" || !Object.hasOwn(state.disconnectedPlayers ?? {}, oldConnId)) return;
+        if (Object.keys(state.players).length >= 4) return;
+        const saved = state.disconnectedPlayers[oldConnId];
         const botId = `bot_${Date.now()}`;
         const botNum = Object.values(state.players).filter(p => p.isBot).length + 1;
         state.players[botId] = {
           ...saved.player,
           name: `BOT${botNum}`,
           isBot: true,
-          botDifficulty: difficulty ?? "easy",
+          botDifficulty: difficulty,
           isReady: true,
           lettersLeft: 0,
         };
@@ -1018,9 +1051,9 @@ const handlers = {
       case "leave_lobby": {
         const state = await room.storage.get("state");
         if (!state || state.phase !== "lobby") return;
-        if (pendingDisconnects.has(conn.id)) {
-          clearTimeout(pendingDisconnects.get(conn.id));
-          pendingDisconnects.delete(conn.id);
+        if (room.pendingDisconnects.has(conn.id)) {
+          clearTimeout(room.pendingDisconnects.get(conn.id));
+          room.pendingDisconnects.delete(conn.id);
         }
         if (state.host === conn.id) {
           if (state.isPublic) await notifyLobby(room, { type: "unregister", roomId: room.id });
@@ -1045,7 +1078,7 @@ const handlers = {
         if (!player || player.isBot) return;
         // Save slot so host can still replace with a bot if other humans remain
         if (!state.disconnectedPlayers) state.disconnectedPlayers = {};
-        state.disconnectedPlayers[conn.id] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(conn.id) };
+        state.disconnectedPlayers[conn.id] = { player: { ...player }, turnIndex: state.turnOrder.indexOf(conn.id), left: true };
         delete state.players[conn.id];
         const wasTheirTurn = state.cur === conn.id;
         state.turnOrder = state.turnOrder.filter(id => id !== conn.id);
@@ -1085,6 +1118,7 @@ const handlers = {
         const state = await room.storage.get("state");
         if (!state || state.host !== conn.id) return;
         if (!["ended", "playing"].includes(state.phase)) return;
+        if (state.phase === "playing" && isAsync(state)) return; // multi-day games end by play or resignation
         const fresh = {
           ...state,
           phase: "lobby",
@@ -1163,11 +1197,11 @@ const handlers = {
     if (isAsync(await room.storage.get("state"))) return;
 
     // Players: grace period — mobile users briefly switching apps won't be booted
-    const tid = setTimeout(async () => {
-      pendingDisconnects.delete(conn.id);
+    const tid = setTimeout(() => room.serial(async () => {
+      room.pendingDisconnects.delete(conn.id);
       await processDisconnect(conn.id, room);
-    }, DISCONNECT_GRACE_MS);
-    pendingDisconnects.set(conn.id, tid);
+    }), DISCONNECT_GRACE_MS);
+    room.pendingDisconnects.set(conn.id, tid);
   },
 
   // Server-only: the lobby asks the room for its real listing details instead of trusting clients
@@ -1203,14 +1237,25 @@ const handlers = {
 // Game room. In-memory state (spectators, disconnect timers) relies on the room
 // staying awake while players are connected, so hibernation stays off.
 export class Main extends Server {
-  room = Object.assign(makeRoom(this), { spectatorConns: new Set() });
+  // `serial` runs state-changing work one piece at a time. Without it, two messages could both
+  // read the same state while one awaits another server, and the later write would undo the first
+  // (or a game could end twice and pay out twice).
+  room = Object.assign(makeRoom(this), { spectatorConns: new Set(), pendingDisconnects: new Map(), renameAt: new Map(), serial: (fn) => this.serial(fn) });
   live = new Map(); // connection id → socket currently using it
+  queue = Promise.resolve();
+  serial(fn) {
+    const run = this.queue.then(fn, fn);
+    this.queue = run.catch((e) => console.error("room task failed", e));
+    return run;
+  }
 
   async fetch(request) {
     if (!/^[A-Z0-9]{4,8}$/.test(this.name)) return new Response("Invalid room code", { status: 400 });
     // A connection id that's already connected can't be taken over by a second socket
     if (request.headers.get("Upgrade")?.toLowerCase() === "websocket") {
       const id = new URL(request.url).searchParams.get("_pk");
+      // Connection ids become player keys that every client renders, so only plain ids are allowed
+      if (id !== null && !/^[A-Za-z0-9_-]{1,64}$/.test(id)) return new Response("Invalid connection id", { status: 400 });
       if (id && this.live.has(id)) return new Response("Connection id already in use", { status: 409 });
     }
     return super.fetch(request);
@@ -1222,15 +1267,17 @@ export class Main extends Server {
     // Decide from the parsed type (not the raw text) so a crafted message can't dodge it.
     let type = null;
     try { type = JSON.parse(message)?.type; } catch {}
-    if (type === "hover" || type === "watch") return handlers.onMessage(message, conn, this.room);
-    const before = await this.ctx.storage.get("state");
-    await handlers.onMessage(message, conn, this.room);
-    if (isAsync(before) || isAsync(await this.ctx.storage.get("state"))) await asyncHooks(this.room, before);
+    if (type === "hover") return handlers.onMessage(message, conn, this.room);
+    return this.serial(async () => {
+      const before = await this.ctx.storage.get("state");
+      await handlers.onMessage(message, conn, this.room);
+      if (isAsync(before) || isAsync(await this.ctx.storage.get("state"))) await asyncHooks(this.room, before);
+    });
   }
   onClose(conn) {
     if (this.live.get(conn.id) === conn) this.live.delete(conn.id);
-    return handlers.onClose(conn, this.room);
+    return this.serial(() => handlers.onClose(conn, this.room));
   }
   onRequest(req) { return handlers.onRequest(req, this.room); }
-  onAlarm() { return handlers.onAlarm(this.room); }
+  onAlarm() { return this.serial(() => handlers.onAlarm(this.room)); }
 }

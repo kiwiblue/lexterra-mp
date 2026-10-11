@@ -5,6 +5,7 @@
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { isInternal, cleanName, isUuid, clientIp } from "./compat.js";
 import { initialSkill, nextSkill } from "./botskill.js";
+import { getCoin, putCoin, getXp, putXp } from "./accounts.js";
 import { dailyPuzzle, endlessPuzzle, replayDaily, shareGrid, utcDate, isDateStr, addDays, daysBetween } from "./daily.js";
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
@@ -22,6 +23,7 @@ const ENDLESS_LB_SIZE = 100;
 export const TILE_THEMES = ["neon", "gold", "ocean", "candy"];
 const FOREVER = 8.64e15; // stored like a colour-unlock expiry so account merges keep it
 const MAX_STREAK_FREEZES = 2;
+const WEEK_MAX = 6000, WEEK_KEEP = 5000;
 const DAILY_LB_SIZE = 100;
 const MYGAMES_KEEP_ENDED_MS = 3 * 86400000;
 
@@ -66,22 +68,26 @@ function applyStreak(rec, date) {
 // ── Per-IP daily allowances ──────────────────────────────────────────────
 // Creating new identities (daily results, analytics visitors, push subscriptions) is capped per
 // visitor IP per UTC day, so scripts can't flood storage or the leaderboards with fake accounts.
-async function pruneDaily(room) {
+// Deletes every key with a prefix, in batches (list() returns at most `limit` keys per call)
+async function deleteAll(room, prefix) {
+  for (let guard = 0; guard < 200; guard++) {
+    const keys = [...(await room.storage.list({ prefix, limit: 1000 })).keys()];
+    if (!keys.length) return;
+    for (let i = 0; i < keys.length; i += 128) await room.storage.delete(keys.slice(i, i + 128));
+  }
+}
+
+export async function pruneDaily(room) {
   const today = utcDate();
   if (await room.storage.get(`pruned:${today}`)) return;
   await room.storage.put(`pruned:${today}`, 1);
   for (let back = 2; back <= 10; back++) {
     const d = addDays(today, -back);
-    for (const prefix of [`ipcap:${d}:`, `an_cap:${d}:`]) {
-      const old = await room.storage.list({ prefix, limit: 1000 });
-      const keys = [...old.keys()];
-      for (let i = 0; i < keys.length; i += 128) await room.storage.delete(keys.slice(i, i + 128));
-    }
+    for (const prefix of [`ipcap:${d}:`, `an_cap:${d}:`, `gameend:${d}:`]) await deleteAll(room, prefix);
   }
+  for (let back = 63; back <= 84; back += 7) await room.storage.delete(`week:${isoWeek(Date.now() - back * 86400000).id}`);
   for (let back = 36; back <= 45; back++) {
-    const old = await room.storage.list({ prefix: `an_seen:${addDays(today, -back)}:`, limit: 1000 });
-    const keys = [...old.keys()];
-    for (let i = 0; i < keys.length; i += 128) await room.storage.delete(keys.slice(i, i + 128));
+    await deleteAll(room, `an_seen:${addDays(today, -back)}:`);
   }
 }
 export async function ipAllowance(room, req, bucket, max) {
@@ -107,33 +113,34 @@ export async function addWeekly(room, players) {
     e.pts += p.score; e.games += 1; e.name = p.name ?? e.name;
     week[p.uuid] = e; changed = true;
   }
-  if (changed) await room.storage.put(key, week);
+  if (!changed) return;
+  // Keep the stored value well under the 2 MB limit: past WEEK_MAX players, drop the lowest scorers
+  const ids = Object.keys(week);
+  if (ids.length > WEEK_MAX) {
+    ids.sort((a, b) => week[b].pts - week[a].pts).slice(WEEK_KEEP).forEach(u => delete week[u]);
+  }
+  await room.storage.put(key, week);
 }
 
 async function addXp(room, uuid, name, score) {
-  const xp = (await room.storage.get("player_xp")) ?? [];
-  const i = xp.findIndex(e => e.uuid === uuid);
-  if (i >= 0) { xp[i].xp += score; xp[i].gamesPlayed++; xp[i].name = name; }
-  else xp.push({ uuid, name, xp: score, gamesPlayed: 1 });
-  xp.sort((a, b) => b.xp - a.xp);
-  await room.storage.put("player_xp", xp);
+  const rec = (await getXp(room, uuid)) ?? { uuid, name, xp: 0, gamesPlayed: 0 };
+  rec.xp += score; rec.gamesPlayed++; rec.name = name;
+  await putXp(room, rec);
 }
 
 async function addCoins(room, uuid, name, amount) {
   if (!(amount > 0)) return;
-  const coins = (await room.storage.get("player_coins")) ?? [];
-  let i = coins.findIndex(e => e.uuid === uuid);
-  if (i < 0) { coins.push({ uuid, name, coins: 0 }); i = coins.length - 1; }
-  coins[i].coins = (coins[i].coins ?? 0) + amount;
-  coins[i].name = name;
-  await room.storage.put("player_coins", coins);
+  const rec = (await getCoin(room, uuid)) ?? { uuid, name, coins: 0 };
+  rec.coins = (rec.coins ?? 0) + amount;
+  rec.name = name;
+  await putCoin(room, rec);
 }
 
 // ── Adaptive bot rating ────────────────────────────────────────────────────
 async function botSkillOf(room, uuid) {
   const rec = await room.storage.get(`botskill:${uuid}`);
   if (rec) return rec;
-  const x = ((await room.storage.get("player_xp")) ?? []).find(p => p.uuid === uuid);
+  const x = await getXp(room, uuid);
   return { skill: initialSkill(x?.gamesPlayed ?? 0, x?.xp ?? 0), games: 0, wins: 0, losses: 0, draws: 0 };
 }
 // Called from game_end (server-only) after a solo game against Auto bots
@@ -224,14 +231,20 @@ async function sendPush(room, uuid, message) {
 async function track(room, uuid, event, req, cfg) {
   const today = utcDate();
   const pid = await pidOf(uuid);
+  // New identities are capped per IP per day *before* anything is stored for them, so a script
+  // inventing uuids can't fill storage or skew the numbers; unknown players' other events are ignored.
+  const known = await room.storage.get(`an_first:${pid}`);
+  if (!known) {
+    if (event !== "visit") return;
+    if (!(await ipAllowance(room, req, "visitor", Number(cfg.ipNewVisitors) || 20))) return;
+  }
   const counts = (await room.storage.get(`an:${today}`)) ?? {};
   if (event === "visit") {
     const seenKey = `an_seen:${today}:${pid}`;
     if (await room.storage.get(seenKey)) return;
     await room.storage.put(seenKey, 1);
     counts.visitors = (counts.visitors ?? 0) + 1;
-    if (!(await room.storage.get(`an_first:${pid}`))) {
-      if (!(await ipAllowance(room, req, "visitor", Number(cfg.ipNewVisitors) || 20))) { await room.storage.put(`an:${today}`, counts); return; }
+    if (!known) {
       await room.storage.put(`an_first:${pid}`, today);
       const cohort = (await room.storage.get(`an_cohort:${today}`)) ?? [];
       cohort.push(pid);
@@ -291,12 +304,6 @@ export async function growthGet(url, room, cfg) {
     return jsonRes({ date, top: await Promise.all(lb.slice(0, 50).map(async e => ({ pid: await pidOf(e.uuid), name: e.name, score: e.score, words: e.words }))) });
   }
 
-  if (q.has("streak")) {
-    const uuid = q.get("streak");
-    if (!isUuid(uuid)) return jsonRes({ error: "bad_uuid" }, 400);
-    return jsonRes(effectiveStreak(await room.storage.get(`streak:${uuid}`), utcDate()));
-  }
-
   if (q.has("weekly")) {
     const { id, resetsAt } = isoWeek();
     const week = (await room.storage.get(`week:${id}`)) ?? {};
@@ -343,7 +350,7 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       if (r.placed === 0) return jsonRes({ error: "empty" }, 400);
       if (!(await ipAllowance(room, req, "daily", Number(cfg.ipDailySubmits) || 3))) return jsonRes({ error: "too_many_today" }, 429);
       const name = cleanName(msg.name);
-      await room.storage.put(resKey, { score: r.score, words: r.words, used: r.used, moves: r.moves, name, at: Date.now() });
+      await room.storage.put(resKey, { score: r.score, words: r.words, used: r.used, moves: r.moves, complete: r.complete, name, at: Date.now() });
 
       const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
       if (r.score > 0) {
@@ -377,7 +384,11 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       if (!isUuid(uuid) || !isDateStr(date) || typeof pid !== "string" || !/^[0-9a-f]{16}$/.test(pid)) return jsonRes({ error: "bad_request" }, 400);
       const today = utcDate();
       if (date > today) return jsonRes({ error: "bad_request" }, 400);
-      if (date >= addDays(today, -1) && !(await room.storage.get(`daily_res:${date}:${uuid}`))) return jsonRes({ error: "play_first" }, 403);
+      if (date >= addDays(today, -1)) {
+        // Only after finishing your own go (every letter placed) — a throwaway one-letter attempt doesn't unlock the answers
+        const mine = await room.storage.get(`daily_res:${date}:${uuid}`);
+        if (!mine || mine.complete === false) return jsonRes({ error: "play_first" }, 403);
+      }
       const lb = (await room.storage.get(`daily_lb:${date}`)) ?? [];
       let owner = null;
       for (const e of lb) if ((await pidOf(e.uuid)) === pid) { owner = e.uuid; break; }
@@ -451,16 +462,14 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       if (msg.item === "tileTheme") {
         if (!isUuid(msg.uuid) || !TILE_THEMES.includes(msg.theme)) return jsonRes({ error: "bad_request" }, 400);
         const cost = Math.max(0, Number(cfg.spendTileTheme) || 0);
-        const coins = (await room.storage.get("player_coins")) ?? [];
-        let ci = coins.findIndex(p => p.uuid === msg.uuid);
-        const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
+        const rec = (await getCoin(room, msg.uuid)) ?? { uuid: msg.uuid, name: cleanName(msg.name), coins: 0 };
+        const balance = rec.coins ?? 0;
         const key = `theme_${msg.theme}`;
-        if (ci >= 0 && coins[ci].colorUnlocks?.[key]) return jsonRes({ coins: balance, cost: 0, owned: true });
+        if (rec.colorUnlocks?.[key]) return jsonRes({ coins: balance, cost: 0, owned: true });
         if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
-        if (ci < 0) { coins.push({ uuid: msg.uuid, name: cleanName(msg.name), coins: 0 }); ci = coins.length - 1; }
-        coins[ci].coins = balance - cost;
-        coins[ci].colorUnlocks = { ...(coins[ci].colorUnlocks ?? {}), [key]: FOREVER };
-        await room.storage.put("player_coins", coins);
+        rec.coins = balance - cost;
+        rec.colorUnlocks = { ...(rec.colorUnlocks ?? {}), [key]: FOREVER };
+        await putCoin(room, rec);
         return jsonRes({ coins: balance - cost, cost, owned: true });
       }
       // Streak freezes are a coin item handled here; other items fall through to stats.js
@@ -470,11 +479,10 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
       const rec = (await room.storage.get(`streak:${msg.uuid}`)) ?? { current: 0, best: 0, freezes: 0, lastDate: null };
       if ((rec.freezes ?? 0) >= MAX_STREAK_FREEZES) return jsonRes({ error: "max_freezes", freezes: rec.freezes }, 409);
       const cost = Math.max(0, Number(cfg.spendStreakFreeze) || 0);
-      const coins = (await room.storage.get("player_coins")) ?? [];
-      const ci = coins.findIndex(p => p.uuid === msg.uuid);
-      const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
+      const wallet = await getCoin(room, msg.uuid);
+      const balance = wallet?.coins ?? 0;
       if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
-      if (cost > 0) { coins[ci].coins = balance - cost; await room.storage.put("player_coins", coins); }
+      if (cost > 0) { wallet.coins = balance - cost; await putCoin(room, wallet); }
       rec.freezes = (rec.freezes ?? 0) + 1;
       await room.storage.put(`streak:${msg.uuid}`, rec);
       return jsonRes({ coins: balance - cost, cost, freezes: rec.freezes });
@@ -509,13 +517,11 @@ export async function growthPost(msg, req, room, cfg, isAdmin) {
     case "profile": {
       if (!isUuid(msg.uuid)) return jsonRes({ error: "bad_uuid" }, 400);
       const today = utcDate();
-      const [coins, xp, st, mine, epb, week] = await Promise.all([
-        room.storage.get("player_coins"), room.storage.get("player_xp"),
+      const [c, x, st, mine, epb, week] = await Promise.all([
+        getCoin(room, msg.uuid), getXp(room, msg.uuid),
         room.storage.get(`streak:${msg.uuid}`), room.storage.get(`daily_res:${today}:${msg.uuid}`),
         room.storage.get(`endless_pb:${msg.uuid}`), room.storage.get(`week:${isoWeek().id}`),
       ]);
-      const c = (coins ?? []).find(p => p.uuid === msg.uuid);
-      const x = (xp ?? []).find(p => p.uuid === msg.uuid);
       return jsonRes({
         name: c?.name ?? x?.name ?? null, coins: c?.coins ?? 0, colorUnlocks: c?.colorUnlocks ?? {},
         xp: x?.xp ?? 0, gamesPlayed: x?.gamesPlayed ?? 0,

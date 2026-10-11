@@ -13,7 +13,8 @@
 
 import { Server } from "partyserver";
 import { makeRoom, isInternal, cleanName, isUuid, clientIp } from "./compat.js";
-import { growthGet, growthPost, addWeekly, mergeGrowth, updateBotSkill } from "./growth.js";
+import { growthGet, growthPost, addWeekly, mergeGrowth, updateBotSkill, pruneDaily } from "./growth.js";
+import { ensureAccounts, getCoin, putCoin, deleteCoin, getXp, putXp, deleteXp, updateXpTop, listCoins } from "./accounts.js";
 
 const TOP_SNAPS = 5;
 
@@ -62,6 +63,7 @@ const DEFAULT_COIN_CONFIG = {
   highScoreYear:    5,
   pointsInterval:   50,  // 1 coin per this many points scored
   longWordBonus:    1,   // per qualifying long word (5+/6+/7+ letters by board size)
+  soloCoinsPerDay: 60,   // most coins a player can earn per day from games without other people
   // Spend
   spendUndoLetter:      1,
   spendViewUnclaimed:   1,
@@ -84,7 +86,7 @@ const DEFAULT_COIN_CONFIG = {
   // Async games
   asyncTurnHours:        24, // hours a player has to take their turn before it auto-passes
   // Abuse limits — per visitor IP per UTC day
-  ipDailySubmits:         3, // daily-puzzle results (one per account; caps throwaway accounts)
+  ipDailySubmits:        10, // daily-puzzle results (one per account; caps throwaway accounts — homes and schools share IPs)
   ipNewVisitors:         20, // new players counted in analytics
   ipPushSubscribes:      10, // push-notification sign-ups
   ipEndlessStarts:      300, // endless puzzles dealt
@@ -142,8 +144,11 @@ function updatePlayers(players, entry) {
     players.push({ uuid: entry.uuid, name: entry.name, best: entry, bestComp: comp ? entry : null });
   }
   players.sort((a, b) => b.best.score - a.best.score);
-  return players;
+  return players.slice(0, LB_PLAYERS_MAX); // the board only ever shows the top; keeps the value small
 }
+
+const LB_PLAYERS_MAX = 500;
+const LB_MODES = ["conquest", "exclusive", "off"];
 
 // All-time high scores: every game result kept (no dedup), top 100.
 function updateAll(all, entry) {
@@ -185,6 +190,7 @@ const handlers = {
 
   async onRequest(req, room) {
     if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+    await ensureAccounts(room);
 
     if (req.method === "POST") {
       let msg;
@@ -214,13 +220,11 @@ const handlers = {
           for (const e of all) { if (e.uuid === msg.uuid) { e.name = msg.name; allChanged = true; } }
           if (allChanged) await room.storage.put(allKey, all);
         }
-        // Also update name in XP and coins stores
-        let xp = (await room.storage.get("player_xp")) ?? [];
-        const xi = xp.findIndex(p => p.uuid === msg.uuid);
-        if (xi >= 0) { xp[xi].name = msg.name; await room.storage.put("player_xp", xp); }
-        let coins = (await room.storage.get("player_coins")) ?? [];
-        const ci = coins.findIndex(p => p.uuid === msg.uuid);
-        if (ci >= 0) { coins[ci].name = msg.name; await room.storage.put("player_coins", coins); }
+        // Also update name in XP and coins records
+        const xrec = await getXp(room, msg.uuid);
+        if (xrec && xrec.name !== msg.name) { xrec.name = msg.name; await putXp(room, xrec); }
+        const crec = await getCoin(room, msg.uuid);
+        if (crec && crec.name !== msg.name) { crec.name = msg.name; await putCoin(room, crec); }
         return new Response("ok", { headers: CORS });
       }
 
@@ -232,11 +236,10 @@ const handlers = {
         if (!key) return jsonRes({ error: "unknown_item" }, 400);
         const cfg = { ...DEFAULT_COIN_CONFIG, ...((await room.storage.get("coin_config")) ?? {}) };
         const cost = Math.max(0, Number(cfg[key]) || 0);
-        const coins = (await room.storage.get("player_coins")) ?? [];
-        const ci = coins.findIndex(p => p.uuid === msg.uuid);
-        const balance = ci >= 0 ? (coins[ci].coins ?? 0) : 0;
+        const wallet = await getCoin(room, msg.uuid);
+        const balance = wallet?.coins ?? 0;
         if (balance < cost) return jsonRes({ error: "insufficient_coins", balance, cost }, 402);
-        if (cost > 0) { coins[ci].coins = balance - cost; await room.storage.put("player_coins", coins); }
+        if (cost > 0) { wallet.coins = balance - cost; await putCoin(room, wallet); }
         return jsonRes({ coins: balance - cost, cost });
       }
 
@@ -244,19 +247,18 @@ const handlers = {
         const stored2 = (await room.storage.get("coin_config")) ?? {};
         const cfg2 = { ...DEFAULT_COIN_CONFIG, ...stored2 };
         const cost = cfg2.spendPremiumColor;
-        let coins2 = (await room.storage.get("player_coins")) ?? [];
-        const ci2 = coins2.findIndex(p => p.uuid === msg.uuid);
-        if (ci2 < 0 || (coins2[ci2].coins ?? 0) < cost) {
-          return new Response(JSON.stringify({ error: "insufficient_coins", balance: coins2[ci2]?.coins ?? 0, cost }), {
+        const wallet = await getCoin(room, msg.uuid);
+        if (!wallet || (wallet.coins ?? 0) < cost) {
+          return new Response(JSON.stringify({ error: "insufficient_coins", balance: wallet?.coins ?? 0, cost }), {
             status: 402, headers: { "Content-Type": "application/json", ...CORS },
           });
         }
-        coins2[ci2].coins -= cost;
-        if (!coins2[ci2].colorUnlocks) coins2[ci2].colorUnlocks = {};
+        wallet.coins -= cost;
+        if (!wallet.colorUnlocks) wallet.colorUnlocks = {};
         const expiry = Date.now() + 30 * 24 * 60 * 60 * 1000;
-        coins2[ci2].colorUnlocks.premium = expiry;
-        await room.storage.put("player_coins", coins2);
-        return new Response(JSON.stringify({ coins: coins2[ci2].coins, expiry }), {
+        wallet.colorUnlocks.premium = expiry;
+        await putCoin(room, wallet);
+        return new Response(JSON.stringify({ coins: wallet.coins, expiry }), {
           headers: { "Content-Type": "application/json", ...CORS },
         });
       }
@@ -268,7 +270,7 @@ const handlers = {
         // Keep only known keys with sane values so a bad save can't break coin maths
         const clean = {};
         for (const [k, v] of Object.entries(msg.config)) {
-          if (!(k in DEFAULT_COIN_CONFIG)) continue;
+          if (!Object.hasOwn(DEFAULT_COIN_CONFIG, k)) continue;
           if (k === "highStakesTimeoutAction") { if (v === "pass" || v === "lose") clean[k] = v; continue; }
           const n = Number(v);
           if (!Number.isFinite(n) || n < 0 || (k === "pointsInterval" && n < 1)) continue;
@@ -282,15 +284,15 @@ const handlers = {
       if (msg.type === "admin_data") {
         const denied = await isAdmin(msg.password, room.env, req, room);
         if (denied) return denied;
-        const coins = (await room.storage.get("player_coins")) ?? [];
-        const sorted = [...coins].sort((a, b) => (b.coins ?? 0) - (a.coins ?? 0));
+        // Account ids are login secrets — the admin view never needs them
+        const sorted = (await listCoins(room)).map(({ uuid, ...rest }) => rest);
         return new Response(JSON.stringify(sorted), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
 
       // ── UUID merge (called by auth party when a returning player links a second browser) ──
-      if (msg.type === "merge_uuid" && msg.fromUuid && msg.toUuid && isInternal(req)) {
+      if (msg.type === "merge_uuid" && isUuid(msg.fromUuid) && isUuid(msg.toUuid) && isInternal(req)) {
         const { fromUuid, toUuid } = msg;
         if (fromUuid === toUuid) return new Response("ok", { headers: CORS });
 
@@ -315,7 +317,7 @@ const handlers = {
               if (players[fromPi].bestComp) players[fromPi].bestComp.uuid = toUuid;
             }
             players.sort((a, b) => b.best.score - a.best.score);
-            await room.storage.put(playersKey, players);
+            await room.storage.put(playersKey, players.slice(0, LB_PLAYERS_MAX));
           }
 
           let all = (await room.storage.get(allKey)) ?? [];
@@ -325,38 +327,31 @@ const handlers = {
         }
 
         // XP
-        let xp = (await room.storage.get("player_xp")) ?? [];
-        const fromXi = xp.findIndex(p => p.uuid === fromUuid);
-        const toXi   = xp.findIndex(p => p.uuid === toUuid);
-        if (fromXi >= 0) {
-          if (toXi >= 0) { xp[toXi].xp += xp[fromXi].xp; xp[toXi].gamesPlayed += xp[fromXi].gamesPlayed; xp.splice(fromXi, 1); }
-          else { xp[fromXi].uuid = toUuid; }
-          xp.sort((a, b) => b.xp - a.xp);
-          await room.storage.put("player_xp", xp);
+        const fromX = await getXp(room, fromUuid);
+        if (fromX) {
+          const toX = await getXp(room, toUuid);
+          const merged = toX
+            ? { ...toX, xp: (toX.xp ?? 0) + (fromX.xp ?? 0), gamesPlayed: (toX.gamesPlayed ?? 0) + (fromX.gamesPlayed ?? 0) }
+            : { ...fromX, uuid: toUuid };
+          await deleteXp(room, fromUuid);
+          await updateXpTop(room, null, fromUuid);
+          await putXp(room, merged);
         }
 
         // Coins, colorUnlocks, dates
-        let coins = (await room.storage.get("player_coins")) ?? [];
-        const fromCi = coins.findIndex(p => p.uuid === fromUuid);
-        const toCi   = coins.findIndex(p => p.uuid === toUuid);
-        if (fromCi >= 0) {
-          if (toCi >= 0) {
-            coins[toCi].coins = (coins[toCi].coins ?? 0) + (coins[fromCi].coins ?? 0);
-            if (coins[fromCi].colorUnlocks) {
-              if (!coins[toCi].colorUnlocks) coins[toCi].colorUnlocks = {};
-              for (const [k, v] of Object.entries(coins[fromCi].colorUnlocks)) {
-                if (!coins[toCi].colorUnlocks[k] || v > coins[toCi].colorUnlocks[k]) coins[toCi].colorUnlocks[k] = v;
-              }
-            }
-            if (coins[fromCi].lastPlayDate && (!coins[toCi].lastPlayDate || coins[fromCi].lastPlayDate > coins[toCi].lastPlayDate))
-              coins[toCi].lastPlayDate = coins[fromCi].lastPlayDate;
-            if (coins[fromCi].lastWinDate && (!coins[toCi].lastWinDate || coins[fromCi].lastWinDate > coins[toCi].lastWinDate))
-              coins[toCi].lastWinDate = coins[fromCi].lastWinDate;
-            coins.splice(fromCi, 1);
+        const fromC = await getCoin(room, fromUuid);
+        if (fromC) {
+          const toC = await getCoin(room, toUuid);
+          let merged;
+          if (toC) {
+            merged = { ...toC, coins: (toC.coins ?? 0) + (fromC.coins ?? 0), colorUnlocks: { ...(toC.colorUnlocks ?? {}) } };
+            for (const [k, v] of Object.entries(fromC.colorUnlocks ?? {})) if (!merged.colorUnlocks[k] || v > merged.colorUnlocks[k]) merged.colorUnlocks[k] = v;
+            for (const k of ["lastPlayDate", "lastWinDate"]) if (fromC[k] && (!toC[k] || fromC[k] > toC[k])) merged[k] = fromC[k];
           } else {
-            coins[fromCi].uuid = toUuid;
+            merged = { ...fromC, uuid: toUuid };
           }
-          await room.storage.put("player_coins", coins);
+          await deleteCoin(room, fromUuid);
+          await putCoin(room, merged);
         }
 
         await mergeGrowth(room, fromUuid, toUuid);
@@ -365,6 +360,14 @@ const handlers = {
 
       if (msg.type !== "game_end") return new Response("ok");
       if (!isInternal(req)) return new Response("Forbidden", { status: 403 });
+      // A game is recorded once, even if the room sends its result twice (retries, races)
+      if (typeof msg.gameId === "string" && msg.gameId.length <= 40) {
+        const day = (t) => new Date(t).toISOString().slice(0, 10);
+        const seen = await room.storage.get([`gameend:${day(Date.now())}:${msg.gameId}`, `gameend:${day(Date.now() - 86400000)}:${msg.gameId}`]);
+        if (seen.size) return new Response("ok", { headers: CORS });
+        await room.storage.put(`gameend:${day(Date.now())}:${msg.gameId}`, 1);
+        await pruneDaily(room); // old markers are cleared with the other daily housekeeping
+      }
 
       const s = (await room.storage.get("stats")) ?? EMPTY();
       s.totalGames++;
@@ -427,20 +430,12 @@ const handlers = {
         await room.storage.put(allKey, all);
 
         // Accumulate XP — total points earned across all games, all modes
-        let xp = (await room.storage.get("player_xp")) ?? [];
         for (const p of msg.players) {
-          if (!p.uuid || !(p.score > 0)) continue;
-          const xi = xp.findIndex(e => e.uuid === p.uuid);
-          if (xi >= 0) {
-            xp[xi].xp += p.score;
-            xp[xi].gamesPlayed++;
-            xp[xi].name = p.name;
-          } else {
-            xp.push({ uuid: p.uuid, name: p.name, xp: p.score, gamesPlayed: 1 });
-          }
+          if (!isUuid(p.uuid) || !(p.score > 0)) continue;
+          const rec = (await getXp(room, p.uuid)) ?? { uuid: p.uuid, name: p.name, xp: 0, gamesPlayed: 0 };
+          rec.xp += p.score; rec.gamesPlayed++; rec.name = p.name;
+          await putXp(room, rec);
         }
-        xp.sort((a, b) => b.xp - a.xp);
-        await room.storage.put("player_xp", xp);
 
         if (Number(cfgAll.feature_weekly ?? 1) !== 0) {
           try { await addWeekly(room, msg.players); } catch (e) { console.error("weekly ladder update failed", e); }
@@ -450,20 +445,14 @@ const handlers = {
         // ── Coin earning ────────────────────────────────────────────────
         const stored = (await room.storage.get("coin_config")) ?? {};
         const cfg = { ...DEFAULT_COIN_CONFIG, ...stored };
-        let coinStore = (await room.storage.get("player_coins")) ?? [];
         const now = new Date();
         const today = now.toISOString().slice(0, 10);
         const thisMonth = today.slice(0, 7);
         const thisYear = today.slice(0, 4);
 
         for (const p of msg.players) {
-          if (!p.uuid || !(p.score > 0)) continue;
-          let ci = coinStore.findIndex(e => e.uuid === p.uuid);
-          if (ci < 0) {
-            coinStore.push({ uuid: p.uuid, name: p.name ?? "Unknown", coins: 0 });
-            ci = coinStore.length - 1;
-          }
-          const rec = coinStore[ci];
+          if (!isUuid(p.uuid) || !(p.score > 0)) continue;
+          const rec = (await getCoin(room, p.uuid)) ?? { uuid: p.uuid, name: p.name ?? "Unknown", coins: 0 };
           if (p.name) rec.name = p.name;
           let earned = 0;
 
@@ -500,9 +489,16 @@ const handlers = {
             }
           }
 
+          // Games without other people (solo vs bots) pay out up to a daily cap, so scripts can't mint coins
+          if ((msg.humanCount ?? 1) <= 1) {
+            const capLeft = Math.max(0, (Number(cfg.soloCoinsPerDay) || 0) - (rec.soloCoinsDate === today ? rec.soloCoins ?? 0 : 0));
+            earned = Math.min(earned, capLeft);
+            rec.soloCoins = (rec.soloCoinsDate === today ? rec.soloCoins ?? 0 : 0) + earned;
+            rec.soloCoinsDate = today;
+          }
           rec.coins = Math.max(0, (rec.coins ?? 0) + earned);
+          await putCoin(room, rec);
         }
-        await room.storage.put("player_coins", coinStore);
       }
 
       return new Response("ok");
@@ -514,15 +510,6 @@ const handlers = {
       if (grown) return grown;
       const mode = url.searchParams.get("mode");
 
-      const playerXpUuid = url.searchParams.get("playerXp");
-      if (playerXpUuid) {
-        const xp = (await room.storage.get("player_xp")) ?? [];
-        const entry = xp.find(p => p.uuid === playerXpUuid);
-        return new Response(JSON.stringify(entry ?? { uuid: playerXpUuid, xp: 0, gamesPlayed: 0 }), {
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
-      }
-
       if (url.searchParams.get("config") !== null) {
         const storedCfg = (await room.storage.get("coin_config")) ?? {};
         return new Response(JSON.stringify({ ...DEFAULT_COIN_CONFIG, ...storedCfg }), {
@@ -530,20 +517,8 @@ const handlers = {
         });
       }
 
-      const coinsUuid = url.searchParams.get("coins");
-      if (coinsUuid) {
-        const coins = (await room.storage.get("player_coins")) ?? [];
-        const entry = coins.find(p => p.uuid === coinsUuid);
-        return new Response(JSON.stringify(entry ?? { uuid: coinsUuid, coins: 0 }), {
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
-      }
-
       if (url.searchParams.get("xp") === "true") {
-        const xp = (await room.storage.get("player_xp")) ?? [];
-        return new Response(JSON.stringify(await withPids(xp)), {
-          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
+        return jsonRes(await withPids((await room.storage.get("xp_top")) ?? []));
       }
 
       const snapId = url.searchParams.get("snapId");
@@ -562,6 +537,7 @@ const handlers = {
       }
 
       if (mode) {
+        if (!LB_MODES.includes(mode)) return jsonRes({ error: "bad_mode" }, 400);
         let players = (await room.storage.get(`lb_${mode}_players`)) ?? [];
         let all = (await room.storage.get(`lb_${mode}_all`)) ?? [];
         // One-time migration from old single-list format
@@ -576,7 +552,7 @@ const handlers = {
             await room.storage.put(`lb_${mode}_all`, all);
           }
         }
-        return new Response(JSON.stringify({ players: await withPids(players), all: await withPids(all) }), {
+        return new Response(JSON.stringify({ players: await withPids(players.slice(0, 200)), all: await withPids(all) }), {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }

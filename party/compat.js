@@ -41,7 +41,9 @@ export function publicState(state) {
   };
 }
 
-export const isUuid = (v) => typeof v === "string" && /^[A-Za-z0-9-]{8,64}$/.test(v);
+// Account ids are always crypto.randomUUID() values. A strict format also keeps words like
+// "constructor" or "__proto__" from ever being used as object keys or storage keys.
+export const isUuid = (v) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 export function makeRoom(server) {
   return {

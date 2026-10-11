@@ -26,6 +26,7 @@ const rand = () => Math.random().toString(36).slice(2, 7).toUpperCase();
 const roomCode = () => "B" + rand();
 const post = (body, url = STATS) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const getJson = async (q) => (await fetch(`${STATS}?${q}`)).json();
+const profile = async (uuid) => (await post({ type: "profile", uuid })).json();
 
 // ── Bot client ─────────────────────────────────────────────────────────────
 class Bot {
@@ -245,14 +246,14 @@ async function liveGame() {
   s = await A.waitState(st => st.phase === "ended", 10000, "ended").catch(e => { throw new Error(`${e.message} ${brief(A.state())}`); });
   check("game ends when everyone passes", s.phase === "ended");
   await sleep(1500);
-  const xp = await getJson(`playerXp=${A.uuid}`);
+  const xp = await profile(A.uuid);
   check("finishing player's points recorded as XP", xp.xp === aScore, `xp=${xp.xp} score=${aScore}`);
-  const coins = await getJson(`coins=${A.uuid}`);
+  const coins = await profile(A.uuid);
   check("finishing player earned coins", (coins.coins ?? 0) > 0, `coins=${coins.coins}`);
   const wk = await getJson("weekly=1");
   const aWeek = (await (await post({ type: "profile", uuid: A.uuid })).json()).weekly;
   check("weekly ladder includes the game's points", aWeek?.pts >= aScore && aWeek.games >= 1 && !JSON.stringify(wk).includes(A.uuid), `pts=${aWeek?.pts}`);
-  const leaverXp = await getJson(`playerXp=${C.uuid}`);
+  const leaverXp = await profile(C.uuid);
   check("player who left forfeits (their seat's points went to the bot)", (leaverXp.xp ?? 0) === 0);
 
   // Play again resets cleanly
@@ -448,7 +449,7 @@ async function daily() {
 
   // Streak freezes
   section = "Streaks"; console.log(`\n▶ ${section}`);
-  const st = await getJson(`streak=${bots[0].uuid}`);
+  const st = (await profile(bots[0].uuid)).streak;
   check("streak readable", st.current === 1 && st.freezes === 0);
   const poor = await post({ type: "spend", uuid: bots[0].uuid, item: "streakFreeze" });
   check("can't buy a freeze without enough coins", poor.status === 402);
@@ -657,9 +658,9 @@ async function securityRegressions() {
   const s = A.state();
   check("names sanitised", !/[<>"']/.test(s.players[A.id].name), s.players[A.id].name);
   check("settings whitelisted", s.settings.boardSize === 5 && !s.settings.highStakes);
-  const before = (await getJson(`coins=${A.uuid}`)).coins ?? 0;
+  const before = (await profile(A.uuid)).coins ?? 0;
   await post({ type: "coins_update", uuid: A.uuid, delta: 99999 });
-  check("coins can't be added from outside", ((await getJson(`coins=${A.uuid}`)).coins ?? 0) === before);
+  check("coins can't be added from outside", ((await profile(A.uuid)).coins ?? 0) === before);
   const ge = await post({ type: "game_end", outcome: "completed", players: [{ uuid: A.uuid, name: "X", score: 500 }] });
   check("fake game results rejected", ge.status === 403);
   const merge = await post({ type: "mygames_update", roomId: code, entries: [{ uuid: A.uuid, info: { phase: "playing" } }] });
@@ -678,6 +679,68 @@ async function securityRegressions() {
   const err = await evil.waitFor(m => m.type === "error", 8000).catch(() => null);
   check("live rooms can't be overwritten", !!err);
   A.close(); evil.close();
+
+  // ── Audit round 2 ──
+  const xss = await new Bot("X").connect(roomCode(), `x"><img src=x onerror=alert(1)>`).then(() => "connected", () => "refused");
+  check("connection ids with markup refused", xss === "refused");
+  const statuses = await Promise.all(["stats/other", "auth/other", "lobby/other", "main/__proto__"].map(async p =>
+    (await fetch(`${BASE}/parties/${p}`, { method: "POST", body: "{}" })).status));
+  check("only the real service instances answer", statuses.every(st => st === 404), statuses.join(","));
+  const proto = await post({ type: "profile", uuid: "constructor" });
+  check("non-uuid account ids rejected", proto.status === 400);
+  const badMode = await fetch(`${STATS}?mode=conquest_all`);
+  check("unknown leaderboard modes rejected", badMode.status === 400);
+  const xpTop = await getJson("xp=true");
+  check("XP leaderboard is a bounded top list", Array.isArray(xpTop) && xpTop.length <= 200 && !JSON.stringify(xpTop).includes("-4"), `${xpTop.length}`);
+  for (const gone of ["coins", "playerXp", "streak"]) {
+    const r = await getJson(`${gone}=${A.uuid}`);
+    check(`no account lookups by id in URLs (?${gone}=)`, !("coins" in r) && !("xp" in r) && !("current" in r));
+  }
+
+  // Two players finish a game; a burst of duplicate passes must not end it (or pay out) twice
+  const [P, Q] = [new Bot("PAT"), new Bot("QUIN")];
+  const c2 = await createRoom(P, { boardSize: 5 });
+  await joinRoom(Q, c2);
+  P.send({ type: "start" });
+  let st = await P.waitState(x => x.phase === "playing", 8000, "start");
+  const first = st.cur === P.id ? P : Q, second = first === P ? Q : P;
+  await first.waitState(x => x.phase === "playing");
+  await place(first, 0, 0, "C"); st = await passTurn(first, first.id, false);
+  // A late pass tagged with the previous turn's number is ignored
+  first.send({ type: "pass", isRealPass: true, turnNo: (st.turnNo ?? 1) - 1 });
+  await sleep(600);
+  check("actions from an earlier turn are ignored", first.state().cur === second.id);
+  await second.waitState(x => x.cur === second.id);
+  await place(second, 0, 1, "A"); await passTurn(second, second.id, false);
+  await first.waitState(x => x.cur === first.id);
+  const before1 = await profile(first.uuid);
+  await place(first, 0, 2, "T");
+  first.send({ type: "claim", word: "CAT", path: [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 0, c: 2 }] });
+  await first.waitState(x => x.claimed?.length === 1, 8000, "claim CAT");
+  await passTurn(first, first.id, false);
+  for (let k = 0; k < 3; k++) { const cur = first.state().cur === first.id ? first : second; await cur.waitState(x => x.cur === cur.id); await passTurn(cur, cur.id, true); }
+  const last = first.state().cur === first.id ? first : second;
+  await last.waitState(x => x.cur === last.id);
+  for (let k = 0; k < 15; k++) last.send({ type: "pass", isRealPass: true });
+  st = await last.waitState(x => x.phase === "ended", 8000, "ended");
+  await sleep(2500);
+  const after1 = await profile(first.uuid);
+  check("a game ends once, however many final passes arrive", st.phase === "ended" && after1.xp === (before1.xp ?? 0) + 3 && after1.gamesPlayed === (before1.gamesPlayed ?? 0) + 1,
+    `xp ${before1.xp ?? 0} → ${after1.xp}, games ${before1.gamesPlayed ?? 0} → ${after1.gamesPlayed}`);
+  P.close(); Q.close();
+
+  // Viewing today's boards needs a finished attempt, not a one-letter throwaway
+  const d = await getJson("daily=1");
+  const lb = await getJson(`dailylb=${d.puzzle.date}`);
+  if (lb.top?.length) {
+    const thrower = crypto.randomUUID();
+    const empty = d.puzzle.starters.map(x => `${x.r},${x.c}`);
+    let spot = null;
+    for (let r = 0; r < 5 && !spot; r++) for (let c = 0; c < 5 && !spot; c++) if (!empty.includes(`${r},${c}`)) spot = { r, c };
+    await post({ type: "daily_submit", uuid: thrower, name: "THROW", date: d.puzzle.date, moves: [{ place: spot }] });
+    const peek = await post({ type: "daily_board", uuid: thrower, date: d.puzzle.date, pid: lb.top[0].pid });
+    check("a throwaway daily attempt doesn't unlock others' boards", peek.status === 403, `${peek.status}`);
+  }
 }
 
 async function load() {

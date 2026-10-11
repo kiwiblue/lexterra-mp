@@ -40,15 +40,20 @@ async function fetchRoomInfo(roomId, room) {
   } catch { return null; }
 }
 
+const ROOM_ID = /^[A-Z0-9]{4,8}$/;
+const listed = (g) => g && JSON.stringify({ ...g, lastActivity: 0 });
+
 async function applyUpdate(msg, room, trusted) {
-  if (!msg || typeof msg !== "object") return;
-  const raw = (await room.storage.get("games")) ?? {};
-  const games = pruneStale(raw);
+  if (!msg || typeof msg !== "object" || typeof msg.roomId !== "string" || !ROOM_ID.test(msg.roomId)) return;
   if (!trusted) {
     if (!["register", "update", "unregister"].includes(msg.type)) return;
+    // Ask the room first, then read the list — reading before the call would let a concurrent
+    // update be overwritten by this one's stale copy
     const info = await fetchRoomInfo(msg.roomId, room);
+    const games = pruneStale((await room.storage.get("games")) ?? {});
+    const before = listed(games[msg.roomId]);
     if (!info || !info.isPublic || info.phase === "ended") {
-      if (!(msg.roomId in games)) return;
+      if (!Object.hasOwn(games, msg.roomId)) return;
       delete games[msg.roomId];
     } else {
       games[msg.roomId] = {
@@ -57,9 +62,11 @@ async function applyUpdate(msg, room, trusted) {
       };
     }
     await room.storage.put("games", games);
-    room.broadcast(JSON.stringify({ type: "games", games }));
+    if (listed(games[msg.roomId]) !== before) room.broadcast(JSON.stringify({ type: "games", games }));
     return;
   }
+  const games = pruneStale((await room.storage.get("games")) ?? {});
+  const before = listed(games[msg.roomId]);
   if (msg.type === "register") {
     games[msg.roomId] = {
       roomId: msg.roomId,
@@ -71,14 +78,17 @@ async function applyUpdate(msg, room, trusted) {
       settings: msg.settings,
     };
   } else if (msg.type === "unregister") {
+    if (!Object.hasOwn(games, msg.roomId)) return;
     delete games[msg.roomId];
   } else if (msg.type === "update") {
-    if (games[msg.roomId]) Object.assign(games[msg.roomId], msg.patch);
+    if (!Object.hasOwn(games, msg.roomId)) return;
+    Object.assign(games[msg.roomId], msg.patch);
   } else {
     return;
   }
   await room.storage.put("games", games);
-  room.broadcast(JSON.stringify({ type: "games", games }));
+  // Activity pings only refresh the timestamp — no need to push the whole list to every visitor
+  if (listed(games[msg.roomId]) !== before) room.broadcast(JSON.stringify({ type: "games", games }));
 }
 
 // Every visitor stays connected to the lobby, so it hibernates between messages
@@ -86,6 +96,7 @@ async function applyUpdate(msg, room, trusted) {
 export class Lobby extends Server {
   static options = { hibernate: true };
   room = makeRoom(this);
+  lastUpdate = new Map(); // connection id → last client update (in memory; resets on hibernation)
 
   async onConnect(conn) {
     const room = this.room;
@@ -99,7 +110,8 @@ export class Lobby extends Server {
     broadcastCounts(room);
   }
 
-  onClose() {
+  onClose(conn) {
+    this.lastUpdate.delete(conn.id);
     broadcastCounts(this.room);
   }
 
@@ -112,6 +124,10 @@ export class Lobby extends Server {
       broadcastCounts(this.room);
       return;
     }
+    // A browser nudges the lobby after it changes its own room; more than one every 2 s is noise
+    const now = Date.now();
+    if (now - (this.lastUpdate.get(conn.id) ?? 0) < 2000) return;
+    this.lastUpdate.set(conn.id, now);
     await applyUpdate(msg, this.room, false);
   }
 
